@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Guia prático para criar RPAs visualmente com Blockly, JSON schema 1, .NET, CloakBrowser, Playwright e execução local ou em fila.">
+  <title>Guia prático para criar RPAs</title>
+  <link rel="stylesheet" href="assets/manual.css">
+  <script src="manual.config.js" defer></script>
+  <script src="assets/block-catalog.js" defer></script>
+  <script src="assets/manual.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">R</span><span data-project-name>Base RPA Blockly</span></div>
+    <label class="search-wrap">
+      <span hidden>Pesquisar blocos</span>
+      <input id="global-search" type="search" placeholder="O que você quer encontrar? Ex.: upload, seletor, OTP…" autocomplete="off">
+    </label>
+    <button id="theme-toggle" class="icon-button" type="button" title="Alternar tema">◐</button>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Índice do manual">
+      <h2>Guia</h2>
+      <nav id="toc-static"></nav>
+      <h2>Consultar blocos</h2>
+      <nav id="toc-blocks"></nav>
+    </aside>
+
+    <main class="content">
+      <header id="inicio" class="hero" data-toc="Início">
+        <h1>Criar um RPA de maneira visual com low code</h1>
+        <p class="lead">Este guia apresenta a arquitetura da base, o vocabulário usado no projeto e os procedimentos para criar e manter RPAs. Escolha abaixo o caminho que corresponde ao que precisa fazer agora.</p>
+        <div class="hero-actions">
+          <a class="pill-button primary" href="#primeiro-rpa">Quero criar um RPA</a>
+          <a class="pill-button" href="#catalogo">Quero entender um bloco</a>
+          <a class="pill-button" href="#worker">Quero colocar em fila</a>
+        </div>
+      </header>
+
+      <section id="como-usar" class="doc-section" data-toc="Por onde começar">
+        <h2>Por onde começar</h2>
+        <p class="section-intro">Use este manual como tutorial e como consulta. Para montar um RPA comum, comece pelo fluxo local. Banco, worker e código interno entram depois, quando forem necessários.</p>
+        <div class="grid">
+          <article class="card reading-path">
+            <h3>Vou criar um RPA agora</h3>
+            <p>Leia <strong>Visão geral</strong>, <strong>Primeiro RPA</strong>, <strong>Dados</strong>, <strong>Seletores</strong> e depois consulte somente os blocos que usar.</p>
+            <a class="pill-button" href="#primeiro-rpa">Ir ao passo a passo</a>
+          </article>
+          <article class="card reading-path">
+            <h3>Já tenho um fluxo e surgiu uma dúvida</h3>
+            <p>Pesquise o nome do bloco no topo da página. Cada ficha explica o comportamento, um exemplo realista, todos os campos e como conferir o resultado.</p>
+            <a class="pill-button" href="#catalogo">Abrir o catálogo</a>
+          </article>
+          <article class="card reading-path">
+            <h3>Vou executar vários casos automaticamente</h3>
+            <p>Primeiro faça um caso funcionar localmente. Em seguida, prepare o banco, configure o worker, escolha os resultados que serão gravados e valide a execução em lote com segurança.</p>
+            <a class="pill-button" href="#worker">Entender o worker</a>
+          </article>
+          <article class="card reading-path">
+            <h3>Preciso alterar a própria base</h3>
+            <p>Essa é a parte avançada. Leia <strong>Adicionar um bloco</strong> apenas quando nenhum dos 35 blocos existentes resolver a necessidade.</p>
+            <a class="pill-button" href="#novo-bloco">Ir à parte avançada</a>
+          </article>
+        </div>
+      </section>
+
+      <section id="modelo-mental" class="doc-section" data-toc="Visão geral">
+        <h2>Como as peças se encaixam</h2>
+        <p class="section-intro">Pense no RPA como uma receita. No Blockly, você organiza visualmente os ingredientes e os passos. O arquivo <code>flow.production.json</code> guarda a receita escrita. O runtime .NET é o cozinheiro: confere os dados recebidos, lê a receita na ordem e realiza cada instrução. Nas ações web, ele trabalha com o CloakBrowser ou com outro navegador compatível pelas interfaces do Playwright.</p>
+
+        <div class="component-guide">
+          <article class="component-card">
+            <div class="component-heading">
+              <span class="component-number">1</span>
+              <div>
+                <h3>Blockly: onde você monta a receita</h3>
+                <p>Na biblioteca à esquerda, você encontra as categorias de ações. No centro, encaixa e configura os blocos. À direita, acompanha o JSON de produção que será salvo. A tela abaixo é uma captura real do editor desta base com um fluxo de exemplo.</p>
+              </div>
+            </div>
+            <figure class="manual-figure">
+              <img src="assets/editor-blockly-exemplo.png" alt="Editor Blockly real com a biblioteca de blocos, um fluxo de consulta e o JSON de produção ao lado" loading="lazy">
+              <figcaption>Exemplo genérico: abrir o portal, aguardar o formulário, preencher o CNPJ e salvar uma evidência. A captura não contém dados de empresa, usuário ou sistema real.</figcaption>
+            </figure>
+          </article>
+
+          <article class="component-card">
+            <div class="component-heading">
+              <span class="component-number">2</span>
+              <div>
+                <h3>flow.production.json: a receita que será executada</h3>
+                <p>Ao salvar, o editor converte os blocos para JSON schema 1. O recorte abaixo corresponde ao fluxo mostrado na tela: a ordem visual vira a ordem do array <code>actions</code>, e cada configuração do bloco vira uma propriedade editável.</p>
+              </div>
+            </div>
+            <pre><code>{
+  "schemaVersion": 1,
+  "name": "Consultar cadastro",
+  "actions": [
+    {
+      "id": "abrir-portal",
+      "type": "navigate",
+      "name": "Abrir o portal",
+      "valueSource": "input.url"
+    },
+    {
+      "id": "aguardar-consulta",
+      "type": "wait",
+      "name": "Aguardar formulário de consulta",
+      "selector": "form#consulta",
+      "state": "visible",
+      "optional": false,
+      "matchMode": "single"
+    },
+    {
+      "id": "preencher-cnpj",
+      "type": "fill",
+      "name": "Preencher CNPJ",
+      "selector": "input[name='cnpj']",
+      "valueSource": "input.cnpj"
+    },
+    {
+      "id": "registrar-evidencia",
+      "type": "screenshot",
+      "name": "Registrar formulário preenchido",
+      "fileName": "consulta-preenchida.png",
+      "separateByExecution": true,
+      "conflictStrategy": "unique",
+      "target": "runtime.evidencia"
+    }
+  ],
+  "subflows": {}
+}</code></pre>
+          </article>
+
+          <article class="component-card">
+            <div class="component-heading">
+              <span class="component-number">3</span>
+              <div>
+                <h3>Programa .NET: o cozinheiro que segue a receita</h3>
+                <p>Você normalmente não escreve um interpretador do zero. O gerador copia um <code>Program.cs</code> pronto do template. O trecho central carrega o JSON validado, monta os dados isolados do caso e entrega tudo ao executor compartilhado:</p>
+              </div>
+            </div>
+            <pre><code>var flow = await new JsonFlowLoader()
+    .LoadAsync(flowPath, cancellationSource.Token);
+
+var request = new FlowExecutionRequest(
+    Guid.NewGuid().ToString("N"),
+    CloneObject(configuration["Input"]),
+    CloneObject(configuration["Blockly"]?["Variables"]),
+    CloneObject(configuration["Attachments"]));
+
+IFlowExecutor executor = new PlaywrightFlowExecutor(flow, options);
+var result = await executor.ExecuteAsync(
+    request,
+    cancellationSource.Token);</code></pre>
+            <p class="component-note">Para mudar a sequência, os seletores ou os valores, edite os blocos. O C# cresce apenas quando surge uma capacidade genérica que ainda não existe, como um novo tipo de integração.</p>
+          </article>
+
+          <article class="component-card">
+            <div class="component-heading">
+              <span class="component-number">4</span>
+              <div>
+                <h3>Navegador: CloakBrowser integrado, com contrato Playwright</h3>
+                <p>O CloakBrowser é a opção stealth padrão da base. O <code>BrowserLauncher</code> inicia o binário público fixado e expõe o navegador pela interface <code>IBrowser</code> do Microsoft Playwright. Assim, os mesmos handlers de clique, preenchimento, espera, download e screenshot funcionam sem mudar o fluxo. Chromium, Firefox, WebKit, Chrome e Edge também continuam disponíveis para teste e homologação.</p>
+              </div>
+            </div>
+            <pre><code>{
+  "Runtime": {
+    "Browser": "cloakbrowser",
+    "Headless": false
+  }
+}</code></pre>
+            <p class="component-note">A compatibilidade é concreta no código: o projeto referencia <code>CloakBrowser</code> e <code>Microsoft.Playwright</code>, e o launcher devolve <code>CloakBrowserHandle.RawBrowser</code> como <code>IBrowser</code>.</p>
+          </article>
+
+          <article class="component-card">
+            <div class="component-heading">
+              <span class="component-number">5</span>
+              <div>
+                <h3>Worker: quem escolhe e reserva cada caso</h3>
+                <p>Quando chegar a hora de executar em lote, configure uma definição do RPA no worker. Ele chama <code>ClaimNextAsync</code> para escolher e reservar atomicamente um item, monta um <code>FlowExecutionRequest</code> isolado, executa o mesmo JSON e grava resultados e artefatos. O fluxo Blockly começa somente depois de receber o caso; ele nunca escolhe o próximo item da fila.</p>
+              </div>
+            </div>
+            <pre><code>var workItem = await repository.ClaimNextAsync(cancellationToken);
+if (workItem is not null)
+{
+    await processor.ProcessAsync(workItem, cancellationToken);
+}
+
+// Dentro do processor:
+var request = new FlowExecutionRequest(
+    executionId,
+    input,
+    configuration,
+    attachments,
+    workItem.WorkItemId.ToString("D"),
+    workItem.BatchId);</code></pre>
+          </article>
+        </div>
+
+        <figure id="fluxograma-execucao" class="architecture-diagram">
+          <figcaption>Do editor à execução: o caminho local e o caminho em fila convergem no mesmo runtime</figcaption>
+          <div class="flowchart-grid" role="img" aria-label="Blockly salva o flow.production.json, que é lido pelo runtime .NET e executado no navegador. Em lote, o banco entrega um item ao worker, que escolhe e reserva o caso, monta um FlowExecutionRequest e o entrega ao mesmo runtime.">
+            <div class="flow-node flow-blockly">Blockly<strong>monta o fluxo</strong></div>
+            <div class="flow-arrow flow-arrow-local-one" aria-hidden="true"><span>salva</span>→</div>
+            <div class="flow-node flow-json"><code>flow.production.json</code><strong>guarda a receita</strong></div>
+            <div class="flow-arrow flow-arrow-local-two" aria-hidden="true"><span>é lido</span>→</div>
+            <div class="flow-node flow-runtime">Runtime .NET<strong>valida e interpreta</strong></div>
+            <div class="flow-arrow flow-arrow-browser" aria-hidden="true"><span>comanda</span>→</div>
+            <div class="flow-node flow-browser">CloakBrowser ou navegador Playwright<strong>executa no portal</strong></div>
+
+            <div class="flow-node flow-database">Banco SQL Server<strong>mantém a fila</strong></div>
+            <div class="flow-arrow flow-arrow-queue-one" aria-hidden="true"><span>oferece</span>→</div>
+            <div class="flow-node flow-worker">Worker<strong>escolhe e reserva um caso</strong></div>
+            <div class="flow-arrow flow-arrow-queue-two" aria-hidden="true"><span>monta</span>→</div>
+            <div class="flow-node flow-request"><code>FlowExecutionRequest</code><strong>leva os dados do caso</strong></div>
+            <div class="flow-arrow flow-arrow-merge" aria-hidden="true"><span>entrega ao mesmo runtime</span>↑</div>
+          </div>
+        </figure>
+        <div class="callout"><strong>Duas formas de executar o mesmo fluxo</strong> Durante o desenvolvimento, você roda o projeto diretamente com um arquivo de configuração local. Em lote, o worker entrega um caso vindo do banco. O roteiro Blockly não precisa mudar por causa disso.</div>
+        <div class="callout warning"><strong>Existem dois JSONs diferentes.</strong> O arquivo visual do Blockly guarda posição, zoom e encaixe. O arquivo <code>flow.production.json</code> guarda somente o que o RPA deve fazer. Produção executa apenas o segundo.</div>
+      </section>
+
+      <section id="glossario" class="doc-section" data-toc="Dicionário rápido">
+        <h2>Dicionário rápido</h2>
+        <p class="section-intro">Você encontrará estes nomes no código e nas configurações. A coluna do meio explica o significado prático; a última mostra onde aparece.</p>
+        <table class="data-table">
+          <thead><tr><th>Termo</th><th>O que significa</th><th>Exemplo nesta base</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Ação</strong></td><td>Um passo executável do roteiro.</td><td>Clicar, preencher, aguardar ou baixar.</td></tr>
+            <tr><td><strong>Bloco</strong></td><td>A representação visual de uma ação no Blockly.</td><td>O bloco “Anexar arquivo”.</td></tr>
+            <tr><td><strong>Runtime / interpretador</strong></td><td>O código .NET que lê o JSON e executa as ações.</td><td><code>RpaFlow.Runtime</code> e <code>RpaFlow.Playwright</code>.</td></tr>
+            <tr><td><strong>Handler</strong></td><td>Trecho de C# responsável por executar um tipo de ação.</td><td>O handler de clique chama o Playwright.</td></tr>
+            <tr><td><strong>Adapter / adaptador</strong></td><td>Integração com uma tecnologia externa.</td><td>Interfaces Playwright com CloakBrowser por padrão; Microsoft Graph para e-mail.</td></tr>
+            <tr><td><strong>Provider / provedor</strong></td><td>Componente que fornece um serviço ao fluxo.</td><td>O provedor de OTP lê uma caixa de e-mail.</td></tr>
+            <tr><td><strong>Alias</strong></td><td>Nome curto que aponta para uma configuração protegida.</td><td><code>email-otp</code> aponta para uma caixa configurada no worker.</td></tr>
+            <tr><td><strong>Source / origem</strong></td><td>Caminho de onde o bloco deve ler um valor.</td><td><code>input.cnpj</code> ou <code>attachments.notaPdf</code>.</td></tr>
+            <tr><td><strong>Target / destino</strong></td><td>Caminho onde o bloco guarda um resultado temporário.</td><td><code>runtime.protocolo</code>.</td></tr>
+            <tr><td><strong>Contexto</strong></td><td>Conjunto de dados disponível durante um caso.</td><td><code>input.*</code>, <code>config.*</code> e <code>runtime.*</code>.</td></tr>
+            <tr><td><strong>Seletor</strong></td><td>Regra usada para encontrar um elemento na página.</td><td><code>button[data-action='save']</code>.</td></tr>
+            <tr><td><strong>Escopo</strong></td><td>Parte da tela dentro da qual o seletor será procurado.</td><td>Procurar “Editar” somente dentro de uma linha da tabela.</td></tr>
+            <tr><td><strong>Iframe</strong></td><td>Página colocada dentro de outra página.</td><td>Antes de achar um campo, o RPA precisa entrar no iframe correto.</td></tr>
+            <tr><td><strong>Timeout</strong></td><td>Tempo máximo de espera antes de considerar falha.</td><td>Esperar no máximo 30 segundos por um botão.</td></tr>
+            <tr><td><strong>Worker</strong></td><td>Serviço que pega casos da fila e executa o RPA automaticamente.</td><td><code>Rpa.Worker</code>.</td></tr>
+            <tr><td><strong>Claim / reserva</strong></td><td>Ato de marcar um item como sendo processado por um worker.</td><td>Impede dois serviços de pegarem a mesma nota.</td></tr>
+            <tr><td><strong>Lease / prazo da reserva</strong></td><td>Tempo durante o qual a reserva pertence ao worker.</td><td>Se o serviço morrer, outro poderá recuperar o item após o prazo.</td></tr>
+            <tr><td><strong>Heartbeat</strong></td><td>Renovação periódica que informa que o worker continua vivo.</td><td>Atualiza o prazo da reserva enquanto o caso está rodando.</td></tr>
+            <tr><td><strong>Retry / nova tentativa</strong></td><td>Recolocar um caso na fila depois de uma falha que pode ser temporária.</td><td>Tentar novamente após indisponibilidade do portal.</td></tr>
+            <tr><td><strong>Artefato</strong></td><td>Arquivo produzido ou coletado pelo RPA.</td><td>Screenshot, recibo ou relatório baixado.</td></tr>
+            <tr><td><strong>Round-trip / ida e volta</strong></td><td>Abrir um JSON no Blockly e salvá-lo novamente sem perder informação.</td><td>Teste automático do editor.</td></tr>
+            <tr><td><strong>Modo seguro</strong></td><td>Execução que para antes das ações cadastradas como irreversíveis.</td><td><code>SafeValidation</code>.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="estrutura" class="doc-section" data-toc="Estrutura da base">
+        <h2>O que existe em cada pasta</h2>
+        <p class="section-intro">Use esta tabela quando precisar localizar um arquivo. Para criar um RPA comum, você trabalhará principalmente na pasta do próprio RPA, no Blockly e no <code>flow.production.json</code>. Não é necessário decorar o restante.</p>
+        <table class="data-table">
+          <thead><tr><th>Pasta</th><th>Para que serve</th><th>Você precisa mexer?</th></tr></thead>
+          <tbody>
+            <tr><td><code>rpas/NomeDoRpa</code></td><td>Seu fluxo, sua configuração e o pequeno programa que inicia a execução.</td><td><strong>Sim.</strong> É o local normal de trabalho.</td></tr>
+            <tr><td><code>src/RpaFlow.Contracts</code></td><td>Define quais ações e campos são aceitos no JSON e mostra erros de configuração.</td><td>Somente para criar ou mudar uma capacidade compartilhada.</td></tr>
+            <tr><td><code>src/RpaFlow.Runtime</code></td><td>Guarda os dados de cada execução e interpreta ações que não dependem diretamente da página.</td><td>Normalmente não.</td></tr>
+            <tr><td><code>src/RpaFlow.Playwright</code></td><td>Executa no navegador os cliques, preenchimentos, esperas, downloads e screenshots.</td><td>Somente quando um bloco web precisa ganhar comportamento novo.</td></tr>
+            <tr><td><code>src/RpaFlow.Editor</code></td><td>Abre o Blockly localmente e converte blocos para JSON e JSON para blocos.</td><td>Somente ao alterar o editor ou um bloco.</td></tr>
+            <tr><td><code>src/Rpa.Worker</code></td><td>Pega casos do banco, executa o fluxo e grava status, resultados e arquivos.</td><td>Para configurar execução em fila ou adicionar uma integração de infraestrutura.</td></tr>
+            <tr><td><code>templates/rpa-web</code></td><td>Modelo copiado automaticamente quando você cria um RPA.</td><td>Altere apenas quando todo RPA novo deve receber a mesma melhoria.</td></tr>
+            <tr><td><code>examples/RpaExemplo</code></td><td>Exemplo pequeno que compila e ajuda a conferir se a base está saudável.</td><td>Use para estudo; não coloque regra de um sistema real.</td></tr>
+            <tr><td><code>database/sqlserver</code></td><td>Scripts para criar as tabelas de fila e histórico do worker.</td><td>Somente ao preparar o ambiente do worker.</td></tr>
+            <tr><td><code>tests</code></td><td>Programas que verificam blocos, navegador, worker e abertura/salvamento do editor.</td><td>Execute sempre; altere quando mudar a base.</td></tr>
+            <tr><td><code>docs</code></td><td>Este guia e as referências técnicas.</td><td>Atualize quando o comportamento mudar.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="pre-requisitos" class="doc-section" data-toc="Pré-requisitos">
+        <h2>Pré-requisitos</h2>
+        <p class="section-intro">Você consegue criar e testar um RPA local sem SQL Server e sem instalar o worker como serviço. Comece apenas com .NET, PowerShell e um navegador compatível.</p>
+        <div class="grid">
+          <article class="card"><h3>.NET 9 SDK</h3><p>A versão esperada fica em <code>global.json</code>. Confirme com <code>dotnet --version</code>.</p></article>
+          <article class="card"><h3>Navegador</h3><p>CloakBrowser é o padrão da base. Os testes automáticos locais usam Chromium. Se o navegador não abrir, consulte a mensagem do Playwright sobre instalação.</p></article>
+          <article class="card"><h3>SQL Server — só para fila</h3><p>Não é necessário para criar o fluxo, abrir o Blockly nem testar um caso local. Instale ou configure somente quando chegar à etapa do worker.</p></article>
+          <article class="card"><h3>PowerShell</h3><p>Os scripts de criação e validação foram feitos para PowerShell no Windows.</p></article>
+        </div>
+        <pre><code>dotnet --version
+dotnet build RpaBlockly.slnx
+powershell -ExecutionPolicy Bypass -File .\tools\Validar-Base.ps1</code></pre>
+      </section>
+
+      <section id="primeiro-rpa" class="doc-section" data-toc="Primeiro RPA">
+        <h2>Criar o primeiro RPA, passo a passo</h2>
+        <p class="section-intro">O objetivo desta primeira execução é simples: criar a pasta, abrir o fluxo no Blockly e validar o projeto sem acessar um sistema real. Depois disso, você substitui o exemplo pelo roteiro do portal.</p>
+        <div class="steps">
+          <article class="step"><h3>Escolha dois nomes</h3><p>O nome técnico vira pasta e projeto: use <code>RpaContasPagar</code>, sem espaço ou acento. O nome visível pode ser <code>Contas a pagar</code>. Essa separação evita problemas em caminhos e mantém a tela legível.</p></article>
+          <article class="step"><h3>Execute o gerador na raiz da base</h3><pre><code>.\tools\Novo-Rpa.ps1 -Name RpaContasPagar -DisplayName "Contas a pagar"</code></pre><p><strong>Resultado esperado:</strong> aparece a pasta <code>rpas/RpaContasPagar</code>, e o projeto é incluído em <code>RpaBlockly.slnx</code>.</p></article>
+          <article class="step"><h3>Abra a configuração local</h3><p>Edite <code>rpas/RpaContasPagar/appsettings.local.json</code>. Coloque ali URL, usuário de teste, navegador e parâmetros que mudam por ambiente. Esse arquivo não entra no Git.</p><p><strong>Não coloque senha no fluxo JSON.</strong> Segredos devem continuar na configuração local, variável de ambiente ou cofre.</p></article>
+          <article class="step"><h3>Valide antes de abrir o navegador</h3><pre><code>dotnet build RpaBlockly.slnx
+dotnet run --project rpas/RpaContasPagar/RpaContasPagar.csproj --no-build -- --validate-only</code></pre><p><strong>Resultado esperado:</strong> compilação sem erro e mensagem informando que o fluxo é válido. Se falhar aqui, corrija antes de testar o portal.</p></article>
+          <article class="step"><h3>Abra o Blockly</h3><pre><code>.\abrir-editor.cmd rpas\RpaContasPagar</code></pre><p>O comando inicia um pequeno servidor apenas no seu computador e abre o editor. Você deve ver o nome do RPA e os blocos do fluxo atual.</p></article>
+          <article class="step"><h3>Monte uma etapa de cada vez</h3><p>Comece com Navegar e Aguardar elemento. Teste. Depois adicione login. Teste novamente. Continue em pequenos grupos para saber exatamente qual alteração causou uma falha.</p></article>
+          <article class="step"><h3>Salve, feche e reabra</h3><p>Depois de salvar, reabra o editor. Confira se todos os blocos, campos e conexões voltaram iguais. Isso comprova que o JSON contém tudo que a tela precisa.</p></article>
+          <article class="step"><h3>Execute visível e pare antes do efeito real</h3><p>Use navegador visível durante o desenvolvimento. Valide seletores e dados até o ponto autorizado. Enviar, confirmar, cadastrar, excluir ou pagar exige autorização explícita e proteção adequada.</p></article>
+        </div>
+        <div class="callout danger"><strong>Nunca comece testando a confirmação final.</strong> Primeiro valide configuração, JSON, inputs, seletores e cada etapa anterior. O fato de um botão estar visível não autoriza clicar nele.</div>
+      </section>
+
+      <section id="editor" class="doc-section" data-toc="Usar o Blockly">
+        <h2>Como usar o editor Blockly</h2>
+        <p class="section-intro">O editor precisa saber quais arquivos pertencem ao RPA. Essa ligação fica em <code>rpa.editor.json</code>. O gerador cria esse arquivo automaticamente; normalmente você só altera a lista de campos que deseja editar pela tela.</p>
+        <div class="grid">
+          <article class="card"><h3>Arquivo do projeto</h3><p>Permite ao editor localizar a pasta correta e reconhecer o projeto .NET.</p></article>
+          <article class="card"><h3>Arquivo de configuração</h3><p>Guarda valores do ambiente local, como URL e parâmetros. Pode conter dados que não devem ir para o Git.</p></article>
+          <article class="card"><h3>Arquivo do fluxo</h3><p>É o <code>flow.production.json</code> que contém a ordem e a configuração dos blocos.</p></article>
+        </div>
+        <pre><code>{
+  "displayName": "Contas a pagar",
+  "projectFile": "RpaContasPagar.csproj",
+  "configurationFile": "appsettings.local.json",
+  "flowFile": "flow.production.json",
+  "configurationFields": [
+    {
+      "path": "Input.Url",
+      "label": "URL inicial",
+      "source": "input.url",
+      "type": "url"
+    }
+  ]
+}</code></pre>
+        <table class="data-table">
+          <thead><tr><th>Campo do perfil</th><th>Explicação</th></tr></thead>
+          <tbody>
+            <tr><td><code>displayName</code></td><td>Nome humano mostrado no topo do editor.</td></tr>
+            <tr><td><code>projectFile</code></td><td>Nome do arquivo <code>.csproj</code> dentro da pasta do RPA.</td></tr>
+            <tr><td><code>configurationFile</code></td><td>Arquivo que o formulário do editor abre e salva. Durante o desenvolvimento, aponte para <code>appsettings.local.json</code>, não para o exemplo versionado.</td></tr>
+            <tr><td><code>flowFile</code></td><td>Nome do JSON executável. Na estrutura padrão é <code>flow.production.json</code>.</td></tr>
+            <tr><td><code>configurationFields[].path</code></td><td>Local exato dentro do arquivo de configuração. Exemplo: <code>Input.Url</code> significa a propriedade <code>Url</code> dentro de <code>Input</code>.</td></tr>
+            <tr><td><code>configurationFields[].label</code></td><td>Texto amigável mostrado para a pessoa no formulário.</td></tr>
+            <tr><td><code>configurationFields[].source</code></td><td>Nome usado pelos blocos para ler o valor. Exemplo: o campo salvo em <code>Input.Url</code> fica disponível como <code>input.url</code>.</td></tr>
+            <tr><td><code>configurationFields[].type</code></td><td>Define a forma de edição e validação: texto, URL, e-mail, senha, data, número, caixa de seleção ou lista de textos.</td></tr>
+            <tr><td><code>configurationFields[].nullable</code></td><td>Use <code>true</code> somente quando a ausência do valor for válida. Não use para esconder um campo obrigatório ainda não configurado.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><strong>Rotina recomendada ao editar</strong> Abra o fluxo, altere poucos blocos, salve, feche e reabra. Depois execute <code>--validate-only</code>. Se um campo desaparecer depois de reabrir, não use esse campo em produção: a conversão entre Blockly e JSON ainda precisa ser corrigida.</div>
+      </section>
+
+      <section id="dados" class="doc-section" data-toc="Inputs e contexto">
+        <h2>De onde os blocos leem e onde guardam dados</h2>
+        <p class="section-intro">Em vez de colocar todos os valores diretamente nos blocos, você pode indicar um caminho. O começo do caminho informa de qual grupo o dado vem. Pense nesses grupos como objetos disponíveis durante a execução.</p>
+        <table class="data-table">
+          <thead><tr><th>Raiz</th><th>O que contém</th><th>Quem escreve</th><th>Exemplo</th></tr></thead>
+          <tbody>
+            <tr><td><code>input.*</code></td><td>Dados do caso atual, como CNPJ, número e datas. Os blocos podem ler, mas não alterar.</td><td>Execução local ou worker, antes do fluxo começar.</td><td><code>input.documentos[0].numero</code></td></tr>
+            <tr><td><code>config.*</code></td><td>Parâmetros que valem para o RPA ou ambiente, mas não são resultado de um caso.</td><td>Arquivo de configuração ou worker.</td><td><code>config.unidadePadrao</code></td></tr>
+            <tr><td><code>attachments.*</code></td><td>Caminhos dos arquivos que o caso trouxe para o RPA.</td><td>Execução local ou worker.</td><td><code>attachments.notaPdf</code></td></tr>
+            <tr><td><code>runtime.*</code></td><td>Área temporária de trabalho. Os blocos guardam aqui protocolo, leituras, cálculos e caminhos produzidos.</td><td>Blocos durante a execução.</td><td><code>runtime.protocolo</code></td></tr>
+            <tr><td><code>system.*</code></td><td>Identificadores criados pelo sistema para rastrear a execução e o item da fila.</td><td>Runtime ou worker.</td><td><code>system.workItemId</code></td></tr>
+            <tr><td><code>loop.*</code></td><td>Item e posição atuais de um bloco Para cada item ou Repetir.</td><td>Interpretador, apenas enquanto o loop está ativo.</td><td><code>loop.documento.arquivos</code></td></tr>
+          </tbody>
+        </table>
+        <h3>De onde surge um caso?</h3>
+        <p><strong>O Blockly não cria o caso.</strong> Ele apenas define o que fazer com os dados recebidos. Antes de o primeiro bloco rodar, o programa do RPA recebe um objeto chamado <code>FlowExecutionRequest</code>. A propriedade <code>Input</code> desse objeto passa a ser a raiz <code>input.*</code> usada pelos blocos.</p>
+        <pre><code>Durante um teste local:
+appsettings.local.json → seção Input → FlowExecutionRequest.Input → input.*
+
+Quando o worker está em uso:
+rpa.WorkItem.InputJson → FlowExecutionRequest.Input → input.*</code></pre>
+
+        <h3>Opção 1: caso informado no arquivo local</h3>
+        <p>Esta é a forma mais simples durante o desenvolvimento. Abra o <code>appsettings.local.json</code> que fica na pasta do RPA e coloque o caso dentro da seção <code>Input</code>:</p>
+        <pre><code>{
+  "Input": {
+    "url": "https://portal.exemplo/login",
+    "cnpj": "12345678000190",
+    "documentos": [
+      { "numero": "NF-100", "valor": 150.75 }
+    ]
+  }
+}</code></pre>
+        <p>O <code>Program.cs</code> criado pelo gerador já lê essa seção. Em forma resumida, o código existente faz isto:</p>
+        <pre><code>var request = new FlowExecutionRequest(
+    Guid.NewGuid().ToString("N"),
+    CloneObject(configuration["Input"]),
+    CloneObject(configuration["Blockly"]?["Variables"]),
+    CloneObject(configuration["Attachments"]));</code></pre>
+        <p>Você normalmente não precisa escrever esse trecho. Basta preencher <code>Input</code> no arquivo local e iniciar o projeto. O programa retira o objeto de dentro de <code>Input</code> e o entrega ao runtime.</p>
+
+        <h3>Opção 2: caso colocado na fila do worker</h3>
+        <p>Em produção, algum sistema precisa criar o item da fila. Pode ser uma API interna, uma integração, uma importação de planilha, uma procedure ou outro programa. A base não inventa os casos sozinha. Quem cria o item grava os dados na coluna <code>InputJson</code> da tabela <code>rpa.WorkItem</code>.</p>
+        <pre><code>INSERT INTO rpa.WorkItem (RpaCode, InputJson)
+VALUES (
+  N'contas-pagar',
+  N'{"url":"https://portal.exemplo/login","cnpj":"12345678000190","documentos":[{"numero":"NF-100","valor":150.75}]}'
+);</code></pre>
+        <p>Nesse caso, grave em <code>InputJson</code> somente o objeto do caso. Não coloque outra propriedade <code>Input</code> ao redor dele. Quando o worker reserva a linha, ele converte o texto da coluna em objeto JSON e o entrega como <code>FlowExecutionRequest.Input</code>.</p>
+
+        <h3>Como o exemplo aparece para os blocos</h3>
+        <table class="data-table">
+          <thead><tr><th>Dado recebido</th><th>Caminho usado no bloco</th><th>Valor encontrado</th></tr></thead>
+          <tbody>
+            <tr><td><code>url</code></td><td><code>input.url</code></td><td><code>https://portal.exemplo/login</code></td></tr>
+            <tr><td><code>cnpj</code></td><td><code>input.cnpj</code></td><td><code>12345678000190</code></td></tr>
+            <tr><td>Primeiro documento</td><td><code>input.documentos[0]</code></td><td>Objeto da nota NF-100.</td></tr>
+            <tr><td>Número do primeiro documento</td><td><code>input.documentos[0].numero</code></td><td><code>NF-100</code></td></tr>
+            <tr><td>Valor do primeiro documento</td><td><code>input.documentos[0].valor</code></td><td><code>150.75</code></td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><strong>O fluxo declara; a execução fornece.</strong> A lista <code>inputs</code> do <code>flow.production.json</code> serve para dizer quais dados são obrigatórios e quais tipos são aceitos. Ela não cria nem preenche o caso. Os valores reais vêm do <code>appsettings.local.json</code> ou do <code>InputJson</code> reservado pelo worker.</div>
+
+        <h3>Valor direto ou origem?</h3>
+        <div class="grid">
+          <article class="card"><h3>Valor direto, chamado de literal</h3><p>Use quando o texto é sempre igual em qualquer caso e ambiente. Exemplo: pressionar a tecla <code>Enter</code>.</p></article>
+          <article class="card"><h3>Origem, campo terminado em Source</h3><p>Use quando o valor vem do caso, da configuração ou de uma etapa anterior. Exemplo: <code>valueSource: input.cnpj</code>.</p></article>
+        </div>
+        <div class="callout warning"><strong>Não preencha os dois ao mesmo tempo.</strong> Se um bloco oferece <code>value</code> e <code>valueSource</code>, escolha apenas um. O primeiro grava o valor no próprio fluxo; o segundo diz de onde ler durante a execução.</div>
+
+        <h3>Declarar input obrigatório</h3>
+        <pre><code>{
+  "schemaVersion": 1,
+  "name": "Contas a pagar",
+  "inputs": [
+    { "path": "input.url", "type": "string", "required": true },
+    { "path": "input.documentos", "type": "array", "required": true }
+  ],
+  "actions": [],
+  "subflows": {}
+}</code></pre>
+        <p>Essa lista é uma conferência feita antes de abrir o navegador. Se <code>input.documentos</code> estiver ausente ou não for uma lista, o erro aparece imediatamente.</p>
+        <p><strong>Tipos aceitos:</strong> <code>string</code> é texto; <code>number</code> é número; <code>boolean</code> é verdadeiro ou falso; <code>object</code> é um objeto JSON; <code>array</code> é uma lista; <code>null</code> representa ausência; <code>any</code> aceita qualquer tipo.</p>
+      </section>
+
+      <section id="seletores" class="doc-section" data-toc="Encontrar elementos">
+        <h2>Como encontrar o elemento certo na página</h2>
+        <p class="section-intro">A maior parte das falhas de um RPA web vem de seletores frágeis ou ambíguos. O objetivo não é encontrar “algum botão”, mas identificar exatamente o controle correto e falhar quando a página não estiver como esperado.</p>
+        <h3>Ordem de preferência</h3>
+        <div class="steps">
+          <article class="step"><h3>ID estável</h3><p>Prefira <code>#btnSalvar</code> quando o ID é único e não muda entre acessos.</p></article>
+          <article class="step"><h3>Atributo funcional</h3><p>Use <code>button[data-action='save']</code>, <code>input[name='cnpj']</code> ou outro atributo que descreva a função do campo.</p></article>
+          <article class="step"><h3>Escopo + seletor</h3><p>Quando há botões repetidos, primeiro limite a busca a um formulário, modal ou linha e depois procure o botão dentro dele.</p></article>
+          <article class="step"><h3>Texto como complemento</h3><p>Use texto para diferenciar itens dentro de um escopo estável. Evite depender apenas do texto da página inteira.</p></article>
+        </div>
+        <h3>Exemplo: botão Editar repetido em uma tabela</h3>
+        <pre><code>{
+  "selector": "button[data-action='edit']",
+  "scope": "tr[data-row]",
+  "scopeHasTextSource": "input.numeroDocumento"
+}</code></pre>
+        <p>Primeiro o RPA encontra a linha que contém o número do documento atual. Somente dentro dessa linha ele procura o botão Editar. Isso é mais seguro do que usar o primeiro botão da tabela.</p>
+        <h3>Quando existe iframe</h3>
+        <p>Um iframe é uma página dentro da página. Se o campo está dentro dele, informe <code>frameSelectors</code> do iframe mais externo para o mais interno. Se houver dois níveis, a lista terá dois seletores nessa ordem.</p>
+        <div class="callout danger"><strong>Não resolva ambiguidade com First ou Nth.</strong> Se o seletor encontra dois elementos, melhore o seletor ou o escopo. Escolher o primeiro pela posição pode fazer o RPA agir silenciosamente no registro errado.</div>
+      </section>
+
+      <section id="artefatos" class="doc-section" data-toc="Artefatos">
+        <h2>Artefatos, downloads e screenshots</h2>
+        <p class="section-intro"><strong>Artefato</strong> é qualquer arquivo que você deseja guardar como parte da execução: screenshot, recibo, relatório, PDF ou XML. O RPA primeiro termina de gravar o arquivo e só depois informa o caminho em <code>runtime.*</code>.</p>
+        <div class="grid">
+          <article class="card"><h3>Pasta relativa</h3><p>É uma pasta abaixo da área de saída do RPA. A base impede <code>..</code> de sair dessa área e atingir arquivos do projeto.</p></article>
+          <article class="card"><h3>Pasta absoluta ou de rede</h3><p>Informe o caminho completo, como <code>C:\Rpa\Saidas</code> ou <code>\\servidor\pasta</code>. O usuário que executa o processo precisa ter acesso.</p></article>
+          <article class="card"><h3>Se o nome já existir</h3><p><code>unique</code> cria outro nome; <code>fail</code> para com erro; <code>overwrite</code> substitui o arquivo de propósito. Use overwrite somente quando essa perda for aceitável.</p></article>
+          <article class="card"><h3>Registro pelo worker</h3><p>O worker confere se o arquivo existe, guarda tamanho e calcula SHA-256, uma assinatura que ajuda a identificar exatamente aquele conteúdo.</p></article>
+        </div>
+        <div class="callout warning"><strong>Artefato não é inofensivo.</strong> Screenshot, PDF, XML e planilha podem conter dados pessoais, fiscais e credenciais. Defina acesso, retenção e descarte; mantenha tudo fora do Git.</div>
+      </section>
+
+      <section id="worker" class="doc-section" data-toc="Worker">
+        <h2>Worker: executar casos de uma fila</h2>
+        <p class="section-intro">Use o worker quando os casos vêm de uma tabela e precisam ser processados automaticamente. Para desenvolver um único fluxo, continue executando o projeto do RPA diretamente; isso reduz as partes envolvidas e facilita encontrar erros.</p>
+
+        <h3>O caminho de um caso</h3>
+        <div class="steps">
+          <article class="step"><h3>O worker procura um item disponível</h3><p>Ele consulta somente códigos de RPA que estão autorizados em <code>Definitions</code>. Itens com status <code>Pending</code> ou <code>Retry</code> podem ser escolhidos quando o horário <code>AvailableAtUtc</code> já chegou.</p></article>
+          <article class="step"><h3>O item é reservado</h3><p>A reserva, chamada de <em>claim</em> no código, acontece na mesma operação do banco. Assim dois workers não recebem o mesmo item.</p></article>
+          <article class="step"><h3>A reserva é renovada</h3><p>Enquanto o navegador está trabalhando, o heartbeat renova o prazo da reserva. Se o processo morrer, a reserva vence e outro worker pode recuperar o caso.</p></article>
+          <article class="step"><h3>O mesmo fluxo JSON é executado</h3><p>Os JSONs de entrada, configuração e anexos da tabela viram <code>input.*</code>, <code>config.*</code> e <code>attachments.*</code>. O Blockly não consulta o banco.</p></article>
+          <article class="step"><h3>O resultado é registrado</h3><p>Em sucesso, o worker grava saídas e arquivos. Em parada segura, registra <code>Validated</code>. Em falha, registra a mensagem e decide entre nova tentativa ou falha definitiva conforme o número máximo de tentativas.</p></article>
+        </div>
+
+        <h3>Três autorizações precisam estar ligadas</h3>
+        <table class="data-table">
+          <thead><tr><th>Chave</th><th>O que ela autoriza</th><th>Por que são três?</th></tr></thead>
+          <tbody>
+            <tr><td><code>RpaWorker.Enabled</code></td><td>Liga o serviço inteiro.</td><td>Permite desligar toda a fila com uma configuração.</td></tr>
+            <tr><td><code>Definitions.nome.Enabled</code></td><td>Permite carregar e validar aquele RPA.</td><td>Um RPA pode permanecer cadastrado, mas fora de uso.</td></tr>
+            <tr><td><code>Definitions.nome.ClaimEnabled</code></td><td>Permite reservar itens daquele RPA.</td><td>É a última trava para começar a consumir casos reais.</td></tr>
+          </tbody>
+        </table>
+        <p>Mantenha as três desligadas ou parcialmente desligadas enquanto prepara o ambiente. Habilite <code>ClaimEnabled</code> apenas para o RPA em teste e ligue <code>RpaWorker.Enabled</code> por último.</p>
+        <pre><code>Copy-Item src/Rpa.Worker/appsettings.example.json src/Rpa.Worker/appsettings.local.json
+dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj -- --validate-only
+dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj</code></pre>
+        <h3>Configuração geral</h3>
+        <table class="data-table">
+          <thead><tr><th>Propriedade</th><th>Valor inicial</th><th>O que significa na prática</th></tr></thead>
+          <tbody>
+            <tr><td><code>Enabled</code></td><td><code>false</code></td><td>Liga a busca contínua por novos itens. Deve ser a última chave alterada.</td></tr>
+            <tr><td><code>ExecutionMode</code></td><td><code>SafeValidation</code></td><td><code>SafeValidation</code> para antes dos IDs perigosos cadastrados. <code>Production</code> permite executá-los e só deve ser usado depois da aprovação operacional.</td></tr>
+            <tr><td><code>WorkerId</code></td><td>Nome da máquina</td><td>Nome gravado no banco para mostrar qual processo reservou e executou o item. Use um valor diferente por serviço.</td></tr>
+            <tr><td><code>WorkspaceRoot</code></td><td><code>.</code></td><td>Pasta usada como ponto de partida para localizar fluxos, configurações e caminhos relativos.</td></tr>
+            <tr><td><code>PollIntervalSeconds</code></td><td><code>5</code></td><td>Quando não encontra item, quantos segundos espera antes de consultar de novo. Não é uma pausa dentro do RPA.</td></tr>
+            <tr><td><code>MaxParallelism</code></td><td><code>2</code></td><td>Quantidade máxima de casos executados ao mesmo tempo por este processo. Fluxos que correlacionam OTP por uma única caixa exigem 1.</td></tr>
+            <tr><td><code>LeaseSeconds</code></td><td><code>300</code></td><td>Prazo inicial da reserva do item. Deve ser longo o suficiente para o heartbeat renovar antes de vencer.</td></tr>
+            <tr><td><code>HeartbeatSeconds</code></td><td><code>60</code></td><td>Intervalo de renovação da reserva. Precisa ser menor que <code>LeaseSeconds</code>.</td></tr>
+            <tr><td><code>CaseTimeoutMinutes</code></td><td><code>30</code></td><td>Tempo máximo para um caso inteiro, incluindo navegador e esperas. Ao vencer, a execução é cancelada.</td></tr>
+            <tr><td><code>RetryDelaySeconds</code></td><td><code>60</code></td><td>Tempo antes de disponibilizar novamente um item que ainda pode tentar de novo.</td></tr>
+            <tr><td><code>Storage.ArtifactRoot</code></td><td><code>storage/artifacts</code></td><td>Pasta principal de screenshots e downloads produzidos pelo worker.</td></tr>
+            <tr><td><code>Storage.SessionStateRoot</code></td><td><code>storage/sessions</code></td><td>Pasta dos estados de login. Trate como segredo porque contém cookies e armazenamento do navegador.</td></tr>
+          </tbody>
+        </table>
+        <h3>Configuração de cada RPA</h3>
+        <table class="data-table">
+          <thead><tr><th>Propriedade</th><th>O que você deve informar</th></tr></thead>
+          <tbody>
+            <tr><td><code>Definitions.&lt;código&gt;</code></td><td>O código entre as chaves deve ser igual ao <code>RpaCode</code> dos itens da fila. Exemplo: <code>contas-pagar</code>.</td></tr>
+            <tr><td><code>Enabled</code></td><td><code>true</code> permite carregar e validar esse RPA. Não significa que itens já serão reservados.</td></tr>
+            <tr><td><code>ClaimEnabled</code></td><td><code>true</code> autoriza o worker a reservar itens com esse código. Deixe <code>false</code> até terminar a configuração.</td></tr>
+            <tr><td><code>FlowFile</code></td><td>Caminho do <code>flow.production.json</code>, relativo a <code>WorkspaceRoot</code>.</td></tr>
+            <tr><td><code>ConfigurationFile</code></td><td>Arquivo base com variáveis e anexos opcionais. Pode ficar vazio quando todos os dados chegam pelo item.</td></tr>
+            <tr><td><code>IrreversibleActionIds</code></td><td>Lista dos IDs de ações que podem enviar, confirmar, cadastrar, excluir, pagar ou provocar outro efeito real. Em modo seguro, o worker para antes delas.</td></tr>
+            <tr><td><code>Outputs</code></td><td>Lista dos valores de <code>runtime.*</code> que devem ganhar nome e linha própria na tabela de resultados.</td></tr>
+            <tr><td><code>Artifacts</code></td><td>Lista dos caminhos de arquivos em <code>runtime.*</code> que devem ser verificados e registrados.</td></tr>
+          </tbody>
+        </table>
+        <h3>Configuração do navegador em cada RPA</h3>
+        <table class="data-table">
+          <thead><tr><th>Propriedade</th><th>Valor inicial</th><th>Como escolher</th></tr></thead>
+          <tbody>
+            <tr><td><code>Runtime.Headless</code></td><td><code>true</code></td><td><code>false</code> mostra o navegador e é melhor para desenvolvimento. <code>true</code> executa sem janela visível.</td></tr>
+            <tr><td><code>Runtime.Browser</code></td><td><code>cloakbrowser</code></td><td>Nome do navegador suportado pelo host. Use o mesmo que foi homologado nos testes do portal.</td></tr>
+            <tr><td><code>Runtime.ActionTimeoutSeconds</code></td><td><code>30</code></td><td>Limite padrão de uma ação web quando o próprio bloco não informa outro timeout.</td></tr>
+            <tr><td><code>Runtime.UploadTimeoutSeconds</code></td><td><code>90</code></td><td>Limite usado durante upload e estabilização posterior, que costumam levar mais tempo.</td></tr>
+            <tr><td><code>Runtime.ReadinessQuietPeriodMs</code></td><td><code>800</code></td><td>Quanto tempo a rede precisa permanecer quieta para a página ser considerada estável.</td></tr>
+            <tr><td><code>Runtime.FormStabilityMs</code></td><td><code>600</code></td><td>Quanto tempo os valores do formulário precisam permanecer sem mudança.</td></tr>
+            <tr><td><code>Runtime.Locale</code></td><td><code>pt-BR</code></td><td>Idioma e convenções do navegador, usados por páginas que mudam formato conforme a localidade.</td></tr>
+            <tr><td><code>Runtime.ViewportWidth</code></td><td><code>1440</code></td><td>Largura da área visível do navegador em pixels.</td></tr>
+            <tr><td><code>Runtime.ViewportHeight</code></td><td><code>1000</code></td><td>Altura da área visível do navegador em pixels.</td></tr>
+            <tr><td><code>Runtime.BusySelectors</code></td><td>Lista de loaders comuns</td><td>Seletores dos indicadores que significam “a página ainda está trabalhando”. Cadastre somente elementos cuja visibilidade realmente indica carregamento.</td></tr>
+            <tr><td><code>Runtime.UseSessionState</code></td><td><code>false</code></td><td>Quando <code>true</code>, tenta carregar cookies e armazenamento de uma sessão anterior para a mesma chave de login.</td></tr>
+            <tr><td><code>Runtime.SaveSessionState</code></td><td><code>false</code></td><td>Quando <code>true</code>, salva o estado atualizado ao terminar com sucesso.</td></tr>
+          </tbody>
+        </table>
+        <h3>Sessão por login</h3>
+        <p>O item da fila pode trazer uma <code>SessionKey</code>, por exemplo o identificador interno da credencial. O worker combina o código do RPA com essa chave e cria um nome de arquivo irreconhecível por meio de SHA-256. Assim cada login possui seu próprio estado sem expor o usuário no nome do arquivo.</p>
+        <p>Se a sessão ainda for aceita pelo portal, o fluxo pode entrar diretamente no sistema. Se o portal mostrar login ou OTP, os blocos condicionais tratam esse caminho. O worker não consulta e-mail fora do bloco de OTP.</p>
+        <div class="callout danger"><strong>Estado autenticado é segredo.</strong> A pasta <code>storage/</code> fica ignorada pelo Git. Restrinja permissões, retenção e backup como faria com credenciais.</div>
+      </section>
+
+      <section id="otp-email" class="doc-section" data-toc="OTP por e-mail">
+        <h2>OTP por e-mail com Outlook e Microsoft 365</h2>
+        <p class="section-intro">A base consegue procurar um código de autenticação em uma caixa do Microsoft 365. Ela usa o Microsoft Graph, que é a interface oficial para programas acessarem serviços do Microsoft 365. O Outlook não precisa estar aberto e nenhum usuário precisa permanecer conectado no Windows.</p>
+
+        <div class="callout"><strong>O que você precisa pedir ao administrador do Microsoft 365</strong> Um aplicativo registrado no Microsoft Entra ID, permissão de aplicativo <code>Mail.Read</code> aprovada por um administrador e acesso limitado à caixa que o RPA consultará. O desenvolvedor recebe Tenant ID, Client ID e um segredo; esses valores não entram no fluxo Blockly.</div>
+
+        <div class="grid">
+          <article class="card"><h3>Não altera a caixa</h3><p>O leitor consulta assunto, horário, remetente e corpo. Não marca como lido, não move e não exclui mensagens.</p></article>
+          <article class="card"><h3>Só consulta quando necessário</h3><p>A leitura começa apenas quando o fluxo chega ao bloco Aguardar código de uso único. Se a sessão ainda estiver autenticada e esse ramo não executar, o e-mail não é consultado.</p></article>
+          <article class="card"><h3>Ignora códigos antigos</h3><p>O bloco Capturar instante UTC registra quando o pedido começou. Mensagens anteriores a esse horário são descartadas.</p></article>
+          <article class="card"><h3>Escolhe a mensagem mais nova</h3><p>Depois de aplicar horário, assunto e remetente, o leitor usa a mensagem válida mais recente que contém um código no formato esperado.</p></article>
+        </div>
+
+        <h3>Preparar o Microsoft 365</h3>
+        <ol class="steps">
+          <li><strong>Administrador:</strong> crie ou escolha um aplicativo em Microsoft Entra ID → Registros de aplicativo.</li>
+          <li><strong>Administrador:</strong> adicione a permissão de aplicativo <code>Mail.Read</code> do Microsoft Graph e aprove o consentimento. “Permissão de aplicativo” permite ao serviço funcionar sem login interativo.</li>
+          <li><strong>Administrador:</strong> limite o aplicativo às caixas necessárias. Não conceda acesso a todas as caixas se o RPA usa somente uma.</li>
+          <li><strong>Administrador ou responsável:</strong> entregue Tenant ID, Client ID e um segredo com data de validade e plano de renovação.</li>
+          <li><strong>Desenvolvedor:</strong> copie <code>appsettings.example.json</code> para <code>appsettings.local.json</code>, preencha os valores e mantenha <code>Enabled=false</code> até validar tudo.</li>
+          <li><strong>Desenvolvedor:</strong> execute <code>--validate-only</code>. Depois habilite o leitor e teste com uma mensagem controlada, sem registrar o código em log ou screenshot.</li>
+        </ol>
+
+        <pre><code>"EmailReader": {
+  "TenantId": "GUID-DO-TENANT",
+  "ClientId": "GUID-DO-APLICATIVO",
+  "ClientSecret": "SEGREDO-SOMENTE-NO-AMBIENTE-LOCAL",
+  "RequestTimeoutSeconds": 30,
+  "Providers": {
+    "email-otp": {
+      "Enabled": true,
+      "Provider": "MicrosoftGraph",
+      "Mailbox": "rpa@empresa.com.br",
+      "SenderAddress": "nao-responda@sistema.com.br",
+      "SubjectContains": "Código de autenticação",
+      "CodePattern": "(?:código|token)\\s*(?:de acesso)?\\s*[-:]\\s*(\\d{6})",
+      "MaximumEmailAgeMinutes": 5,
+      "RequestedEmailCount": 10
+    }
+  }
+}</code></pre>
+
+        <h3>O que preencher em cada propriedade</h3>
+        <table class="data-table">
+          <thead><tr><th>Propriedade</th><th>Obrigatória</th><th>Padrão/limite</th><th>Explicação</th></tr></thead>
+          <tbody>
+            <tr><td><code>EmailReader.TenantId</code></td><td>Quando algum leitor está habilitado</td><td>GUID</td><td>Código que identifica a organização no Microsoft 365. GUID é um identificador no formato <code>11111111-1111-4111-8111-111111111111</code>.</td></tr>
+            <tr><td><code>EmailReader.ClientId</code></td><td>Quando algum leitor está habilitado</td><td>GUID</td><td>Código público que identifica o aplicativo registrado. Não é o segredo.</td></tr>
+            <tr><td><code>EmailReader.ClientSecret</code></td><td>Quando algum leitor está habilitado</td><td>Sem valor inicial</td><td>Senha do aplicativo. Guarde em arquivo local, variável de ambiente ou cofre. Nunca coloque no fluxo ou no exemplo enviado ao Git.</td></tr>
+            <tr><td><code>EmailReader.RequestTimeoutSeconds</code></td><td>Sim</td><td>30; entre 1 e 300</td><td>Tempo máximo de uma consulta individual ao Microsoft 365. O bloco pode realizar várias consultas até atingir o timeout total dele.</td></tr>
+            <tr><td><code>Providers.&lt;alias&gt;</code></td><td>Para cada nome usado no Blockly</td><td>Letras, números, ponto, hífen e sublinhado</td><td>Nome curto que liga o bloco a esta configuração. Se o bloco usa <code>email-otp</code>, a configuração deve ter exatamente a chave <code>email-otp</code>.</td></tr>
+            <tr><td><code>Enabled</code></td><td>Sim</td><td><code>false</code></td><td><code>false</code> impede qualquer acesso à caixa. Mude para <code>true</code> somente depois de preencher e validar os demais campos.</td></tr>
+            <tr><td><code>Provider</code></td><td>Sim</td><td><code>MicrosoftGraph</code></td><td>Nome interno do tipo de leitor. Nesta base, mantenha <code>MicrosoftGraph</code>.</td></tr>
+            <tr><td><code>Mailbox</code></td><td>Quando habilitado</td><td>Endereço de e-mail</td><td>Caixa que será consultada. Pode ser de usuário ou compartilhada, desde que o aplicativo tenha permissão para acessá-la.</td></tr>
+            <tr><td><code>SenderAddress</code></td><td>Não</td><td>Vazio aceita qualquer remetente</td><td>Endereço exato de quem envia o OTP. Preencher reduz a chance de interpretar outra mensagem com assunto parecido.</td></tr>
+            <tr><td><code>SubjectContains</code></td><td>Quando habilitado</td><td>Até 200 caracteres</td><td>Parte estável do assunto. Se o assunto pode começar com <code>ENC:</code>, use somente a parte que permanece igual.</td></tr>
+            <tr><td><code>CodePattern</code></td><td>Quando habilitado</td><td>Expressão regular de até 2048 caracteres</td><td>Regra que encontra o código no corpo. Os parênteses indicam qual trecho deve ser retornado. Exemplo: <code>Código:\s*(\d{6})</code> captura seis dígitos depois de “Código:”.</td></tr>
+            <tr><td><code>MaximumEmailAgeMinutes</code></td><td>Sim</td><td>5; entre 1 e 60</td><td>Idade máxima aceita. Mesmo que outro horário esteja errado, uma mensagem muito antiga não será usada.</td></tr>
+            <tr><td><code>RequestedEmailCount</code></td><td>Sim</td><td>10; entre 1 e 50</td><td>Quantidade máxima de mensagens recentes lidas em cada consulta. Dez costuma permitir encontrar a mensagem correta sem buscar conteúdo demais.</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Opção avançada: segredo por variável de ambiente</h3>
+        <p>Se a equipe não puder guardar o segredo no arquivo local, configure-o no ambiente do processo. O valor do ambiente substitui o valor vazio do JSON:</p>
+        <pre><code>$env:RpaWorker__EmailReader__TenantId = "GUID-DO-TENANT"
+$env:RpaWorker__EmailReader__ClientId = "GUID-DO-APLICATIVO"
+$env:RpaWorker__EmailReader__ClientSecret = "SEGREDO"
+
+dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj -- --validate-only</code></pre>
+
+        <h3>Sequência correta no Blockly</h3>
+        <pre><code>capturar instante UTC
+→ ação que solicita o OTP no portal
+→ se o campo de OTP estiver visível
+    → aguardar código de uso único
+    → digitar em um campo ou distribuir entre campos
+    → marcar dispositivo confiável, se autorizado e disponível
+→ continuar o fluxo</code></pre>
+        <p><strong>Como ligar os blocos à configuração:</strong> <code>providerAlias</code> precisa ser igual ao nome em <code>EmailReader.Providers</code>. <code>notBeforeSource</code> aponta para o horário salvo por Capturar instante UTC. <code>target</code> é o local temporário onde o código ficará até ser digitado.</p>
+
+        <div class="callout warning"><strong>Execute um caso por vez quando todos usam a mesma caixa.</strong> Com <code>ClaimEnabled=true</code>, o worker exige <code>MaxParallelism=1</code> para fluxos com OTP. Isso evita que o código do caso A seja usado no caso B. Se houver dois serviços instalados, a equipe também precisa garantir que apenas um deles solicite OTP daquela caixa por vez.</div>
+        <div class="callout danger"><strong>O código não é resultado de negócio.</strong> O worker remove automaticamente os destinos produzidos por <code>waitForOneTimeCode</code> antes de gravar <code>OutputJson</code> e rejeita outputs ou artefatos que incluam esse caminho. Não copie o OTP para outro caminho de runtime.</div>
+      </section>
+
+      <section id="banco" class="doc-section" data-toc="Banco e tabelas">
+        <h2>Banco de dados do worker</h2>
+        <p class="section-intro">O banco guarda a fila e o histórico. Ele não contém o roteiro Blockly. O fluxo continua no <code>flow.production.json</code>; cada linha da fila apenas informa qual RPA executar e quais dados entregar.</p>
+        <h3>Criar as tabelas</h3>
+        <pre><code>sqlcmd -S SERVIDOR -d BANCO -E -i .\database\sqlserver\001_create_worker_schema.sql</code></pre>
+        <p>O comando executa o script no SQL Server usando autenticação do Windows. Troque <code>SERVIDOR</code> e <code>BANCO</code>. Se a equipe usa usuário e senha do SQL Server, adapte somente os parâmetros de conexão do comando, sem colocar a senha no script versionado.</p>
+        <table class="data-table">
+          <thead><tr><th>Tabela padrão</th><th>O que guarda</th><th>Como pensar nela</th></tr></thead>
+          <tbody>
+            <tr><td><code>rpa.WorkItem</code></td><td>Um registro por caso: código do RPA, status, prioridade, tentativas, dados de entrada, anexos e resultado geral.</td><td>É a caixa de entrada e o estado atual do caso.</td></tr>
+            <tr><td><code>rpa.Execution</code></td><td>Uma linha para cada tentativa de executar um caso, com início, fim, worker, quantidade de ações e erro.</td><td>É o histórico de tentativas.</td></tr>
+            <tr><td><code>rpa.ExecutionOutput</code></td><td>Resultados importantes com nomes próprios, como protocolo ou situação final.</td><td>Facilita consultar resultados sem interpretar todo o JSON.</td></tr>
+            <tr><td><code>rpa.Artifact</code></td><td>Caminho, tipo, tamanho e SHA-256 dos arquivos produzidos.</td><td>É o índice de evidências e downloads.</td></tr>
+            <tr><td><code>rpa.ExecutionEvent</code></td><td>Eventos técnicos durante a tentativa: ação iniciada, concluída ou com falha.</td><td>Ajuda a descobrir em qual etapa e quanto tempo o RPA gastou.</td></tr>
+          </tbody>
+        </table>
+        <h3>Alterar os nomes das tabelas</h3>
+        <p>As propriedades abaixo ficam em <code>RpaWorker.Tables</code>: <code>Schema</code>, <code>WorkItems</code>, <code>Executions</code>, <code>Outputs</code>, <code>Artifacts</code> e <code>Events</code>. Se mudar um nome, aplique o mesmo nome ao executar o script SQL. Os valores aceitam apenas identificadores simples, sem espaço ou SQL livre.</p>
+        <div class="callout"><strong>Como a base evita dois workers no mesmo item</strong> A consulta usa bloqueios do SQL Server dentro de uma transação. Em termos práticos, o banco escolhe e marca o item como reservado em uma única operação. Outro worker pula linhas já reservadas e procura a próxima.</div>
+      </section>
+
+      <section id="outputs" class="doc-section" data-toc="Outputs do worker">
+        <h2>Resultados e arquivos que o worker deve registrar</h2>
+        <p class="section-intro">O fluxo pode produzir muitos valores temporários. Use <code>Outputs</code> para destacar os resultados que o negócio consultará e <code>Artifacts</code> para registrar arquivos. Isso não cria o valor nem o arquivo; apenas informa ao worker onde encontrá-lo depois que o fluxo terminar.</p>
+        <pre><code>"Outputs": [
+  {
+    "Name": "protocolo",
+    "Source": "runtime.protocolo",
+    "Required": true,
+    "Sensitive": false
+  }
+],
+"Artifacts": [
+  {
+    "Name": "recibo",
+    "Source": "runtime.artefatos.recibo",
+    "Kind": "download",
+    "Required": true
+  }
+]</code></pre>
+        <h3>Campos de Outputs</h3>
+        <table class="data-table">
+          <thead><tr><th>Campo</th><th>O que preencher</th></tr></thead>
+          <tbody>
+            <tr><td><code>Name</code></td><td>Nome curto e estável para consulta, como <code>protocolo</code> ou <code>situacao</code>.</td></tr>
+            <tr><td><code>Source</code></td><td>Caminho <code>runtime.*</code> onde um bloco guardou o resultado.</td></tr>
+            <tr><td><code>Required</code></td><td>Se <code>true</code>, terminar o fluxo sem esse valor vira falha. Use somente quando a ausência realmente torna o processamento inválido.</td></tr>
+            <tr><td><code>Sensitive</code></td><td>Marca que o valor precisa de tratamento restrito em consultas e telas. Não criptografa automaticamente.</td></tr>
+          </tbody>
+        </table>
+        <h3>Campos de Artifacts</h3>
+        <table class="data-table">
+          <thead><tr><th>Campo</th><th>O que preencher</th></tr></thead>
+          <tbody>
+            <tr><td><code>Name</code></td><td>Nome administrativo do arquivo, como <code>recibo</code>.</td></tr>
+            <tr><td><code>Source</code></td><td>Caminho <code>runtime.*</code> que contém o caminho final do arquivo.</td></tr>
+            <tr><td><code>Kind</code></td><td>Categoria para consulta, por exemplo <code>download</code>, <code>screenshot</code> ou <code>relatorio</code>.</td></tr>
+            <tr><td><code>Required</code></td><td>Se <code>true</code>, o worker exige que o caminho exista e que o arquivo possa ser verificado.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout warning"><strong>Cuidado com nova tentativa depois de um efeito real.</strong> Se o portal já enviou ou cadastrou algo e depois faltou um output obrigatório, repetir automaticamente pode duplicar a operação. Antes de marcar um resultado como obrigatório, defina como o processo reconhece que a operação já aconteceu.</div>
+      </section>
+
+      <section id="seguranca" class="doc-section" data-toc="Segurança operacional">
+        <h2>Segurança operacional</h2>
+        <p class="section-intro">Segurança aqui não significa apenas proteger senhas. Também significa impedir clique no registro errado, evitar duplicidade e saber exatamente até onde um teste está autorizado a ir.</p>
+        <div class="grid">
+          <article class="card"><h3>Senhas e tokens</h3><p>Nunca coloque em <code>flow.production.json</code>, <code>appsettings.example.json</code>, logs ou screenshots. Use configuração local, variável de ambiente ou cofre de segredos.</p></article>
+          <article class="card"><h3>Botões que causam efeito real</h3><p>Liste seus IDs em <code>IrreversibleActionIds</code> e mantenha <code>SafeValidation</code> durante a homologação. Um botão visível não significa que o clique está autorizado.</p></article>
+          <article class="card"><h3>Elemento errado</h3><p>Um seletor deve encontrar exatamente um alvo quando a ação é única. Não escolha o primeiro resultado apenas para fazer o teste passar.</p></article>
+          <article class="card"><h3>Casos simultâneos</h3><p>Dados, página e variáveis de um caso não podem ficar em variáveis globais. Cada execução recebe seu próprio contexto.</p></article>
+          <article class="card"><h3>Página lenta</h3><p>Espere um sinal real: campo visível, loader ausente, rede quieta ou arquivo iniciado. Uma pausa fixa pode funcionar hoje e falhar amanhã.</p></article>
+          <article class="card"><h3>Banco</h3><p>O Blockly recebe um caso já reservado. Ele não escolhe o próximo item e não aceita SQL livre vindo do fluxo.</p></article>
+          <article class="card"><h3>Screenshots e downloads</h3><p>Eles podem conter CPF, CNPJ, valores e credenciais. Defina quem acessa, por quanto tempo ficam guardados e como serão apagados.</p></article>
+          <article class="card"><h3>Repetição depois de falha</h3><p>Antes de permitir retry, confirme se a operação pode ser repetida sem enviar, pagar ou cadastrar duas vezes.</p></article>
+        </div>
+        <div class="callout danger"><strong>Regra simples para testes</strong> Escreva antes da execução qual é o último passo autorizado. Se a autorização diz “não abrir a confirmação”, pare antes do clique que abre a confirmação. Uma proteção técnica não aumenta a autorização recebida.</div>
+      </section>
+
+      <section id="catalogo" class="doc-section" data-toc="Catálogo dos 35 blocos">
+        <h2>Catálogo completo dos 35 blocos</h2>
+        <p class="section-intro">Não leia as 35 fichas em sequência. Pesquise o bloco que pretende usar. Cada ficha apresenta a finalidade do bloco, um cenário de uso, o que acontece durante a execução e todos os campos disponíveis.</p>
+        <h3>Como ler uma ficha</h3>
+        <div class="grid">
+          <article class="card"><h3>Nome interno do bloco</h3><p>Começa com <code>rpa_</code> e identifica o bloco dentro do editor. Você normalmente não digita esse nome.</p></article>
+          <article class="card"><h3>Nome salvo no JSON</h3><p>É o valor de <code>type</code> que o programa .NET usa para escolher o comportamento.</p></article>
+          <article class="card"><h3>Campo terminado em Source</h3><p>Não recebe o valor final. Recebe o caminho de onde ler, como <code>input.cnpj</code>.</p></article>
+          <article class="card"><h3>Campo target</h3><p>Indica onde guardar o resultado temporário e deve começar por <code>runtime.</code>.</p></article>
+          <article class="card"><h3>Seletor, escopo e texto</h3><p>Trabalham juntos para identificar exatamente um elemento. Comece pelo seletor e acrescente escopo ou texto somente quando necessário.</p></article>
+          <article class="card"><h3>Valor inicial</h3><p>É usado quando você não preenche o campo. “Não há valor automático” significa que a ausência precisa ser válida ou será rejeitada.</p></article>
+        </div>
+        <div class="callout"><strong>Por que aparecem id, name e type em todas as fichas?</strong> <code>id</code> identifica aquela etapa de forma única; <code>name</code> é a descrição que aparece em logs e na tela; <code>type</code> escolhe o comportamento e é preenchido pelo editor. Mesmo repetidos, eles aparecem para que cada ficha seja completa quando consultada isoladamente.</div>
+        <div class="callout warning"><strong>Confirmação final e feedback</strong> No bloco Confirmação final segura, a caixa <strong>comprovar conclusão e publicar feedback</strong> inclui ou omite juntos os critérios de mensagem, protocolo, timeout e destinos <code>runtime.*</code>. Marcar essa caixa não autoriza o envio. A autorização permanece na configuração protegida do host e na política específica do portal.</div>
+        <div class="block-toolbar">
+          <label class="search-wrap"><span hidden>Filtrar catálogo</span><input id="block-search" type="search" placeholder="Ex.: anexar, nova aba, lista, OTP, timeout…" autocomplete="off"></label>
+          <select id="block-category" class="category-filter"><option value="">Todas as categorias</option></select>
+          <div><button id="expand-blocks" class="pill-button" type="button">Expandir visíveis</button> <span id="block-count" class="block-count"></span></div>
+        </div>
+        <div id="block-empty" class="empty-state" hidden>Nenhum bloco corresponde ao filtro.</div>
+        <div id="block-catalog"></div>
+      </section>
+
+      <section id="novo-bloco" class="doc-section" data-toc="Adicionar um bloco">
+        <h2>Parte avançada: adicionar ou alterar um bloco</h2>
+        <p class="section-intro">Um bloco não é apenas o desenho no Blockly. Para funcionar, o mesmo comportamento precisa existir no JSON, na validação, no C#, na conversão do editor e nos testes. Faça esta alteração somente quando uma combinação dos blocos atuais não resolve a necessidade.</p>
+        <div class="callout warning"><strong>Antes de criar um tipo novo</strong> Verifique se a diferença é apenas seletor, texto, valor, timeout, condição, loop ou subfluxo. Essas diferenças pertencem à configuração do fluxo e não justificam novo C#.</div>
+        <div class="steps">
+          <article class="step"><h3>Escreva o comportamento em português</h3><p>Responda: o que entra, o que o bloco faz, o que produz, quando falha e se pode causar efeito remoto. Defina também o timeout e se repetir a ação depois de uma falha é seguro.</p></article>
+          <article class="step"><h3>Tente montar com blocos existentes</h3><p>Condição, loop e subfluxo podem combinar ações pequenas. Evite um bloco como “Processar nota no Portal X”; prefira ações reutilizáveis como anexar, aguardar, ler e comparar.</p></article>
+          <article class="step"><h3>Defina o formato no JSON</h3><p>Escolha um <code>type</code> técnico em inglês, adicione apenas os campos necessários ao modelo e defina quais são obrigatórios, opcionais ou mutuamente exclusivos.</p></article>
+          <article class="step"><h3>Atualize as validações</h3><p>O JSON inválido deve falhar antes da execução. Valide texto obrigatório, opções permitidas, limites numéricos, caminhos de dados e posição da ação quando houver restrição.</p></article>
+          <article class="step"><h3>Implemente o C# que executa</h3><p>Crie ou amplie o handler. Respeite cancelamento e timeout. Use o adaptador correto: Playwright para web, cliente HTTP para API ou outra integração explícita.</p></article>
+          <article class="step"><h3>Crie o bloco e adicione à caixa de ferramentas</h3><p>Todos os campos configuráveis do JSON precisam aparecer no editor. O texto visível deve dizer o que preencher sem exigir que a pessoa leia o C#.</p></article>
+          <article class="step"><h3>Implemente as duas conversões</h3><p><code>JSON → bloco</code> abre um fluxo existente. <code>Bloco → JSON</code> salva. Teste campos opcionais presentes e ausentes para garantir que nada desaparece.</p></article>
+          <article class="step"><h3>Atualize a validação do microservidor</h3><p>O servidor que salva o arquivo precisa aceitar e rejeitar as mesmas regras importantes do runtime.</p></article>
+          <article class="step"><h3>Documente e teste de ponta a ponta</h3><p>Adicione a ficha ao catálogo e uma fixture. Faça JSON → Blockly → JSON, carregue o resultado no runtime e teste o comportamento do handler.</p></article>
+        </div>
+        <div class="callout"><strong>Definição de pronto</strong> O bloco aparece no editor, salva todos os campos, reabre sem perda, é validado antes da execução, possui C# funcional, respeita segurança e está explicado neste manual. Se uma dessas partes faltar, a capacidade ainda está incompleta.</div>
+      </section>
+
+      <section id="testes" class="doc-section" data-toc="Testes e validação">
+        <h2>Como validar antes de entregar</h2>
+        <p class="section-intro">O script abaixo executa toda a bateria. Rode primeiro sem acessar portal real. Depois faça o teste visível e controlado do seu RPA até o limite autorizado.</p>
+        <pre><code>.\tools\Validar-Base.ps1</code></pre>
+        <h3>Comandos individuais, quando você precisa descobrir qual parte falhou</h3>
+        <pre><code>dotnet build RpaBlockly.slnx
+dotnet run --project tests/RpaBase.Checks/RpaBase.Checks.csproj --no-build
+dotnet run --project tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj --no-build
+dotnet run --project tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj --no-build
+dotnet run --project examples/RpaExemplo/RpaExemplo.csproj --no-build -- --validate-only
+dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj --no-build -- --validate-only</code></pre>
+        <table class="data-table">
+          <thead><tr><th>Comando</th><th>O que ele comprova</th></tr></thead>
+          <tbody>
+            <tr><td><code>dotnet build</code></td><td>Todos os projetos compilam juntos e as dependências estão disponíveis.</td></tr>
+            <tr><td><code>RpaBase.Checks</code></td><td>Todos os blocos estão documentados, exemplos são seguros e os textos permanecem em UTF-8.</td></tr>
+            <tr><td><code>Rpa.WorkerChecks</code></td><td>Configuração, leitura simulada de OTP, timeout, concorrência e remoção do código sensível funcionam.</td></tr>
+            <tr><td><code>RpaFlow.PlaywrightChecks</code></td><td>Os blocos web executam contra páginas locais controladas, sem afetar um sistema externo.</td></tr>
+            <tr><td><code>RpaExemplo --validate-only</code></td><td>O fluxo de exemplo pode ser carregado sem abrir navegador.</td></tr>
+            <tr><td><code>Rpa.Worker --validate-only</code></td><td>A configuração do worker e os arquivos referenciados são válidos sem consultar banco, e-mail ou portal.</td></tr>
+          </tbody>
+        </table>
+        <h3>Checklist do RPA específico</h3>
+        <ul>
+          <li>Feche e reabra o fluxo no Blockly; nenhum campo ou bloco pode desaparecer.</li>
+          <li>Teste um input obrigatório ausente e confirme que falha antes de abrir o navegador.</li>
+          <li>Com navegador visível, confirme que cada seletor encontra exatamente o elemento esperado.</li>
+          <li>Teste condições pelos dois ramos e loops com lista vazia, um item e vários itens.</li>
+          <li>Confirme o conteúdo e o local de screenshots e downloads.</li>
+          <li>Cadastre no worker todos os IDs que podem causar efeito real.</li>
+          <li>Registre o último passo autorizado e confirme que o teste não o ultrapassou.</li>
+        </ul>
+      </section>
+
+      <section id="problemas" class="doc-section" data-toc="Problemas comuns">
+        <h2>Problemas comuns</h2>
+        <p class="section-intro">Comece pelo sintoma que você consegue observar. A correção deve remover a causa; não torne etapas obrigatórias opcionais, não aumente timeouts sem evidência e não force cliques.</p>
+        <table class="data-table">
+          <thead><tr><th>O que você vê</th><th>O que isso geralmente significa</th><th>O que conferir</th></tr></thead>
+          <tbody>
+            <tr><td>O editor abre, mas não mostra o RPA.</td><td>O caminho entregue ao atalho está errado ou o arquivo <code>rpa.editor.json</code> não foi encontrado.</td><td>Execute o comando na raiz da base e informe a pasta do RPA. Dentro dela, confira <code>projectFile</code>, <code>configurationFile</code> e <code>flowFile</code>.</td></tr>
+            <tr><td>Um campo desaparece depois de salvar e reabrir.</td><td>O editor sabe executar o JSON, mas ainda não sabe representar ou salvar aquela propriedade.</td><td>Não edite apenas o JSON. Corrija as conversões JSON → bloco e bloco → JSON e adicione teste de ida e volta.</td></tr>
+            <tr><td>O erro diz que foram encontrados dois elementos.</td><td>O seletor também encontrou menu, modelo oculto, outra linha ou outro modal.</td><td>Inspecione os dois resultados. Acrescente um escopo estável ou um texto que identifique o registro correto. Não escolha o primeiro.</td></tr>
+            <tr><td>O campo fica com letras ou dígitos faltando.</td><td>O componente precisa receber eventos reais de teclado ou recria o input enquanto digita.</td><td>Use Digitar sequencialmente e ajuste <code>delayMs</code> com base em teste visível. Para um dígito por campo, use Digitar em inputs segmentados.</td></tr>
+            <tr><td>O RPA continua antes de o upload terminar.</td><td>Os indicadores configurados não representam o carregamento real do portal.</td><td>Descubra qual spinner, atributo ou campo muda durante o processamento. Atualize <code>BusySelectors</code> ou aguarde um elemento específico.</td></tr>
+            <tr><td>O worker está ligado, mas não pega o item.</td><td>Uma das três autorizações está desligada, o <code>RpaCode</code> não corresponde, o horário ainda não chegou ou o status não está disponível.</td><td>Confira <code>RpaWorker.Enabled</code>, <code>Definitions.código.Enabled</code>, <code>ClaimEnabled</code>, <code>AvailableAtUtc</code>, status e código do item.</td></tr>
+            <tr><td>O item fica em Running depois que o serviço parou.</td><td>A reserva ainda não venceu ou outro processo continua renovando o heartbeat.</td><td>Confira <code>LeaseOwner</code>, <code>LeaseExpiresAtUtc</code> e os serviços ativos. Não altere a reserva manualmente sem entender qual processo ainda executa.</td></tr>
+            <tr><td>O portal pede login toda vez.</td><td>Não há <code>SessionKey</code>, o carregamento ou salvamento da sessão está desligado, ou o portal invalidou os cookies.</td><td>Use a mesma chave para o mesmo login, habilite <code>UseSessionState</code> e <code>SaveSessionState</code> e confirme que a pasta é gravável.</td></tr>
+            <tr><td>“Provider não configurado”.</td><td>O nome curto do bloco não existe em <code>EmailReader.Providers</code>.</td><td>Use exatamente o mesmo texto, por exemplo <code>email-otp</code>, no bloco e na configuração.</td></tr>
+            <tr><td>“Provider não habilitado”.</td><td>A configuração existe, mas <code>Enabled</code> está <code>false</code>.</td><td>Complete e valide caixa, filtros e credenciais. Só então habilite; não ligue apenas para esconder a mensagem.</td></tr>
+            <tr><td>Microsoft Graph retorna 401 ou 403.</td><td>O aplicativo não conseguiu se identificar ou não tem autorização para a caixa.</td><td>Peça ao administrador para conferir Tenant ID, Client ID, validade do segredo, permissão de aplicativo <code>Mail.Read</code>, consentimento e restrição de caixa.</td></tr>
+            <tr><td>O OTP nunca é encontrado.</td><td>A mensagem não chegou à caixa, chegou antes do horário mínimo, assunto/remetente não correspondem ou a expressão não reconhece o corpo.</td><td>Confira a mensagem real e compare cada filtro separadamente. Teste a expressão com conteúdo fictício e não registre o OTP real.</td></tr>
+            <tr><td>A validação exige MaxParallelism igual a 1.</td><td>O RPA usa uma caixa única para correlacionar OTP e está autorizado a pegar casos.</td><td>Defina <code>MaxParallelism=1</code> ou mantenha <code>ClaimEnabled=false</code> até criar uma estratégia que separe os códigos por execução.</td></tr>
+            <tr><td>O fluxo terminou, mas o output obrigatório não existe.</td><td>Nenhum bloco gravou o caminho <code>runtime.*</code> configurado em <code>Source</code>.</td><td>Revise o <code>target</code> do bloco produtor. Antes de permitir retry, confira se o portal já realizou um efeito que não pode ser repetido.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <footer class="footer">
+        <p><strong data-project-name>Base RPA Blockly</strong> — documentação local, sem CDN e configurável em <code>docs/manual.config.js</code>.</p>
+        <p data-support-text>Defina aqui o canal interno de suporte antes de distribuir a base.</p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

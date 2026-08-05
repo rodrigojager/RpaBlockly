@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "Confirmação final configurável",
+  "inputs": [],
+  "actions": [
+    {
+      "id": "confirmar-operacao",
+      "type": "safeFinalConfirmation",
+      "name": "Confirmar e comprovar a operação",
+      "selector": "button[type='submit']",
+      "successSelector": "p.mensagem-sucesso",
+      "successText": "Operação concluída",
+      "protocolSelector": "body",
+      "protocolPattern": "#(?<protocol>\\d+)",
+      "completionTarget": "runtime.business.completed",
+      "confirmationMessageTarget": "runtime.business.confirmationMessage",
+      "protocolTarget": "runtime.business.protocol",
+      "timeoutMs": 60000,
+      "fileName": "antes-da-confirmacao.png",
+      "separateByExecution": true,
+      "conflictStrategy": "unique"
+    }
+  ],
+  "subflows": {}
+}

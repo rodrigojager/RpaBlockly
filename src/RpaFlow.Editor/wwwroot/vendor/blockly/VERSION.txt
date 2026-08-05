@@ -1,0 +1,3 @@
+Blockly 13.1.1
+Origem: pacote npm blockly@13.1.1
+Licença: Apache-2.0

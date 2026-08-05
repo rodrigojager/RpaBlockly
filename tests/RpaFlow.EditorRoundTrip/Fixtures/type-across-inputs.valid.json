@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "name": "Round-trip da digitação segmentada",
+  "actions": [
+    {
+      "id": "digitar-codigo-segmentado",
+      "type": "typeAcrossInputs",
+      "name": "Digitar código em campos segmentados",
+      "selector": "input[data-cy='codigo-segmento']",
+      "scope": "#autenticacao",
+      "scopeHasTextSource": "input.usuario",
+      "hasTextSource": "runtime.authentication.inputHint",
+      "frameSelectors": [
+        "iframe#portal",
+        "iframe#autenticacao"
+      ],
+      "valueSource": "runtime.authentication.otp",
+      "delayMs": 75,
+      "clearFirst": true,
+      "blurAfter": true
+    }
+  ],
+  "subflows": {}
+}

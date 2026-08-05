@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "name": "Round-trip da autenticação por código",
+  "actions": [
+    {
+      "id": "registrar-solicitacao-codigo",
+      "type": "captureTimestamp",
+      "name": "Registrar solicitação do código",
+      "target": "runtime.authentication.otpRequestedAt"
+    },
+    {
+      "id": "aguardar-codigo-autenticacao",
+      "type": "waitForOneTimeCode",
+      "name": "Aguardar código de autenticação",
+      "providerAlias": "email-otp",
+      "notBeforeSource": "runtime.authentication.otpRequestedAt",
+      "target": "runtime.authentication.otp",
+      "timeoutMs": 120000,
+      "pollIntervalMs": 5000
+    }
+  ],
+  "subflows": {}
+}

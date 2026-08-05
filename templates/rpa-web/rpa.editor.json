@@ -1,0 +1,91 @@
+{
+  "displayName": "Novo RPA web",
+  "projectFile": "RpaTemplate.csproj",
+  "configurationFile": "appsettings.local.json",
+  "flowFile": "flow.production.json",
+  "configurationFields": [
+    {
+      "path": "Input.Url",
+      "label": "URL inicial",
+      "source": "input.url",
+      "type": "url"
+    },
+    {
+      "path": "Runtime.Headless",
+      "label": "Executar sem interface do navegador",
+      "type": "checkbox"
+    },
+    {
+      "path": "Runtime.Browser",
+      "label": "Navegador",
+      "type": "text"
+    },
+    {
+      "path": "Runtime.Locale",
+      "label": "Idioma e região do navegador",
+      "type": "text"
+    },
+    {
+      "path": "Runtime.ViewportWidth",
+      "label": "Largura da janela virtual",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.ViewportHeight",
+      "label": "Altura da janela virtual",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.ActionTimeoutSeconds",
+      "label": "Timeout de ação (s)",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.UploadTimeoutSeconds",
+      "label": "Timeout de upload (s)",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.ReadinessQuietPeriodMs",
+      "label": "Período sem rede para considerar estável (ms)",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.FormStabilityMs",
+      "label": "Período sem alteração do formulário (ms)",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.BusySelectors",
+      "label": "Seletores de loading do portal (lista JSON)",
+      "type": "stringList",
+      "nullable": true
+    },
+    {
+      "path": "Runtime.OutputDirectory",
+      "label": "Pasta padrão de artefatos",
+      "type": "text"
+    },
+    {
+      "path": "Runtime.FlowFile",
+      "label": "Arquivo de fluxo",
+      "type": "text"
+    },
+    {
+      "path": "Runtime.StorageStatePath",
+      "label": "Arquivo de sessão autenticada",
+      "type": "text",
+      "nullable": true
+    },
+    {
+      "path": "Runtime.SaveStorageState",
+      "label": "Salvar sessão ao concluir",
+      "type": "checkbox"
+    },
+    {
+      "path": "Runtime.HoldBrowserOpenForInspection",
+      "label": "Manter navegador aberto para inspeção",
+      "type": "checkbox"
+    }
+  ]
+}

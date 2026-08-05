@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RpaFlow.Contracts/RpaFlow.Contracts.csproj" />
+    <Project Path="src/RpaFlow.Runtime/RpaFlow.Runtime.csproj" />
+    <Project Path="src/RpaFlow.Playwright/RpaFlow.Playwright.csproj" />
+    <Project Path="src/RpaFlow.Editor/RpaFlow.Editor.csproj" />
+    <Project Path="src/Rpa.Worker/Rpa.Worker.csproj" />
+  </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples/RpaExemplo/RpaExemplo.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RpaBase.Checks/RpaBase.Checks.csproj" />
+    <Project Path="tests/RpaFlow.EditorRoundTrip/RpaFlow.EditorRoundTrip.csproj" />
+    <Project Path="tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj" />
+    <Project Path="tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj" />
+  </Folder>
+</Solution>

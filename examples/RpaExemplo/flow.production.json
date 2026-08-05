@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "name": "RPA de exemplo",
+  "inputs": [],
+  "actions": [
+    {
+      "id": "iniciar-fluxo",
+      "type": "setVariable",
+      "name": "Iniciar fluxo",
+      "value": "pronto",
+      "target": "runtime.estado"
+    }
+  ],
+  "subflows": {}
+}
