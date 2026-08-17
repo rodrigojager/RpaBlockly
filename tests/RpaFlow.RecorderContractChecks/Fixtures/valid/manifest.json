@@ -1,0 +1,33 @@
+{
+  "bundleFormat": "rpablockly-recorder",
+  "bundleVersion": 1,
+  "bundleId": "bundle-fixture-001",
+  "createdAtUtc": "2026-08-17T18:00:00Z",
+  "recorderVersion": "1.0.0",
+  "generatorVersion": "1.0.0",
+  "rpaPackageRoot": "package",
+  "schemas": {
+    "flow": 2,
+    "locators": 1,
+    "policy": 1,
+    "session": 1,
+    "evidence": 1,
+    "issues": 1,
+    "integrity": 1
+  },
+  "displayName": "Gravação mínima",
+  "origin": "chrome-recorder",
+  "hasSecrets": false,
+  "hasUploads": false,
+  "stepCount": 1,
+  "blockingIssueCount": 0,
+  "warningIssueCount": 0,
+  "files": [
+    "package/flow.production.json",
+    "package/locators.production.json",
+    "package/rpa.policy.json",
+    "recording/session.json",
+    "recording/issues.json"
+  ],
+  "containsReplay": false
+}

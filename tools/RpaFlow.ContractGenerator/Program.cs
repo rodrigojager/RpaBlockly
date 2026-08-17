@@ -8,7 +8,12 @@ var schemaPaths = new[]
 {
     Path.Combine(repositoryRoot, "schemas", "flow-v2.schema.json"),
     Path.Combine(repositoryRoot, "schemas", "locators-v1.schema.json"),
-    Path.Combine(repositoryRoot, "schemas", "rpa-policy-v1.schema.json")
+    Path.Combine(repositoryRoot, "schemas", "rpa-policy-v1.schema.json"),
+    Path.Combine(repositoryRoot, "schemas", "recorder-bundle-v1.schema.json"),
+    Path.Combine(repositoryRoot, "schemas", "recorder-session-v1.schema.json"),
+    Path.Combine(repositoryRoot, "schemas", "recorder-evidence-v1.schema.json"),
+    Path.Combine(repositoryRoot, "schemas", "recorder-issues-v1.schema.json"),
+    Path.Combine(repositoryRoot, "schemas", "recorder-integrity-v1.schema.json")
 };
 var schemas = schemaPaths.Select(path => new SchemaDocument(
     path,

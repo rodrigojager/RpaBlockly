@@ -1,0 +1,19 @@
+{
+  "bundleFormat": "rpablockly-recorder",
+  "bundleVersion": 1,
+  "bundleId": "bundle-invalid-replay",
+  "createdAtUtc": "2026-08-17T18:00:00Z",
+  "recorderVersion": "1.0.0",
+  "generatorVersion": "1.0.0",
+  "rpaPackageRoot": "package",
+  "schemas": { "flow": 2, "locators": 1, "policy": 1, "session": 1, "evidence": 1, "issues": 1 },
+  "displayName": "Inválido",
+  "origin": "chrome-recorder",
+  "hasSecrets": false,
+  "hasUploads": false,
+  "stepCount": 0,
+  "blockingIssueCount": 0,
+  "warningIssueCount": 0,
+  "files": ["package/flow.production.json"],
+  "containsReplay": true
+}

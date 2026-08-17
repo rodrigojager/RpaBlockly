@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "issues": [
+    {
+      "id": "issue-invalid",
+      "code": "UNKNOWN_PROBLEM",
+      "severity": "blocking",
+      "title": "Problema desconhecido",
+      "technicalDetail": "Código fora do contrato.",
+      "evidenceIds": [],
+      "resolutionOptions": [],
+      "omittedFromFlow": true,
+      "resolved": false
+    }
+  ]
+}

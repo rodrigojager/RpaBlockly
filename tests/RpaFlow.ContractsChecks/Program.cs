@@ -22,7 +22,12 @@ foreach (var schema in new[]
          {
              "flow-v2.schema.json",
              "locators-v1.schema.json",
-             "rpa-policy-v1.schema.json"
+             "rpa-policy-v1.schema.json",
+             "recorder-bundle-v1.schema.json",
+             "recorder-session-v1.schema.json",
+             "recorder-evidence-v1.schema.json",
+             "recorder-issues-v1.schema.json",
+             "recorder-integrity-v1.schema.json"
          })
 {
     var path = Path.Combine(repositoryRoot, "schemas", schema);
@@ -298,7 +303,12 @@ static string ComputeSchemasHash(string schemaDirectory)
     {
         Path.Combine(schemaDirectory, "flow-v2.schema.json"),
         Path.Combine(schemaDirectory, "locators-v1.schema.json"),
-        Path.Combine(schemaDirectory, "rpa-policy-v1.schema.json")
+        Path.Combine(schemaDirectory, "rpa-policy-v1.schema.json"),
+        Path.Combine(schemaDirectory, "recorder-bundle-v1.schema.json"),
+        Path.Combine(schemaDirectory, "recorder-session-v1.schema.json"),
+        Path.Combine(schemaDirectory, "recorder-evidence-v1.schema.json"),
+        Path.Combine(schemaDirectory, "recorder-issues-v1.schema.json"),
+        Path.Combine(schemaDirectory, "recorder-integrity-v1.schema.json")
     };
     using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     foreach (var path in paths.OrderBy(path => path, StringComparer.Ordinal))

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpablockly.dev/schemas/recorder-session-v1.schema.json",
+  "title": "RpaBlocklyRecorderSessionV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "name",
+    "state",
+    "startedAtUtc",
+    "timezone",
+    "locale",
+    "options",
+    "origins",
+    "tabs",
+    "frames",
+    "eventCount",
+    "associations",
+    "acceptedPrivacyNotices"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sessionId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "state": { "enum": ["idle", "recording", "paused", "finalizing", "completed", "failed"] },
+    "startedAtUtc": { "type": "string", "format": "date-time" },
+    "completedAtUtc": { "type": "string", "format": "date-time" },
+    "timezone": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "locale": { "type": "string", "minLength": 2, "maxLength": 35 },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captureScreenshots", "captureSecrets", "includeUploads"],
+      "properties": {
+        "captureScreenshots": { "type": "boolean" },
+        "captureSecrets": { "type": "boolean" },
+        "includeUploads": { "type": "boolean" }
+      }
+    },
+    "origins": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": { "type": "string", "format": "uri", "maxLength": 2048 }
+    },
+    "tabs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/tab" }
+    },
+    "frames": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/frame" }
+    },
+    "eventCount": { "type": "integer", "minimum": 0, "maximum": 100000 },
+    "associations": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/association" }
+    },
+    "acceptedPrivacyNotices": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+    }
+  },
+  "$defs": {
+    "tab": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "initialUrl"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^tab-[a-z0-9-]+$" },
+        "openerId": { "type": "string", "pattern": "^tab-[a-z0-9-]+$" },
+        "initialUrl": { "type": "string", "format": "uri", "maxLength": 2048 }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tabId", "url", "accessible"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^frame-[a-z0-9-]+$" },
+        "tabId": { "type": "string", "pattern": "^tab-[a-z0-9-]+$" },
+        "parentFrameId": { "type": "string", "pattern": "^frame-[a-z0-9-]+$" },
+        "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "accessible": { "type": "boolean" }
+      }
+    },
+    "association": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "actionId"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "locatorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "evidenceId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    }
+  }
+}

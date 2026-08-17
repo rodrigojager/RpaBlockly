@@ -21,6 +21,7 @@
     <Project Path="tests/RpaFlow.MigratorChecks/RpaFlow.MigratorChecks.csproj" />
     <Project Path="tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj" />
     <Project Path="tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj" />
+    <Project Path="tests/RpaFlow.RecorderContractChecks/RpaFlow.RecorderContractChecks.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/RpaFlow.ContractGenerator/RpaFlow.ContractGenerator.csproj" />

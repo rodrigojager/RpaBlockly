@@ -6,16 +6,28 @@ import addFormats from "ajv-formats";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = join(currentDirectory, "..", "..");
+const contractsFixtures = join("tests", "RpaFlow.ContractsChecks", "Fixtures");
+const recorderFixtures = join("tests", "RpaFlow.RecorderContractChecks", "Fixtures");
 const cases = [
-  ["flow-v2.schema.json", "package-valid/flow.production.json", true],
-  ["locators-v1.schema.json", "package-valid/locators.production.json", true],
-  ["rpa-policy-v1.schema.json", "package-valid/rpa.policy.json", true],
-  ["flow-v2.schema.json", "flow-invalid-unknown-property.json", false],
-  ["flow-v2.schema.json", "flow-invalid-selector-embedded.json", false],
-  ["locators-v1.schema.json", "locators-invalid-missing-target.json", false],
-  ["locators-v1.schema.json", "locators-invalid-dual-text-source.json", false],
-  ["locators-v1.schema.json", "locators-invalid-strategy-fields.json", false],
-  ["rpa-policy-v1.schema.json", "policy-invalid-mode.json", false]
+  ["flow-v2.schema.json", join(contractsFixtures, "package-valid/flow.production.json"), true],
+  ["locators-v1.schema.json", join(contractsFixtures, "package-valid/locators.production.json"), true],
+  ["rpa-policy-v1.schema.json", join(contractsFixtures, "package-valid/rpa.policy.json"), true],
+  ["flow-v2.schema.json", join(contractsFixtures, "flow-invalid-unknown-property.json"), false],
+  ["flow-v2.schema.json", join(contractsFixtures, "flow-invalid-selector-embedded.json"), false],
+  ["locators-v1.schema.json", join(contractsFixtures, "locators-invalid-missing-target.json"), false],
+  ["locators-v1.schema.json", join(contractsFixtures, "locators-invalid-dual-text-source.json"), false],
+  ["locators-v1.schema.json", join(contractsFixtures, "locators-invalid-strategy-fields.json"), false],
+  ["rpa-policy-v1.schema.json", join(contractsFixtures, "policy-invalid-mode.json"), false],
+  ["recorder-bundle-v1.schema.json", join(recorderFixtures, "valid/manifest.json"), true],
+  ["recorder-session-v1.schema.json", join(recorderFixtures, "valid/session.json"), true],
+  ["recorder-evidence-v1.schema.json", join(recorderFixtures, "valid/evidence.json"), true],
+  ["recorder-issues-v1.schema.json", join(recorderFixtures, "valid/issues.json"), true],
+  ["recorder-integrity-v1.schema.json", join(recorderFixtures, "valid/integrity.json"), true],
+  ["recorder-bundle-v1.schema.json", join(recorderFixtures, "invalid/manifest-replay.json"), false],
+  ["recorder-session-v1.schema.json", join(recorderFixtures, "invalid/session-state.json"), false],
+  ["recorder-evidence-v1.schema.json", join(recorderFixtures, "invalid/evidence-path.json"), false],
+  ["recorder-issues-v1.schema.json", join(recorderFixtures, "invalid/issue-code.json"), false],
+  ["recorder-integrity-v1.schema.json", join(recorderFixtures, "invalid/integrity-path.json"), false]
 ];
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -31,12 +43,7 @@ for (const [schemaFile, fixtureFile, expectedValid] of cases) {
     validators.set(schemaFile, validate);
   }
 
-  const instance = JSON.parse(await readFile(join(
-    repositoryRoot,
-    "tests",
-    "RpaFlow.ContractsChecks",
-    "Fixtures",
-    fixtureFile), "utf8"));
+  const instance = JSON.parse(await readFile(join(repositoryRoot, fixtureFile), "utf8"));
   const valid = validate(instance);
   if (valid !== expectedValid) {
     throw new Error(
