@@ -956,7 +956,7 @@ public static partial class FlowDefinitionValidator
 internal static partial class DataPath
 {
     private static readonly string[] ReadableRoots =
-        ["input", "config", "attachments", "runtime", "system", "loop"];
+        ["input", "config", "attachments", "secret", "runtime", "system", "loop"];
 
     public static bool IsReadable(string path) => IsValid(path, ReadableRoots);
 

@@ -60,6 +60,29 @@ var recorderCatalog = new LocatorCatalog
 };
 LocatorCatalogValidator.Validate(recorderCatalog);
 Check(true, "candidato Recorder principal é aceito sem developerRole");
+
+var secretReferenceFlow = new FlowDefinition
+{
+    Name = "Referência de segredo gravado",
+    Actions =
+    [
+        new FlowActionDefinition
+        {
+            Id = "fill-password",
+            Type = "fill",
+            Name = "Preencher senha",
+            Target = new LocatorUseDefinition
+            {
+                LocatorId = "form.name",
+                Cardinality = LocatorCardinality.Single
+            },
+            ValueSource = "secret.recorded.password"
+        }
+    ]
+};
+FlowDefinitionValidator.Validate(secretReferenceFlow);
+Check(true, "pacote Recorder aceita referência de segredo sem texto claro");
+
 recorderCatalog.Locators[0].Candidates[0].DeveloperRole = DeveloperLocatorRole.Original;
 ExpectInvalid(() => LocatorCatalogValidator.Validate(recorderCatalog),
     "origem Recorder não pode falsificar autoria de desenvolvedor");
