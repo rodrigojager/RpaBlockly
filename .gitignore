@@ -4,6 +4,8 @@ obj/
 tmp/
 artifacts/
 node_modules/
+src/RpaFlow.Recorder.Extension/build/
+src/RpaFlow.Recorder.Extension/.test-build/
 __pycache__/
 *.py[cod]
 .package.lock

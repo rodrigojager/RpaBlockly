@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RpaBlockly Recorder V2</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">RpaBlockly V2</p>
+    <h1>Recorder</h1>
+    <p id="status" role="status" aria-live="polite">Nenhuma sessão ativa.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="session-title">
+      <h2 id="session-title">Sessão</h2>
+      <label for="session-name">Nome do roteiro</label>
+      <input id="session-name" maxlength="200" value="Nova gravação" autocomplete="off">
+
+      <label class="check"><input id="capture-screenshots" type="checkbox" checked> Capturar evidências visuais</label>
+      <label class="check"><input id="include-uploads" type="checkbox"> Incluir conteúdo de uploads consentidos</label>
+      <label class="check"><input id="capture-secrets" type="checkbox"> Capturar senhas cifradas nesta sessão</label>
+
+      <div id="secret-options" hidden>
+        <label for="recipient-key-id">ID da chave destinatária</label>
+        <input id="recipient-key-id" maxlength="200" autocomplete="off">
+        <label for="recipient-public-key">Chave pública RSA em PEM</label>
+        <textarea id="recipient-public-key" rows="7" spellcheck="false"></textarea>
+      </div>
+
+      <label class="privacy check">
+        <input id="privacy-accepted" type="checkbox">
+        Entendo que a extensão observará apenas a origem ativa e que senhas ficam desligadas por padrão.
+      </label>
+
+      <div class="actions">
+        <button id="start" class="primary">Iniciar</button>
+        <button id="pause" disabled>Pausar</button>
+        <button id="resume" disabled>Retomar</button>
+        <button id="finalize" disabled>Revisar e baixar</button>
+        <button id="cancel" class="danger" disabled>Excluir sessão</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="issues-title">
+      <div class="section-heading">
+        <h2 id="issues-title">Pendências</h2>
+        <span id="issue-count" class="badge">0</span>
+      </div>
+      <ol id="issues" class="cards"></ol>
+    </section>
+
+    <section aria-labelledby="timeline-title">
+      <div class="section-heading">
+        <h2 id="timeline-title">Timeline</h2>
+        <span id="step-count" class="badge">0</span>
+      </div>
+      <ol id="timeline" class="cards"></ol>
+    </section>
+
+    <section aria-labelledby="slideshow-title">
+      <h2 id="slideshow-title">Evidências</h2>
+      <div id="slideshow" class="slideshow" aria-live="polite">
+        <p>Nenhuma evidência capturada.</p>
+      </div>
+      <div class="actions compact">
+        <button id="previous-evidence" disabled>Anterior</button>
+        <button id="remove-evidence" disabled>Remover</button>
+        <button id="next-evidence" disabled>Próxima</button>
+      </div>
+    </section>
+
+    <section id="export-section" aria-labelledby="export-title" hidden>
+      <h2 id="export-title">Exportação</h2>
+      <progress id="export-progress" max="100" value="0"></progress>
+      <p id="export-message">Preparando pacote…</p>
+      <button id="cancel-export">Cancelar exportação</button>
+    </section>
+  </main>
+
+  <template id="issue-template">
+    <li class="card issue-card">
+      <strong></strong>
+      <p></p>
+      <button>Confirmar omissão/revisão</button>
+    </li>
+  </template>
+  <template id="step-template">
+    <li class="card step-card">
+      <span class="sequence"></span>
+      <div><strong></strong><small></small></div>
+      <label>Comentário <input maxlength="1000" autocomplete="off"></label>
+    </li>
+  </template>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
