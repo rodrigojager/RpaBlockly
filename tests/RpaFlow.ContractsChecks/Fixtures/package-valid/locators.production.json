@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "locators": [
+    {
+      "id": "submit",
+      "displayName": "Botão Enviar",
+      "candidates": [
+        {
+          "id": "submit-original",
+          "origin": "developer",
+          "developerRole": "original",
+          "originalOrder": 0,
+          "recipe": {
+            "frames": [],
+            "target": {
+              "strategy": "role",
+              "role": "button",
+              "name": "Enviar",
+              "exact": true
+            }
+          }
+        }
+      ],
+      "fingerprints": []
+    }
+  ]
+}

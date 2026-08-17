@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/RpaFlow.Contracts/RpaFlow.Contracts.csproj" />
+    <Project Path="src/RpaFlow.Packages/RpaFlow.Packages.csproj" />
+    <Project Path="src/RpaFlow.Packages.SqlServer/RpaFlow.Packages.SqlServer.csproj" />
     <Project Path="src/RpaFlow.Runtime/RpaFlow.Runtime.csproj" />
     <Project Path="src/RpaFlow.Playwright/RpaFlow.Playwright.csproj" />
     <Project Path="src/RpaFlow.Editor/RpaFlow.Editor.csproj" />
@@ -11,8 +13,18 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/RpaBase.Checks/RpaBase.Checks.csproj" />
+    <Project Path="tests/RpaFlow.ContractsChecks/RpaFlow.ContractsChecks.csproj" />
+    <Project Path="tests/RpaFlow.PackagesChecks/RpaFlow.PackagesChecks.csproj" />
+    <Project Path="tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj" />
     <Project Path="tests/RpaFlow.EditorRoundTrip/RpaFlow.EditorRoundTrip.csproj" />
+    <Project Path="tests/RpaFlow.Legacy.Playwright/RpaFlow.Legacy.Playwright.csproj" />
+    <Project Path="tests/RpaFlow.MigratorChecks/RpaFlow.MigratorChecks.csproj" />
     <Project Path="tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj" />
     <Project Path="tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/RpaFlow.ContractGenerator/RpaFlow.ContractGenerator.csproj" />
+    <Project Path="tools/RpaFlow.Legacy.Contracts/RpaFlow.Legacy.Contracts.csproj" />
+    <Project Path="tools/RpaFlow.Migrator/RpaFlow.Migrator.csproj" />
   </Folder>
 </Solution>

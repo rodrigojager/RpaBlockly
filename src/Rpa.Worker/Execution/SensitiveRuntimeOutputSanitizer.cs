@@ -1,11 +1,13 @@
 using System.Text.Json.Nodes;
-using RpaFlow.Contracts;
+using RpaFlow.Contracts.V2;
 
 namespace Rpa.Worker.Execution;
 
 internal static class SensitiveRuntimeOutputSanitizer
 {
-    public static JsonObject RedactOneTimeCodes(JsonObject output, FlowDefinition flow)
+    public static JsonObject RedactOneTimeCodes(
+        JsonObject output,
+        FlowDefinition flow)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(flow);
@@ -18,12 +20,13 @@ internal static class SensitiveRuntimeOutputSanitizer
         return sanitized;
     }
 
-    public static IReadOnlySet<string> EnumerateOneTimeCodeTargets(FlowDefinition flow) =>
+    public static IReadOnlySet<string> EnumerateOneTimeCodeTargets(
+        FlowDefinition flow) =>
         EnumerateActions(flow)
             .Where(action => action.Type.Equals(
                 "waitForOneTimeCode",
                 StringComparison.OrdinalIgnoreCase))
-            .Select(action => action.Target?.Trim())
+            .Select(action => action.Output?.Trim())
             .Where(target => !string.IsNullOrWhiteSpace(target))
             .Cast<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -75,7 +78,8 @@ internal static class SensitiveRuntimeOutputSanitizer
         value.Select(property => property.Key).FirstOrDefault(key =>
             key.Equals(expected, StringComparison.OrdinalIgnoreCase));
 
-    private static IEnumerable<FlowActionDefinition> EnumerateActions(FlowDefinition flow)
+    private static IEnumerable<FlowActionDefinition> EnumerateActions(
+        FlowDefinition flow)
     {
         var pending = new Stack<FlowActionDefinition>(
             flow.Actions.Concat(flow.Subflows.Values.SelectMany(actions => actions)));

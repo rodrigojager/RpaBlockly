@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Rpa.Worker.Configuration;
 using Rpa.Worker.Domain;
+using RpaFlow.Packages;
 using RpaFlow.Runtime;
 
 namespace Rpa.Worker.Data;
@@ -120,6 +121,43 @@ public sealed class SqlWorkItemRepository(
             cancellationToken);
     }
 
+    public async Task SetExecutionPackageAsync(
+        string executionId,
+        string originName,
+        RpaPackageSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(originName);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var sql = $"""
+            UPDATE {_executions}
+               SET RpaPackageOrigin = @origin,
+                   RpaPackageRevision = @revision,
+                   RpaPackageHash = @hash
+             WHERE ExecutionId = @executionId
+               AND Status = N'Running';
+            """;
+        var affected = await ExecuteAsync(
+            sql,
+            command =>
+            {
+                command.Parameters.Add("@origin", SqlDbType.NVarChar, 100).Value =
+                    originName;
+                command.Parameters.Add("@revision", SqlDbType.Char, 64).Value =
+                    snapshot.Revision.Value;
+                command.Parameters.Add("@hash", SqlDbType.Char, 64).Value =
+                    snapshot.ContentHash;
+                command.Parameters.AddWithValue("@executionId", executionId);
+            },
+            cancellationToken);
+        if (affected != 1)
+        {
+            throw new InvalidOperationException(
+                $"Não foi possível registrar a revisão do pacote na execução '{executionId}'.");
+        }
+    }
+
     public async Task RenewLeaseAsync(
         Guid workItemId,
         CancellationToken cancellationToken)
@@ -200,9 +238,10 @@ public sealed class SqlWorkItemRepository(
         string executionId,
         RpaWorkItem workItem,
         Exception exception,
+        bool allowRetry,
         CancellationToken cancellationToken)
     {
-        var shouldRetry = workItem.AttemptCount < workItem.MaxAttempts;
+        var shouldRetry = allowRetry && workItem.AttemptCount < workItem.MaxAttempts;
         var status = shouldRetry ? "Retry" : "Failed";
         var errorType = exception.GetType().Name;
         var errorMessage = Limit(exception.Message, 2000);
@@ -318,11 +357,13 @@ public sealed class SqlWorkItemRepository(
             INSERT INTO {_events}
                 (ExecutionId, WorkItemId, Kind, ActionId, ActionName, ActionType,
                  ExecutedActions, ElapsedMilliseconds, FailureCategory, Retryable,
-                 OccurredAtUtc)
+                 OccurredAtUtc, RpaId, PackageOrigin, PackageRevision, PackageHash,
+                 LocatorId, CandidateId, ResolutionReason, Detail)
             VALUES
                 (@executionId, @workItemId, @kind, @actionId, @actionName, @actionType,
                  @executedActions, @elapsedMilliseconds, @failureCategory, @retryable,
-                 @occurredAtUtc);
+                 @occurredAtUtc, @rpaId, @packageOrigin, @packageRevision, @packageHash,
+                 @locatorId, @candidateId, @resolutionReason, @detail);
             """;
         await ExecuteAsync(
             sql,
@@ -347,6 +388,24 @@ public sealed class SqlWorkItemRepository(
                     DbValue(executionEvent.FailureCategory?.ToString()));
                 command.Parameters.AddWithValue("@retryable", DbValue(executionEvent.Retryable));
                 command.Parameters.AddWithValue("@occurredAtUtc", executionEvent.OccurredAtUtc);
+                command.Parameters.AddWithValue("@rpaId", DbValue(executionEvent.RpaId));
+                command.Parameters.AddWithValue(
+                    "@packageOrigin",
+                    DbValue(executionEvent.PackageOrigin));
+                command.Parameters.AddWithValue(
+                    "@packageRevision",
+                    DbValue(executionEvent.PackageRevision));
+                command.Parameters.AddWithValue(
+                    "@packageHash",
+                    DbValue(executionEvent.PackageHash));
+                command.Parameters.AddWithValue("@locatorId", DbValue(executionEvent.LocatorId));
+                command.Parameters.AddWithValue(
+                    "@candidateId",
+                    DbValue(executionEvent.CandidateId));
+                command.Parameters.AddWithValue(
+                    "@resolutionReason",
+                    DbValue(executionEvent.ResolutionReason));
+                command.Parameters.AddWithValue("@detail", DbValue(executionEvent.Detail));
             },
             cancellationToken);
     }

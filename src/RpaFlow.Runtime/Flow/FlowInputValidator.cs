@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using RpaFlow.Contracts;
 
 namespace RpaFlow.Runtime;
 
@@ -12,7 +11,12 @@ public static class FlowInputValidator
     };
 
     public static void Validate(
-        IReadOnlyList<FlowInputRequirementDefinition> requirements,
+        IReadOnlyList<global::RpaFlow.Contracts.V2.FlowInputRequirementDefinition> requirements,
+        FlowDataContext data) =>
+        Validate(requirements.Select(FlowInputRequirement.From), data);
+
+    public static void Validate(
+        IEnumerable<FlowInputRequirement> requirements,
         FlowDataContext data)
     {
         var errors = new List<string>();

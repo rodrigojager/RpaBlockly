@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0-rc.1",
+  "baselineCommit": "03b74fe2197ad7651f4ba05ec5819efa9787f194",
+  "flowSchemaVersion": 2,
+  "locatorSchemaVersion": 1,
+  "policySchemaVersion": 1,
+  "documents": [
+    "flow.production.json",
+    "locators.production.json",
+    "rpa.policy.json"
+  ],
+  "verification": "pwsh ./tools/Run-Checks.ps1",
+  "rollback": "usar a versão anterior do repositório e seus artefatos; não há downgrade automático de conteúdo"
+}

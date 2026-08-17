@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "locatorResilience": {
+    "mode": "automatic",
+    "learningWriteBack": "disabled",
+    "promotion": "disabled",
+    "failedPrimary": "keep",
+    "minimumConfidence": 0.85,
+    "minimumRunnerUpGap": 0.1,
+    "maximumCandidatesPerLocator": 20,
+    "maximumHeuristicNodes": 5000,
+    "maximumResolutionMilliseconds": 30000
+  }
+}

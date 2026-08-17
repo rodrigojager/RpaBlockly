@@ -12,10 +12,11 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.3" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Graph" Version="5.97.0" />
+    <PackageReference Include="Microsoft.Graph" Version="6.2.0" />
     <ProjectReference Include="..\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
     <ProjectReference Include="..\RpaFlow.Runtime\RpaFlow.Runtime.csproj" />
     <ProjectReference Include="..\RpaFlow.Playwright\RpaFlow.Playwright.csproj" />
+    <ProjectReference Include="..\RpaFlow.Packages.SqlServer\RpaFlow.Packages.SqlServer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

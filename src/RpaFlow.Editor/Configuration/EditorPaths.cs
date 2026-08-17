@@ -5,4 +5,5 @@ public sealed record EditorPaths(
     string ProfileFile,
     EditorProfile Profile,
     string ConfigurationFile,
-    string FlowFile);
+    string PackageStoreRoot,
+    string RpaId);

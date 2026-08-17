@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\RpaFlow.Packages\RpaFlow.Packages.csproj" />
     <ProjectReference Include="..\..\src\RpaFlow.Runtime\RpaFlow.Runtime.csproj" />
     <ProjectReference Include="..\..\src\RpaFlow.Playwright\RpaFlow.Playwright.csproj" />
   </ItemGroup>
@@ -18,7 +19,7 @@
     <None Update="appsettings.local.json"
           CopyToOutputDirectory="PreserveNewest"
           Condition="Exists('appsettings.local.json')" />
-    <None Update="flow.production.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="package-store\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="rpa.editor.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

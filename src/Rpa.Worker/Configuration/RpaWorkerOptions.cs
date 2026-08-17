@@ -104,7 +104,7 @@ public sealed class RpaDefinitionOptions
 
     public bool ClaimEnabled { get; set; }
 
-    public string FlowFile { get; set; } = string.Empty;
+    public RpaPackageReferenceOptions? Package { get; set; }
 
     public string? ConfigurationFile { get; set; }
 
@@ -117,6 +117,30 @@ public sealed class RpaDefinitionOptions
     public List<OutputMappingOptions> Outputs { get; set; } = [];
 
     public List<ArtifactMappingOptions> Artifacts { get; set; } = [];
+}
+
+public sealed class RpaPackageReferenceOptions
+{
+    public string RpaId { get; set; } = string.Empty;
+
+    public string OriginName { get; set; } = "source";
+
+    public string Provider { get; set; } = "File";
+
+    public string Location { get; set; } = "packages";
+
+    public string? Revision { get; set; }
+
+    public RpaPackageStoreReferenceOptions? Overlay { get; set; }
+}
+
+public sealed class RpaPackageStoreReferenceOptions
+{
+    public string OriginName { get; set; } = "overlay";
+
+    public string Provider { get; set; } = "File";
+
+    public string Location { get; set; } = "packages-overlay";
 }
 
 public sealed class RpaRuntimeOptions
@@ -144,6 +168,12 @@ public sealed class RpaRuntimeOptions
     public bool UseSessionState { get; set; }
 
     public bool SaveSessionState { get; set; }
+
+    public long MaximumArtifactBytes { get; set; } = 50 * 1024 * 1024;
+
+    public int MaximumArtifactFilesPerExecution { get; set; } = 100;
+
+    public int ArtifactRetentionDays { get; set; } = 30;
 }
 
 public sealed class OutputMappingOptions

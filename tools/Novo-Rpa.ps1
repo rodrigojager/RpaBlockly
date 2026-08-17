@@ -59,7 +59,6 @@ $relativeSource = Get-RelativePathPortable `
 $filesToCustomize = @(
     $projectFile,
     (Join-Path $destination "rpa.editor.json"),
-    (Join-Path $destination "flow.production.json"),
     (Join-Path $destination "README.md")
 )
 

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "name": "Fixture mínima V2",
+  "inputs": [],
+  "actions": [
+    {
+      "id": "submit",
+      "type": "click",
+      "name": "Enviar",
+      "target": {
+        "locatorId": "submit",
+        "cardinality": "single"
+      }
+    }
+  ],
+  "subflows": {}
+}

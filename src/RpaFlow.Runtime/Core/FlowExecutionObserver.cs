@@ -14,7 +14,15 @@ public sealed record FlowExecutionEvent(
     int? ExecutedActions = null,
     long? ElapsedMilliseconds = null,
     FlowFailureCategory? FailureCategory = null,
-    bool? Retryable = null);
+    bool? Retryable = null,
+    string? RpaId = null,
+    string? PackageOrigin = null,
+    string? PackageRevision = null,
+    string? PackageHash = null,
+    string? LocatorId = null,
+    string? CandidateId = null,
+    string? ResolutionReason = null,
+    string? Detail = null);
 
 public interface IFlowExecutionObserver
 {

@@ -7,8 +7,9 @@ using Rpa.Worker.Configuration;
 using Rpa.Worker.Data;
 using Rpa.Worker.Domain;
 using Rpa.Worker.Storage;
-using RpaFlow.Contracts;
+using RpaFlow.Packages;
 using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
 using RpaFlow.Runtime;
 
 namespace Rpa.Worker.Execution;
@@ -16,6 +17,7 @@ namespace Rpa.Worker.Execution;
 public sealed class WorkItemProcessor(
     RpaWorkerOptions options,
     WorkerEnvironment environment,
+    RpaPackageRuntimeRegistry packageRegistry,
     SqlWorkItemRepository repository,
     IOneTimeCodeProvider oneTimeCodeProvider,
     ILogger<WorkItemProcessor> logger)
@@ -33,6 +35,7 @@ public sealed class WorkItemProcessor(
         using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             caseTimeout.Token);
         var heartbeatTask = RunHeartbeatAsync(workItem, heartbeatCancellation.Token);
+        ConfiguredExecutionGuard? executionGuard = null;
         _ = heartbeatTask.ContinueWith(
             _ => caseTimeout.Cancel(),
             CancellationToken.None,
@@ -49,10 +52,25 @@ public sealed class WorkItemProcessor(
                     $"A definição de RPA '{workItem.RpaCode}' não está habilitada.");
             }
 
-            var flowPath = RpaWorkerOptionsValidator.ResolvePath(
-                environment.Paths.WorkspaceRoot,
-                definition.FlowFile);
-            var flow = await new JsonFlowLoader().LoadAsync(flowPath, caseTimeout.Token);
+            var packageReference = definition.Package
+                ?? throw new InvalidOperationException(
+                    $"A definição V2 '{workItem.RpaCode}' não possui Package.");
+            var packageRpaId = string.IsNullOrWhiteSpace(packageReference.RpaId)
+                ? workItem.RpaCode
+                : packageReference.RpaId;
+            var packageSnapshot = await packageRegistry.ResolveAsync(
+                packageRpaId,
+                packageReference.OriginName,
+                string.IsNullOrWhiteSpace(packageReference.Revision)
+                    ? null
+                    : new PackageRevision(packageReference.Revision),
+                caseTimeout.Token);
+            await repository.SetExecutionPackageAsync(
+                executionId,
+                packageReference.OriginName,
+                packageSnapshot,
+                caseTimeout.Token);
+
             var baseConfiguration = await LoadBaseConfigurationAsync(
                 definition,
                 caseTimeout.Token);
@@ -69,7 +87,9 @@ public sealed class WorkItemProcessor(
                 attachments,
                 workItem.WorkItemId.ToString("D"),
                 workItem.BatchId);
-            FlowInputValidator.Validate(flow.Inputs, new FlowDataContext(request));
+            FlowInputValidator.Validate(
+                packageSnapshot.Flow.Inputs,
+                new FlowDataContext(request));
 
             var runtime = definition.Runtime;
             var statePath = ResolveSessionStatePath(workItem, definition);
@@ -91,18 +111,34 @@ public sealed class WorkItemProcessor(
                 SaveStorageState: runtime.SaveSessionState && statePath is not null,
                 ReadinessQuietPeriodMs: runtime.ReadinessQuietPeriodMs,
                 FormStabilityMs: runtime.FormStabilityMs,
-                BusySelectors: runtime.BusySelectors);
+                BusySelectors: runtime.BusySelectors,
+                MaximumArtifactBytes: runtime.MaximumArtifactBytes,
+                MaximumArtifactFilesPerExecution:
+                    runtime.MaximumArtifactFilesPerExecution,
+                ArtifactRetentionDays: runtime.ArtifactRetentionDays);
             PlaywrightRuntimeOptionsValidator.Validate(runtimeOptions);
 
-            var executionGuard = new ConfiguredExecutionGuard(
+            executionGuard = new ConfiguredExecutionGuard(
                 options.ExecutionMode,
                 definition);
-            IFlowExecutor executor = new PlaywrightFlowExecutor(
-                flow,
+            var observer = new DatabaseFlowExecutionObserver(repository);
+            var sourceWriter = packageRegistry.ResolveWriter(
+                packageRpaId,
+                packageReference.OriginName);
+            var overlayWriter = packageReference.Overlay is null
+                ? null
+                : packageRegistry.ResolveWriter(
+                    packageRpaId,
+                    packageReference.Overlay.OriginName);
+            IFlowExecutor executor = new PlaywrightV2FlowExecutor(
+                packageSnapshot,
                 runtimeOptions,
-                observer: new DatabaseFlowExecutionObserver(repository),
+                observer: observer,
                 executionGuard: executionGuard,
-                oneTimeCodeProvider: oneTimeCodeProvider);
+                oneTimeCodeProvider: oneTimeCodeProvider,
+                sourceWriteBack: sourceWriter,
+                overlayWriteBack: overlayWriter);
+
             var result = await executor.ExecuteAsync(request, caseTimeout.Token);
             var safeValidationBoundaryConfigured =
                 options.ExecutionMode == WorkerExecutionMode.SafeValidation &&
@@ -123,7 +159,7 @@ public sealed class WorkItemProcessor(
                 caseTimeout.Token);
             var persistedOutput = SensitiveRuntimeOutputSanitizer.RedactOneTimeCodes(
                 result.Output,
-                flow);
+                packageSnapshot.Flow);
             await repository.SaveOutputsAsync(
                 executionId,
                 workItem,
@@ -196,7 +232,8 @@ public sealed class WorkItemProcessor(
                 executionId,
                 workItem,
                 exception,
-                CancellationToken.None);
+                allowRetry: executionGuard?.IrreversibleEffectCompleted != true,
+                cancellationToken: CancellationToken.None);
         }
         finally
         {

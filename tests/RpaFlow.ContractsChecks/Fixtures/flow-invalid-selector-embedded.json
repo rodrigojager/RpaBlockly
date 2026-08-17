@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "name": "Inválido por seletor embutido",
+  "actions": [
+    {
+      "id": "click",
+      "type": "click",
+      "name": "Clicar",
+      "selector": "#submit"
+    }
+  ],
+  "subflows": {}
+}

@@ -29,14 +29,14 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
         {
             case "fail":
                 throw new InvalidOperationException(
-                    FlowValueResolver.ResolveRequired(action, execution.Context.Data));
+                    LegacyFlowValueResolver.ResolveRequired(action, execution.Context.Data));
             case "transformpath":
-                FlowPathTransformer.Execute(action, execution.Context.Data);
+                LegacyFlowPathTransformer.Execute(action, execution.Context.Data);
                 Console.WriteLine(
                     $"  Caminho transformado e armazenado em: {action.Target}.");
                 break;
             case "capturetimestamp":
-                OneTimeCodeFlowActionExecutor.CaptureTimestamp(
+                LegacyOneTimeCodeFlowActionExecutor.CaptureTimestamp(
                     action,
                     execution.Context.Data,
                     execution.Context.TimeProvider);
@@ -44,7 +44,7 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
                     $"  Instante UTC armazenado em: {action.Target}.");
                 break;
             case "waitforonetimecode":
-                await OneTimeCodeFlowActionExecutor.WaitForOneTimeCodeAsync(
+                await LegacyOneTimeCodeFlowActionExecutor.WaitForOneTimeCodeAsync(
                     action,
                     execution.Context.Data,
                     execution.Context.OneTimeCodeProvider,
@@ -71,11 +71,8 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
                 await ReadElementsAsync(action, execution, cancellationToken);
                 break;
             case "safefinalconfirmation":
-                await execution.Context.PagePolicy.ExecuteSafeFinalConfirmationAsync(
-                    action,
-                    execution.Context,
-                    cancellationToken);
-                break;
+                throw new InvalidOperationException(
+                    "safeFinalConfirmation exige uma política histórica específica do sistema de destino.");
             default:
                 throw new InvalidOperationException(
                     $"O handler de dados e artefatos não interpreta '{action.Type}'.");
@@ -87,7 +84,7 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
         RpaContext context)
     {
         var fallbackName = action.ScreenshotName ?? "evidencia";
-        var destination = ArtifactDestinationResolver.Resolve(
+        var destination = LegacyArtifactDestinationResolver.Resolve(
             action,
             context,
             fallbackName);
@@ -105,7 +102,7 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
         FlowActionDefinition action,
         RpaContext context)
     {
-        var value = FlowValueResolver.ResolveNode(action, context.Data);
+        var value = LegacyFlowValueResolver.ResolveNode(action, context.Data);
         context.Data.SetRuntimeValue(action.Target!, value);
         Console.WriteLine($"  Valor armazenado em: {action.Target}.");
     }

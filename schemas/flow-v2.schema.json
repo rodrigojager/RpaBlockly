@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpablockly.local/schemas/flow-v2.schema.json",
+  "title": "RpaBlockly Flow V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name", "actions", "subflows"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "name": { "type": "string", "minLength": 1 },
+    "inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/inputRequirement" }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "subflows": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9._-]*$" },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": { "$ref": "#/$defs/action" }
+      }
+    }
+  },
+  "$defs": {
+    "inputRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type", "required"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(input|attachments)\\.[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*|\\[[0-9]+\\])*$"
+        },
+        "type": {
+          "enum": ["any", "string", "number", "boolean", "object", "array", "null"]
+        },
+        "required": { "type": "boolean" }
+      }
+    },
+    "locatorUse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locatorId", "cardinality"],
+      "properties": {
+        "locatorId": { "type": "string", "minLength": 1 },
+        "cardinality": { "enum": ["single", "first", "many"] }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["value", "element"] },
+        "operator": { "type": "string", "minLength": 1 },
+        "leftValue": true,
+        "leftSource": { "type": "string", "minLength": 1 },
+        "rightValue": true,
+        "rightSource": { "type": "string", "minLength": 1 },
+        "ignoreCase": { "type": "boolean" },
+        "locator": { "$ref": "#/$defs/locatorUse" },
+        "state": { "enum": ["visible", "attached", "hidden", "detached"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "element" } } },
+          "then": {
+            "required": ["locator", "state"],
+            "properties": {
+              "locator": { "$ref": "#/$defs/locatorUse" },
+              "state": { "enum": ["visible", "attached", "hidden", "detached"] }
+            }
+          }
+        }
+      ]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": [
+            "navigate", "click", "clickIfVisible", "wait", "fill",
+            "selectOption", "setChecked", "pressKey", "typeSequentially",
+            "typeAcrossInputs", "clickAndSwitchPage", "upload", "waitStable",
+            "preserveOrFill", "select2", "fillMaskedCurrency", "fail",
+            "transformPath", "captureTimestamp", "waitForOneTimeCode",
+            "setVariable", "readElement", "readElements", "switchPage",
+            "closePage", "download", "screenshot", "safeFinalConfirmation",
+            "if", "repeat", "forEach", "runSubflow"
+          ]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "target": { "$ref": "#/$defs/locatorUse" },
+        "trigger": { "$ref": "#/$defs/locatorUse" },
+        "options": { "$ref": "#/$defs/locatorUse" },
+        "ready": { "$ref": "#/$defs/locatorUse" },
+        "success": { "$ref": "#/$defs/locatorUse" },
+        "protocol": { "$ref": "#/$defs/locatorUse" },
+        "value": true,
+        "valueSource": { "type": "string", "minLength": 1 },
+        "providerAlias": { "type": "string", "minLength": 1 },
+        "notBeforeSource": { "type": "string", "minLength": 1 },
+        "output": {
+          "type": "string",
+          "pattern": "^runtime\\.[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)*$"
+        },
+        "property": { "type": "string", "minLength": 1 },
+        "attribute": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "minLength": 1 },
+        "comparison": { "type": "string", "minLength": 1 },
+        "operation": { "type": "string", "minLength": 1 },
+        "optionMode": { "type": "string", "minLength": 1 },
+        "successText": { "type": "string", "minLength": 1 },
+        "protocolPattern": { "type": "string", "minLength": 1 },
+        "completionTarget": { "type": "string", "minLength": 1 },
+        "confirmationMessageTarget": { "type": "string", "minLength": 1 },
+        "protocolTarget": { "type": "string", "minLength": 1 },
+        "screenshotName": { "type": "string", "minLength": 1 },
+        "destinationDirectory": { "type": "string" },
+        "destinationDirectorySource": { "type": "string", "minLength": 1 },
+        "fileName": { "type": "string", "minLength": 1 },
+        "fileNameSource": { "type": "string", "minLength": 1 },
+        "separateByExecution": { "type": "boolean" },
+        "conflictStrategy": { "enum": ["unique", "fail", "overwrite"] },
+        "downloadMode": { "enum": ["click", "request"] },
+        "method": { "enum": ["GET", "POST"] },
+        "bodyType": { "enum": ["json", "text", "form"] },
+        "requestBody": true,
+        "requestBodySource": { "type": "string", "minLength": 1 },
+        "requestHeaders": true,
+        "requestHeadersSource": { "type": "string", "minLength": 1 },
+        "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 600000 },
+        "pollIntervalMs": { "type": "integer", "minimum": 50, "maximum": 60000 },
+        "delayMs": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "decimalPlaces": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "maxItems": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "commitKey": { "type": "string", "minLength": 1 },
+        "clearFirst": { "type": "boolean" },
+        "blurAfter": { "type": "boolean" },
+        "optional": { "type": "boolean" },
+        "condition": { "$ref": "#/$defs/condition" },
+        "actions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/action" }
+        },
+        "elseActions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/action" }
+        },
+        "times": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "timesSource": { "type": "string", "minLength": 1 },
+        "items": { "type": "array" },
+        "itemsSource": { "type": "string", "minLength": 1 },
+        "itemVariable": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+        "indexVariable": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+        "subflow": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

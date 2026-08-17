@@ -3,6 +3,10 @@ obj/
 .vs/
 tmp/
 artifacts/
+node_modules/
+__pycache__/
+*.py[cod]
+.package.lock
 /storage/
 appsettings.local.json
 appsettings.json

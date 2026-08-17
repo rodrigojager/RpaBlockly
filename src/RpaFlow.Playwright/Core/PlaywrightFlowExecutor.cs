@@ -8,7 +8,6 @@ public sealed class PlaywrightFlowExecutor : IFlowExecutor
     public PlaywrightFlowExecutor(
         FlowDefinition definition,
         PlaywrightRuntimeOptions options,
-        IPagePolicyFactory? pagePolicyFactory = null,
         IFlowExecutionObserver? observer = null,
         IFlowActionExecutionGuard? executionGuard = null,
         IOneTimeCodeProvider? oneTimeCodeProvider = null,
@@ -18,7 +17,6 @@ public sealed class PlaywrightFlowExecutor : IFlowExecutor
         _runner = new RpaRunner(
             FlowCompiler.Compile(definition),
             options,
-            pagePolicyFactory,
             observer,
             executionGuard,
             oneTimeCodeProvider,
@@ -28,5 +26,13 @@ public sealed class PlaywrightFlowExecutor : IFlowExecutor
     public Task<FlowExecutionResult> ExecuteAsync(
         FlowExecutionRequest request,
         CancellationToken cancellationToken) =>
-        _runner.RunAsync(request, _definition.Inputs, cancellationToken);
+        _runner.RunAsync(
+            request,
+            _definition.Inputs
+                .Select(requirement => new FlowInputRequirement(
+                    requirement.Path,
+                    requirement.Type,
+                    requirement.Required))
+                .ToArray(),
+            cancellationToken);
 }

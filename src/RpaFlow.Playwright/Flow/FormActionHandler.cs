@@ -69,7 +69,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         FlowActionExecutionScope execution,
         CancellationToken cancellationToken)
     {
-        var value = FlowValueResolver.ResolveRequired(
+        var value = LegacyFlowValueResolver.ResolveRequired(
             action,
             execution.Context.Data);
         await execution.CreateLocator(action)
@@ -81,7 +81,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         FlowActionExecutionScope execution,
         CancellationToken cancellationToken)
     {
-        var value = FlowValueResolver.ResolveRequired(
+        var value = LegacyFlowValueResolver.ResolveRequired(
             action,
             execution.Context.Data);
         var locator = execution.CreateLocator(action);
@@ -118,7 +118,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         FlowActionExecutionScope execution,
         CancellationToken cancellationToken)
     {
-        var value = FlowValueResolver.ResolveRequired(
+        var value = LegacyFlowValueResolver.ResolveRequired(
             action,
             execution.Context.Data);
         if (!bool.TryParse(value, out var expected))
@@ -143,7 +143,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         FlowActionExecutionScope execution,
         CancellationToken cancellationToken)
     {
-        var key = FlowValueResolver.ResolveRequired(
+        var key = LegacyFlowValueResolver.ResolveRequired(
             action,
             execution.Context.Data);
         var locator = execution.CreateLocator(action);
@@ -158,7 +158,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         CancellationToken cancellationToken)
     {
         var context = execution.Context;
-        var value = FlowValueResolver.ResolveRequired(action, context.Data);
+        var value = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         var locator = execution.CreateLocator(action);
         await LocatorActions.EnsureSingleVisibleAsync(locator, action.Name);
         cancellationToken.ThrowIfCancellationRequested();
@@ -200,7 +200,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         CancellationToken cancellationToken)
     {
         var context = execution.Context;
-        var value = FlowValueResolver.ResolveRequired(action, context.Data);
+        var value = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         var textElements = GetTextElements(value);
         _ = await ResolveVisibleInputsAsync(
             action,
@@ -340,7 +340,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         CancellationToken cancellationToken)
     {
         var context = execution.Context;
-        var filePath = FlowValueResolver.ResolveOptional(action, context.Data);
+        var filePath = LegacyFlowValueResolver.ResolveOptional(action, context.Data);
         if (string.IsNullOrWhiteSpace(filePath))
         {
             if (action.Optional)
@@ -379,7 +379,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
     {
         var context = execution.Context;
         var locator = execution.CreateLocator(action);
-        var expected = FlowValueResolver.ResolveRequired(action, context.Data);
+        var expected = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         await LocatorActions.EnsureSingleVisibleAsync(locator, action.Name);
         var current = await locator.InputValueAsync();
 
@@ -419,7 +419,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         CancellationToken cancellationToken)
     {
         var context = execution.Context;
-        var expected = FlowValueResolver.ResolveRequired(action, context.Data);
+        var expected = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         var nativeSelect = execution.CreateLocator(action);
         await LocatorActions.EnsureSingleAttachedAsync(nativeSelect, action.Name);
         var currentValue = await nativeSelect.InputValueAsync();
@@ -521,7 +521,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
     {
         var context = execution.Context;
         var locator = execution.CreateLocator(action);
-        var expected = FlowValueResolver.ResolveRequired(action, context.Data);
+        var expected = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         await LocatorActions.EnsureSingleVisibleAsync(locator, action.Name);
         var current = await locator.InputValueAsync();
 

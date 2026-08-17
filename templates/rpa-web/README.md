@@ -1,15 +1,20 @@
-# Novo RPA web
+# Novo RPA web V2
 
-Este projeto foi criado a partir da base Blockly. Prefira executar `tools/Novo-Rpa.ps1` na raiz em vez de copiar esta pasta manualmente.
+Este projeto foi criado a partir do template V2. Use `tools/Novo-Rpa.ps1` na raiz
+da base em vez de copiar a pasta manualmente.
 
 ## Arquivos do RPA
 
-- `Program.cs`: host local, UTF-8 estrito, `--config`, `--flow` e `--validate-only`;
+- `Program.cs`: host local do pacote V2;
 - `appsettings.example.json`: configuração versionável sem segredo;
 - `appsettings.local.json`: configuração operacional ignorada pelo Git;
-- `flow.production.json`: contrato executado em produção;
-- `rpa.editor.json`: perfil do Blockly;
-- `RpaTemplate.csproj`: referências para contrato, runtime e Playwright compartilhados.
+- `package-store/rpa-template`: revisões atômicas do pacote;
+- `rpa.editor.json`: perfil que liga o editor ao RPA e ao package store;
+- `RpaTemplate.csproj`: referências ao runtime compartilhado.
+
+Cada revisão contém `flow.production.json`, `locators.production.json` e
+`rpa.policy.json`. O fluxo guarda referências `locatorId`; seletores, frames,
+scope e fingerprints ficam somente no catálogo.
 
 ## Comandos
 
@@ -19,14 +24,16 @@ dotnet run --project RpaTemplate.csproj --no-build -- --validate-only
 .\abrir-editor.cmd rpas\RpaTemplate
 ```
 
+Também é possível fixar uma revisão com `--revision <sha256>` ou escolher outro
+store com `--package-store <pasta>` e `--rpa-id <id>`.
+
 ## Regras essenciais
 
-1. Declare dados e anexos obrigatórios em `inputs` para falhar antes do navegador.
-2. Coloque dados do caso em `input.*`, parâmetros em `config.*` e anexos em `attachments.*`.
-3. Grave resultados somente em `runtime.*`.
-4. Mantenha seletores e ordem no fluxo, não em código específico.
-5. Audite seletores e readiness no sistema real sem efeito irreversível.
-6. Credenciais ficam fora do fluxo e fora do Git.
-7. Valide JSON → Blockly → JSON antes de promover o fluxo.
+1. Declare inputs antes de abrir o navegador.
+2. Grave resultados somente em `runtime.*`.
+3. Edite fluxo, locators e policy como uma única revisão.
+4. Comece em política `strict`; habilite fallback ou adaptive deliberadamente.
+5. Mantenha credenciais fora do pacote, logs e screenshots.
+6. Use `--validate-only` e a suíte da base antes de publicar.
 
-Consulte `docs/manual.html` na raiz para o guia completo e todas as propriedades dos blocos.
+Consulte `README.md` e `docs/v2/` na raiz para o guia completo.

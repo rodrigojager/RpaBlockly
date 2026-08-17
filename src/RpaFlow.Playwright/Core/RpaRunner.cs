@@ -5,14 +5,11 @@ namespace RpaFlow.Playwright;
 public sealed class RpaRunner(
     IReadOnlyList<IRpaStep> steps,
     PlaywrightRuntimeOptions options,
-    IPagePolicyFactory? pagePolicyFactory = null,
     IFlowExecutionObserver? observer = null,
     IFlowActionExecutionGuard? executionGuard = null,
     IOneTimeCodeProvider? oneTimeCodeProvider = null,
     TimeProvider? timeProvider = null)
 {
-    private readonly IPagePolicyFactory _pagePolicyFactory =
-        pagePolicyFactory ?? DefaultPagePolicyFactory.Instance;
     private readonly IFlowExecutionObserver _observer =
         observer ?? NullFlowExecutionObserver.Instance;
     private readonly IFlowActionExecutionGuard _executionGuard =
@@ -22,7 +19,7 @@ public sealed class RpaRunner(
 
     public async Task<FlowExecutionResult> RunAsync(
         FlowExecutionRequest executionRequest,
-        IReadOnlyList<FlowInputRequirementDefinition> inputRequirements,
+        IReadOnlyList<FlowInputRequirement> inputRequirements,
         CancellationToken cancellationToken)
     {
         FlowExecutionRequestValidator.Validate(executionRequest);
@@ -143,7 +140,6 @@ public sealed class RpaRunner(
                 options,
                 executionRequest,
                 outputDirectory,
-                _pagePolicyFactory,
                 _observer,
                 _executionGuard,
                 _oneTimeCodeProvider,
@@ -163,13 +159,16 @@ public sealed class RpaRunner(
                 Console.WriteLine(
                     $"Execução concluída pelo guard após a ação '{signal.ActionId}'.");
             }
-            catch
+            catch (Exception executionException)
             {
                 try
                 {
-                    var failureScreenshot =
-                        await context.Artifacts.CaptureScreenshotAsync("falha");
-                    Console.Error.WriteLine($"Evidência da falha: {failureScreenshot}");
+                    var diagnostics =
+                        await context.Artifacts.CaptureFailureDiagnosticsAsync(
+                            executionException);
+                    Console.Error.WriteLine(
+                        $"Evidências sanitizadas da falha: {diagnostics.ScreenshotPath}; " +
+                        $"{diagnostics.SanitizedHtmlPath}; {diagnostics.ResolutionReportPath}");
                 }
                 catch
                 {

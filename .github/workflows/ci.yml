@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dotnet:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Restaurar
+        shell: pwsh
+        run: |
+          dotnet restore RpaBlockly.slnx
+          dotnet restore templates/rpa-web/RpaTemplate.csproj
+      - name: Compilar
+        shell: pwsh
+        run: |
+          dotnet build RpaBlockly.slnx --configuration Release --no-restore
+          dotnet build templates/rpa-web/RpaTemplate.csproj --configuration Release --no-restore
+      - name: Instalar Chromium de teste
+        shell: pwsh
+        run: pwsh tests/RpaFlow.PlaywrightChecks/bin/Release/net9.0/playwright.ps1 install --with-deps chromium
+      - name: Executar checks
+        shell: pwsh
+        run: ./tools/Run-Checks.ps1
+      - name: Auditar dependências
+        shell: pwsh
+        run: ./tools/Test-Dependencies.ps1
+      - name: Gerar SBOM
+        shell: pwsh
+        run: ./tools/Generate-Sbom.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom-${{ matrix.os }}
+          path: artifacts/sbom.spdx.json
+          if-no-files-found: error
+
+  sql-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Restaurar e compilar check SQL
+        run: |
+          dotnet restore tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj
+          dotnet build tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj --configuration Release --no-restore
+      - name: Executar integração SQL descartável
+        env:
+          RPABLOCKLY_REQUIRE_SQL_TESTS: 'true'
+        run: dotnet run --project tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj --configuration Release --no-build

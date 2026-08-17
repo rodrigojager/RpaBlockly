@@ -13,12 +13,12 @@ public enum FlowActionExecutionDirective
 public interface IFlowActionExecutionGuard
 {
     ValueTask BeforeActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken);
 
     ValueTask<FlowActionExecutionDirective> AfterActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(FlowActionExecutionDirective.Continue);
@@ -33,7 +33,7 @@ public sealed class NullFlowActionExecutionGuard : IFlowActionExecutionGuard
     }
 
     public ValueTask BeforeActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken) => ValueTask.CompletedTask;
 }

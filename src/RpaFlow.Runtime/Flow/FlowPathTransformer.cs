@@ -1,15 +1,14 @@
 using System.Text.Json.Nodes;
-using RpaFlow.Contracts;
 
 namespace RpaFlow.Runtime;
 
 public static class FlowPathTransformer
 {
     public static void Execute(
-        FlowActionDefinition action,
+        RpaFlow.Contracts.V2.FlowActionDefinition action,
         FlowDataContext data)
     {
-        var path = FlowValueResolver.ResolveRequired(action, data);
+        var path = RpaFlow.Runtime.V2.V2FlowValueResolver.ResolveRequired(action, data);
         if (string.IsNullOrWhiteSpace(path))
         {
             throw new InvalidOperationException(
@@ -26,7 +25,7 @@ public static class FlowPathTransformer
                 $"Operação de caminho não interpretada em '{action.Name}': '{action.Operation}'.")
         };
 
-        data.SetRuntimeValue(action.Target!, JsonValue.Create(result));
+        data.SetRuntimeValue(action.Output!, JsonValue.Create(result));
     }
 
     private static string GetFileName(string path, string actionName)

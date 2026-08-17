@@ -55,7 +55,7 @@ internal sealed class ControlFlowActionHandler : IFlowActionHandler
         FlowActionExecutionScope execution,
         CancellationToken cancellationToken)
     {
-        var count = FlowValueResolver.ResolveIterationCount(
+        var count = LegacyFlowValueResolver.ResolveIterationCount(
             action,
             execution.Context.Data);
         Console.WriteLine($"  Repetição '{action.Name}': {count} iterações.");
@@ -76,7 +76,7 @@ internal sealed class ControlFlowActionHandler : IFlowActionHandler
         FlowActionExecutionScope execution,
         CancellationToken cancellationToken)
     {
-        var items = FlowValueResolver.ResolveList(action, execution.Context.Data);
+        var items = LegacyFlowValueResolver.ResolveList(action, execution.Context.Data);
         if (items.Count > FlowDefinitionValidator.MaximumLoopIterations)
         {
             throw new InvalidOperationException(

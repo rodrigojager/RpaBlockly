@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "name": "Novo RPA web",
+  "inputs": [],
+  "actions": [
+    {
+      "id": "iniciar-fluxo",
+      "type": "setVariable",
+      "name": "Iniciar fluxo",
+      "value": "pronto",
+      "output": "runtime.estado",
+      "clearFirst": false,
+      "blurAfter": false,
+      "optional": false,
+      "actions": [],
+      "elseActions": []
+    }
+  ],
+  "subflows": {}
+}

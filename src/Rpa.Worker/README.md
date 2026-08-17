@@ -1,6 +1,6 @@
 # Worker genérico
 
-Worker SQL Server para executar qualquer definição desta base. Ele gerencia polling, claim atômico, lease, heartbeat, timeout, retry, histórico, eventos, outputs, artefatos e storage state por `SessionKey`.
+Worker SQL Server para executar qualquer definição desta base. Ele gerencia polling, claim atômico, lease, heartbeat, timeout, retry, histórico, eventos, outputs, artefatos e storage state por `SessionKey`. Cada caso carrega um snapshot imutável do pacote V2 antes da primeira ação e registra revisão e hash usados.
 
 O worker também inclui um `IOneTimeCodeProvider` para Outlook/Microsoft 365. A implementação consulta e-mails pelo Microsoft Graph; ela não depende do Outlook aberto e não altera as mensagens.
 
@@ -32,7 +32,7 @@ Para habilitar:
 O segredo também pode ser fornecido sem gravá-lo em arquivo:
 
 ```powershell
-$env:RpaWorker__EmailReader__ClientSecret = "segredo"
+$env:RpaWorker__EmailReader__ClientSecret = "<forneça-em-tempo-de-execução>"
 ```
 
 O provider:
@@ -47,7 +47,7 @@ O provider:
 
 Uma definição com OTP e `ClaimEnabled=true` exige `MaxParallelism=1`. Os destinos temporários de OTP são removidos do `OutputJson`; mapeá-los como output ou artefato é recusado na inicialização.
 
-Consulte `docs/manual.html#otp-email` para todas as propriedades, sequência Blockly e solução de problemas.
+Consulte o [guia de integração do worker](../../docs/referencia-markdown/integracao-worker-banco.md) e o [tutorial de solução de problemas](../../docs/referencia-markdown/tutorial-solucao-problemas-rpa-blockly.md).
 
 ## Três intertravamentos
 
@@ -73,4 +73,4 @@ O ID do limite precisa existir no fluxo, apontar para uma ação-folha e não po
 - `Definitions.Outputs` → linhas em `ExecutionOutput`;
 - `Definitions.Artifacts` → arquivos verificados e linhas em `Artifact`.
 
-Consulte `docs/manual.html#worker` e `database/sqlserver/README.md` para cada propriedade e tabela.
+Consulte o [guia de integração](../../docs/referencia-markdown/integracao-worker-banco.md) e o [README do banco](../../database/sqlserver/README.md) para cada propriedade e tabela.

@@ -20,18 +20,10 @@ public sealed class ProjectFileService(EditorPaths paths)
 
     public string ConfigurationFileName => Path.GetFileName(paths.ConfigurationFile);
 
-    public string FlowFileName => Path.GetFileName(paths.FlowFile);
-
     public Task<JsonElement> ReadConfigurationAsync(CancellationToken cancellationToken) =>
         ReadAsync(
             paths.ConfigurationFile,
             document => ConfigurationDocumentValidator.Validate(document, paths.Profile),
-            cancellationToken);
-
-    public Task<JsonElement> ReadFlowAsync(CancellationToken cancellationToken) =>
-        ReadAsync(
-            paths.FlowFile,
-            FlowDocumentValidator.Validate,
             cancellationToken);
 
     public Task<string> SaveConfigurationAsync(
@@ -41,15 +33,6 @@ public sealed class ProjectFileService(EditorPaths paths)
             paths.ConfigurationFile,
             document,
             value => ConfigurationDocumentValidator.Validate(value, paths.Profile),
-            cancellationToken);
-
-    public Task<string> SaveFlowAsync(
-        JsonElement document,
-        CancellationToken cancellationToken) =>
-        SaveAsync(
-            paths.FlowFile,
-            document,
-            FlowDocumentValidator.Validate,
             cancellationToken);
 
     private async Task<JsonElement> ReadAsync(

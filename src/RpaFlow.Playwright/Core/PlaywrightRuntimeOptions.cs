@@ -15,4 +15,7 @@ public sealed record PlaywrightRuntimeOptions(
     int ReadinessQuietPeriodMs = 800,
     int FormStabilityMs = 600,
     IReadOnlyList<string>? BusySelectors = null,
-    bool HoldBrowserOpenForInspection = false);
+    bool HoldBrowserOpenForInspection = false,
+    long MaximumArtifactBytes = 50 * 1024 * 1024,
+    int MaximumArtifactFilesPerExecution = 100,
+    int ArtifactRetentionDays = 30);

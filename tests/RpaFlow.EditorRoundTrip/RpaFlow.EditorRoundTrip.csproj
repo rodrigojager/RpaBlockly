@@ -11,5 +11,6 @@
     <PackageReference Include="Microsoft.Playwright" Version="1.61.0" />
     <ProjectReference Include="..\..\src\RpaFlow.Editor\RpaFlow.Editor.csproj" />
     <ProjectReference Include="..\..\src\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\RpaFlow.Packages\RpaFlow.Packages.csproj" />
   </ItemGroup>
 </Project>

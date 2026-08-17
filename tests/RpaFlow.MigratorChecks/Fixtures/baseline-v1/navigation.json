@@ -1,0 +1,98 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Fixture sanitizada: navigation",
+  "Inputs": [],
+  "Actions": [
+    {
+      "Id": "catalogo-navigate",
+      "Type": "navigate",
+      "Name": "navigate",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-click",
+      "Type": "click",
+      "Name": "click",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-clickifvisible",
+      "Type": "clickIfVisible",
+      "Name": "clickIfVisible",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-wait",
+      "Type": "wait",
+      "Name": "wait",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "State": "visible",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-clickandswitchpage",
+      "Type": "clickAndSwitchPage",
+      "Name": "clickAndSwitchPage",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "ReadySelector": "#pronto",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-waitstable",
+      "Type": "waitStable",
+      "Name": "waitStable",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-switchpage",
+      "Type": "switchPage",
+      "Name": "switchPage",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Property": "url",
+      "Comparison": "contains",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-closepage",
+      "Type": "closePage",
+      "Name": "closePage",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Actions": [],
+      "ElseActions": []
+    }
+  ],
+  "Subflows": {}
+}

@@ -2,7 +2,8 @@
   "displayName": "Novo RPA web",
   "projectFile": "RpaTemplate.csproj",
   "configurationFile": "appsettings.local.json",
-  "flowFile": "flow.production.json",
+  "rpaId": "rpa-template",
+  "packageStoreRoot": "package-store",
   "configurationFields": [
     {
       "path": "Input.Url",
@@ -64,11 +65,6 @@
     {
       "path": "Runtime.OutputDirectory",
       "label": "Pasta padrão de artefatos",
-      "type": "text"
-    },
-    {
-      "path": "Runtime.FlowFile",
-      "label": "Arquivo de fluxo",
       "type": "text"
     },
     {

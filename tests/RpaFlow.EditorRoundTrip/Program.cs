@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Net;
-using System.Text.Encodings.Web;
+using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using Microsoft.Playwright;
-using RpaFlow.Contracts;
-using RpaFlow.Editor.Validation;
+using RpaFlow.Contracts.V2;
+using RpaFlow.Packages;
 
 if (args.Length != 2)
 {
@@ -17,32 +17,78 @@ if (args.Length != 2)
 
 var editorDll = Path.GetFullPath(args[0]);
 var repositoryRoot = Path.GetFullPath(args[1]);
-if (!File.Exists(editorDll) ||
-    !File.Exists(Path.Combine(repositoryRoot, "RpaBlockly.slnx")))
-{
-    Console.Error.WriteLine("Editor compilado ou raiz do workspace não encontrados.");
-    return 2;
-}
-
-var port = FindAvailablePort();
-var editorUrl = $"http://127.0.0.1:{port}";
-using var editor = StartEditor(editorDll, repositoryRoot, editorUrl);
+var allowedRoot = Path.GetFullPath(Path.Combine(repositoryRoot, "tmp", "editor-v2-checks"));
+var testRoot = Path.Combine(allowedRoot, Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(testRoot);
 try
 {
-    await WaitForEditorAsync(editorUrl, editor);
-    await RunRoundTripChecksAsync(editorUrl, repositoryRoot);
-    return 0;
+    await PrepareProjectAsync(repositoryRoot, testRoot);
+    var port = FindAvailablePort();
+    var editorUrl = $"http://127.0.0.1:{port}";
+    using var editor = StartEditor(editorDll, testRoot, editorUrl);
+    try
+    {
+        await WaitForEditorAsync(editorUrl, editor);
+        await CheckBrowserRoundTripAsync(editorUrl, testRoot);
+        await CheckAtomicPackageApiAsync(editorUrl);
+    }
+    finally
+    {
+        if (!editor.HasExited)
+        {
+            editor.Kill(entireProcessTree: true);
+            await editor.WaitForExitAsync();
+        }
+    }
 }
 finally
 {
-    if (!editor.HasExited)
+    var fullTestRoot = Path.GetFullPath(testRoot);
+    if (!fullTestRoot.StartsWith(
+            allowedRoot + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase))
     {
-        editor.Kill(entireProcessTree: true);
-        await editor.WaitForExitAsync();
+        throw new InvalidOperationException("A pasta temporária escapou da raiz permitida.");
     }
+    if (Directory.Exists(fullTestRoot)) Directory.Delete(fullTestRoot, recursive: true);
 }
 
-static async Task RunRoundTripChecksAsync(string editorUrl, string repositoryRoot)
+Console.WriteLine("Editor Blockly V2 e persistência de pacote validados com sucesso.");
+return 0;
+
+static async Task PrepareProjectAsync(string repositoryRoot, string testRoot)
+{
+    var source = new FileRpaPackageStore(
+        Path.Combine(repositoryRoot, "examples", "RpaExemplo", "package-store"));
+    var snapshot = await source.LoadAsync("rpa-exemplo", null, CancellationToken.None);
+    var target = new FileRpaPackageStore(Path.Combine(testRoot, "package-store"));
+    _ = await target.PublishAsync(
+        "editor-test",
+        snapshot.CopyDocuments(),
+        null,
+        CancellationToken.None);
+    var utf8 = new UTF8Encoding(false, true);
+    await File.WriteAllTextAsync(
+        Path.Combine(testRoot, "EditorTest.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\" />\n",
+        utf8);
+    await File.WriteAllTextAsync(Path.Combine(testRoot, "appsettings.json"), "{}\n", utf8);
+    await File.WriteAllTextAsync(
+        Path.Combine(testRoot, "rpa.editor.json"),
+        """
+        {
+          "displayName": "Editor V2 em teste",
+          "projectFile": "EditorTest.csproj",
+          "configurationFile": "appsettings.json",
+          "rpaId": "editor-test",
+          "packageStoreRoot": "package-store",
+          "configurationFields": []
+        }
+        """.ReplaceLineEndings("\n") + "\n",
+        utf8);
+}
+
+static async Task CheckBrowserRoundTripAsync(string editorUrl, string testRoot)
 {
     using var playwright = await Playwright.CreateAsync();
     await using var browser = await playwright.Chromium.LaunchAsync(
@@ -51,702 +97,270 @@ static async Task RunRoundTripChecksAsync(string editorUrl, string repositoryRoo
     await page.GotoAsync(
         $"{editorUrl}/?roundtrip-test=1",
         new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-    await page.WaitForFunctionAsync(
-        "() => Boolean(window.RpaFlowEditorTesting)");
+    await page.WaitForFunctionAsync("() => Boolean(window.RpaFlowEditorTesting)");
 
-    await CheckSharedToolboxAsync(page);
-
-    foreach (var project in new[] { Path.Combine("examples", "RpaExemplo") })
-    {
-        var flowPath = Path.Combine(repositoryRoot, project, "flow.production.json");
-        var originalJson = await File.ReadAllTextAsync(flowPath);
-        var exportedJson = await page.EvaluateAsync<string>(
-            "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
-            originalJson);
-
-        var original = DeserializeAndNormalize(originalJson, project);
-        var exported = DeserializeAndNormalize(exportedJson, project);
-        var originalSnapshot = SerializeCanonical(original);
-        var exportedSnapshot = SerializeCanonical(exported);
-        if (!string.Equals(originalSnapshot, exportedSnapshot, StringComparison.Ordinal))
+    var snapshot = await new FileRpaPackageStore(Path.Combine(testRoot, "package-store"))
+        .LoadAsync("editor-test", null, CancellationToken.None);
+    var packageJson = JsonSerializer.Serialize(
+        new
         {
-            var failureDirectory = Path.Combine(repositoryRoot, "tmp", "roundtrip-failures");
-            Directory.CreateDirectory(failureDirectory);
-            await File.WriteAllTextAsync(
-                Path.Combine(failureDirectory, $"{project}.original.json"),
-                originalSnapshot);
-            await File.WriteAllTextAsync(
-                Path.Combine(failureDirectory, $"{project}.exported.json"),
-                exportedSnapshot);
-            throw new InvalidOperationException(
-                $"O round-trip Blockly alterou a semântica de {project}. " +
-                $"Veja os snapshots em {failureDirectory}.");
+            flow = snapshot.Flow,
+            locators = snapshot.Locators,
+            policy = snapshot.Policy
+        },
+        V2JsonSerializer.WriteOptions);
+    var roundTripJson = await page.EvaluateAsync<string>(
+        """
+        json => {
+          const value = JSON.parse(json);
+          return JSON.stringify(window.RpaFlowEditorTesting.roundTrip(
+          value.flow, value.locators, value.policy))
         }
+        """,
+        packageJson);
+    var roundTrip = V2JsonSerializer.Deserialize<FlowDefinition>(
+        roundTripJson,
+        "round-trip do editor");
+    Check(
+        V2JsonSerializer.Serialize(roundTrip) == V2JsonSerializer.Serialize(snapshot.Flow),
+        "abrir e exportar preserva a semântica do fluxo V2");
 
-        Console.WriteLine($"OK: round-trip Blockly preservou {project}.");
-    }
+    var blocksJson = await page.EvaluateAsync<string>(
+        "() => JSON.stringify(window.RpaFlowEditorTesting.instantiateAllBlocks())");
+    var blocks = JsonSerializer.Deserialize<BlockInspection[]>(
+        blocksJson,
+        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+    Check(blocks.Length == 35 && blocks.Select(item => item.Type).Distinct().Count() == 35,
+        "a toolbox V2 instancia os 35 blocos do baseline");
+    Check(blocks.SelectMany(item => item.Fields).All(field =>
+        !field.Contains("SELECTOR", StringComparison.OrdinalIgnoreCase) &&
+        !field.Equals("SCOPE", StringComparison.OrdinalIgnoreCase)),
+        "nenhum bloco V2 armazena campo de seletor ou scope");
 
-    await CheckGeneralizedPropertiesRoundTripAsync(page);
-    await CheckOneTimeCodeActionsRoundTripAsync(page, repositoryRoot);
-    await CheckTypeAcrossInputsRoundTripAsync(page, repositoryRoot);
-    await CheckSafeFinalConfirmationRoundTripAsync(page, repositoryRoot);
+    var uiLocators = new LocatorCatalog
+    {
+        Locators =
+        [
+            LocatorForUi("primary", "Botão principal", "#primary"),
+            LocatorForUi("secondary", "Botão secundário", "#secondary")
+        ]
+    };
+    var uiPackageJson = JsonSerializer.Serialize(
+        new
+        {
+            flow = snapshot.Flow,
+            locators = uiLocators,
+            policy = snapshot.Policy
+        },
+        V2JsonSerializer.WriteOptions);
+    await page.EvaluateAsync(
+        """
+        json => {
+          const value = JSON.parse(json);
+          window.RpaFlowEditorTesting.setPackage(
+            value.flow, value.locators, value.policy);
+        }
+        """,
+        uiPackageJson);
+    await page.FillAsync("#locator-search", "secundário");
+    var visibleLocatorIds = await page.Locator("#locator-list [data-locator-id]")
+        .EvaluateAllAsync<string[]>(
+            "items => items.map(item => item.dataset.locatorId)");
+    Check(visibleLocatorIds.SequenceEqual(["secondary"]),
+        "drawer de locators pesquisa por nome amigável e ID");
+
+    await page.EvaluateAsync("() => window.RpaFlowEditorTesting.openLocatorPicker()");
+    await page.FillAsync("dialog.locator-picker input[type=search]", "secondary");
+    var pickerButtons = page.Locator("dialog.locator-picker .locator-list-item");
+    Check(await pickerButtons.CountAsync() == 1,
+        "FieldLocatorReference filtra opções sem expor receita no bloco");
+    await pickerButtons.ClickAsync();
+    var pickerValue = await page.EvaluateAsync<string>(
+        "() => window.RpaFlowEditorTesting.locatorPickerValue()");
+    Check(pickerValue == "secondary",
+        "FieldLocatorReference persiste somente o locatorId escolhido");
+
+    var policyJson = await page.InputValueAsync("#policy-json");
+    var policyDraft = JsonNode.Parse(policyJson)!.AsObject();
+    policyDraft["locatorResilience"]!["mode"] = "fallback";
+    await page.FillAsync("#policy-json", policyDraft.ToJsonString(
+        new JsonSerializerOptions { WriteIndented = true }));
+    await page.ClickAsync("#save-policy-draft");
+    var appliedPolicy = JsonNode.Parse(await page.EvaluateAsync<string>(
+        "() => JSON.stringify(window.RpaFlowEditorTesting.packagePolicy())"))!.AsObject();
+    Check(appliedPolicy["locatorResilience"]?["mode"]?.GetValue<string>() == "fallback",
+        "drawer de policy valida e aplica a política ao rascunho");
 }
 
-static async Task CheckSafeFinalConfirmationRoundTripAsync(
-    IPage page,
-    string repositoryRoot)
-{
-    var fixturePath = Path.Combine(
-        repositoryRoot,
-        "tests",
-        "RpaFlow.EditorRoundTrip",
-        "Fixtures",
-        "safe-final-confirmation.valid.json");
-    var fixture = await File.ReadAllTextAsync(fixturePath);
-
-    using (var fixtureDocument = JsonDocument.Parse(fixture))
+static LocatorDefinition LocatorForUi(string id, string displayName, string selector) =>
+    new()
     {
-        FlowDocumentValidator.Validate(fixtureDocument.RootElement);
-    }
-
-    var exportedJson = await page.EvaluateAsync<string>(
-        "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
-        fixture);
-    var original = SerializeCanonical(
-        DeserializeAndNormalize(fixture, "fixture-confirmacao-final"));
-    var exported = SerializeCanonical(
-        DeserializeAndNormalize(exportedJson, "fixture-confirmacao-final"));
-    if (!string.Equals(original, exported, StringComparison.Ordinal))
-    {
-        throw new InvalidOperationException(
-            "O round-trip Blockly alterou os critérios da confirmação final.");
-    }
-
-    var legacyNode = JsonNode.Parse(fixture)?.AsObject()
-        ?? throw new InvalidOperationException(
-            "Não foi possível preparar a confirmação final sem feedback.");
-    var legacyAction = legacyNode["actions"]?.AsArray()[0]?.AsObject()
-        ?? throw new InvalidOperationException(
-            "A fixture da confirmação final não possui a ação esperada.");
-    foreach (var propertyName in new[]
-             {
-                 "successSelector",
-                 "successText",
-                 "protocolSelector",
-                 "protocolPattern",
-                 "completionTarget",
-                 "confirmationMessageTarget",
-                 "protocolTarget",
-                 "timeoutMs"
-             })
-    {
-        legacyAction.Remove(propertyName);
-    }
-
-    var legacyFixture = legacyNode.ToJsonString();
-    using (var legacyDocument = JsonDocument.Parse(legacyFixture))
-    {
-        FlowDocumentValidator.Validate(legacyDocument.RootElement);
-    }
-
-    var legacyExportedJson = await page.EvaluateAsync<string>(
-        "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
-        legacyFixture);
-    var legacyOriginal = SerializeCanonical(
-        DeserializeAndNormalize(legacyFixture, "fixture-confirmacao-final-sem-feedback"));
-    var legacyExported = SerializeCanonical(
-        DeserializeAndNormalize(
-            legacyExportedJson,
-            "fixture-confirmacao-final-sem-feedback"));
-    if (!string.Equals(legacyOriginal, legacyExported, StringComparison.Ordinal))
-    {
-        throw new InvalidOperationException(
-            "O Blockly habilitou a comprovação de conclusão que estava desmarcada.");
-    }
-
-    var invalidFixtures = new[]
-    {
-        MutateSafeFinalConfirmationFixture(
-            fixture,
-            action => action.Remove("successText")),
-        MutateSafeFinalConfirmationFixture(
-            fixture,
-            action => action["protocolPattern"] = @"#(\d+)"),
-        MutateSafeFinalConfirmationFixture(
-            fixture,
-            action => action["protocolTarget"] = "runtime.business.completed")
+        Id = id,
+        DisplayName = displayName,
+        Candidates =
+        [
+            new LocatorCandidate
+            {
+                Id = id + ".original",
+                Origin = LocatorCandidateOrigin.Developer,
+                DeveloperRole = DeveloperLocatorRole.Original,
+                OriginalOrder = 0,
+                Recipe = new LocatorRecipe
+                {
+                    Target = new LocatorExpression
+                    {
+                        Strategy = LocatorStrategy.Css,
+                        Selector = selector
+                    }
+                }
+            }
+        ]
     };
 
-    foreach (var invalidFixture in invalidFixtures)
-    {
-        using var invalidDocument = JsonDocument.Parse(invalidFixture);
-        try
-        {
-            FlowDocumentValidator.Validate(invalidDocument.RootElement);
-            throw new InvalidOperationException(
-                "O microservidor aceitou uma confirmação final inválida.");
-        }
-        catch (InvalidOperationException exception) when (
-            !exception.Message.StartsWith(
-                "O microservidor aceitou",
-                StringComparison.Ordinal))
-        {
-        }
-
-        var editorError = await page.EvaluateAsync<string?>(
-            """
-            flowJson => {
-              try {
-                window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson));
-                return null;
-              } catch (error) {
-                return String(error?.message || error);
-              }
-            }
-            """,
-            invalidFixture);
-        if (string.IsNullOrWhiteSpace(editorError))
-        {
-            throw new InvalidOperationException(
-                "O editor aceitou uma confirmação final inválida.");
-        }
-    }
-
-    Console.WriteLine(
-        "OK: round-trip e validações preservaram a confirmação final configurável.");
-}
-
-static string MutateSafeFinalConfirmationFixture(
-    string fixture,
-    Action<JsonObject> mutate)
+static async Task CheckAtomicPackageApiAsync(string editorUrl)
 {
-    var root = JsonNode.Parse(fixture)?.AsObject()
-        ?? throw new InvalidOperationException(
-            "Não foi possível preparar a confirmação final inválida.");
-    var action = root["actions"]?.AsArray()[0]?.AsObject()
-        ?? throw new InvalidOperationException(
-            "A fixture da confirmação final não possui a ação esperada.");
+    using var unauthorizedClient = new HttpClient { BaseAddress = new Uri(editorUrl) };
+    using var unauthorized = await unauthorizedClient.GetAsync("/api/flow");
+    Check(unauthorized.StatusCode == HttpStatusCode.Unauthorized,
+        "APIs de componente exigem o token local da sessão");
 
-    mutate(action);
-    return root.ToJsonString();
-}
-
-static async Task CheckTypeAcrossInputsRoundTripAsync(
-    IPage page,
-    string repositoryRoot)
-{
-    var fixturePath = Path.Combine(
-        repositoryRoot,
-        "tests",
-        "RpaFlow.EditorRoundTrip",
-        "Fixtures",
-        "type-across-inputs.valid.json");
-    var fixture = await File.ReadAllTextAsync(fixturePath);
-
-    using (var fixtureDocument = JsonDocument.Parse(fixture))
+    using var client = new HttpClient { BaseAddress = new Uri(editorUrl) };
+    var session = await client.GetFromJsonAsync<JsonObject>("/api/session")
+        ?? throw new InvalidOperationException("Sessão do editor vazia.");
+    client.DefaultRequestHeaders.Add(
+        "X-Editor-Token",
+        session["token"]!.GetValue<string>());
+    var opened = await client.GetFromJsonAsync<JsonObject>("/api/package")
+        ?? throw new InvalidOperationException("Pacote do editor vazio.");
+    var revision = opened["revision"]!.GetValue<string>();
+    var changedFlow = opened["flow"]!.DeepClone().AsObject();
+    changedFlow["name"] = "Revisão salva pelo editor";
+    var request = new JsonObject
     {
-        FlowDocumentValidator.Validate(fixtureDocument.RootElement);
-    }
-
-    var exportedJson = await page.EvaluateAsync<string>(
-        "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
-        fixture);
-    var original = SerializeCanonical(
-        DeserializeAndNormalize(fixture, "fixture-digitacao-segmentada"));
-    var exported = SerializeCanonical(
-        DeserializeAndNormalize(exportedJson, "fixture-digitacao-segmentada"));
-    if (!string.Equals(original, exported, StringComparison.Ordinal))
+        ["expectedRevision"] = revision,
+        ["flow"] = changedFlow,
+        ["locators"] = opened["locators"]!.DeepClone(),
+        ["policy"] = opened["policy"]!.DeepClone()
+    };
+    using var saved = await client.PutAsJsonAsync("/api/package", request);
+    if (!saved.IsSuccessStatusCode)
     {
         throw new InvalidOperationException(
-            "O round-trip Blockly alterou a ação de digitação segmentada.");
+            $"Falha ao salvar pacote ({(int)saved.StatusCode}): " +
+            await saved.Content.ReadAsStringAsync());
     }
+    Check(true, "save publica atomicamente os três documentos");
+    var savedPackage = JsonNode.Parse(await saved.Content.ReadAsStringAsync())!.AsObject();
+    Check(savedPackage["revision"]!.GetValue<string>() != revision,
+        "alteração semântica cria uma revisão nova");
 
-    var invalidFixtures = new[]
-    {
-        fixture.Replace(
-            "\"valueSource\": \"runtime.authentication.otp\"",
-            "\"value\": \"123456\",\n      \"valueSource\": \"runtime.authentication.otp\"",
-            StringComparison.Ordinal),
-        fixture.Replace(
-            "\"type\": \"typeAcrossInputs\"",
-            "\"type\": \"typeAcrossInputs\",\n      \"matchMode\": \"single\"",
-            StringComparison.Ordinal),
-        fixture.Replace("\"delayMs\": 75", "\"delayMs\": 1001", StringComparison.Ordinal),
-        fixture.Replace("\"clearFirst\": true", "\"clearFirst\": \"true\"", StringComparison.Ordinal),
-        fixture.Replace(
-            "\"selector\": \"input[data-cy='codigo-segmento']\"",
-            "\"selector\": \"\"",
-            StringComparison.Ordinal)
-    };
+    changedFlow["name"] = "Tentativa obsoleta";
+    using var conflict = await client.PutAsJsonAsync("/api/package", request);
+    Check(conflict.StatusCode == HttpStatusCode.Conflict,
+        "compare-and-swap recusa revisão esperada obsoleta");
+    var reopened = await client.GetFromJsonAsync<JsonObject>("/api/package")
+        ?? throw new InvalidOperationException("Pacote reaberto vazio.");
+    Check(reopened["flow"]?["name"]?.GetValue<string>() == "Revisão salva pelo editor",
+        "conflito não altera a revisão publicada");
 
-    foreach (var invalidFixture in invalidFixtures)
-    {
-        using var invalidDocument = JsonDocument.Parse(invalidFixture);
-        try
+    var flowComponent = await client.GetFromJsonAsync<JsonObject>("/api/flow")
+        ?? throw new InvalidOperationException("Componente flow vazio.");
+    var componentRevision = flowComponent["revision"]!.GetValue<string>();
+    var componentFlow = flowComponent["document"]!.DeepClone().AsObject();
+    componentFlow["name"] = "Fluxo salvo pela API de componente";
+    using var flowSaved = await client.PutAsJsonAsync(
+        "/api/flow",
+        new JsonObject
         {
-            FlowDocumentValidator.Validate(invalidDocument.RootElement);
-            throw new InvalidOperationException(
-                "O microservidor aceitou uma digitação segmentada inválida.");
-        }
-        catch (InvalidOperationException exception) when (
-            !exception.Message.StartsWith(
-                "O microservidor aceitou",
-                StringComparison.Ordinal))
-        {
-        }
+            ["expectedRevision"] = componentRevision,
+            ["document"] = componentFlow.DeepClone()
+        });
+    Check(flowSaved.IsSuccessStatusCode,
+        "API de flow publica uma revisão completa do pacote");
+    var afterFlow = JsonNode.Parse(await flowSaved.Content.ReadAsStringAsync())!.AsObject();
+    var afterFlowRevision = afterFlow["revision"]!.GetValue<string>();
+    Check(
+        afterFlow["locators"] is not null && afterFlow["policy"] is not null,
+        "save de flow preserva e devolve locators e policy da mesma revisão");
 
-        var editorError = await page.EvaluateAsync<string?>(
-            """
-            flowJson => {
-              try {
-                window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson));
-                return null;
-              } catch (error) {
-                return String(error?.message || error);
-              }
-            }
-            """,
-            invalidFixture);
-        if (string.IsNullOrWhiteSpace(editorError))
-        {
-            throw new InvalidOperationException(
-                "O editor aceitou uma digitação segmentada inválida.");
-        }
-    }
-
-    Console.WriteLine(
-        "OK: round-trip e validações preservaram a digitação segmentada.");
-}
-
-static async Task CheckOneTimeCodeActionsRoundTripAsync(
-    IPage page,
-    string repositoryRoot)
-{
-    var fixturePath = Path.Combine(
-        repositoryRoot,
-        "tests",
-        "RpaFlow.EditorRoundTrip",
-        "Fixtures",
-        "one-time-code-actions.valid.json");
-    var fixture = await File.ReadAllTextAsync(fixturePath);
-
-    using (var fixtureDocument = JsonDocument.Parse(fixture))
-    {
-        FlowDocumentValidator.Validate(fixtureDocument.RootElement);
-    }
-
-    var exportedJson = await page.EvaluateAsync<string>(
-        "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
-        fixture);
-    var original = SerializeCanonical(
-        DeserializeAndNormalize(fixture, "fixture-codigo-autenticacao"));
-    var exported = SerializeCanonical(
-        DeserializeAndNormalize(exportedJson, "fixture-codigo-autenticacao"));
-    if (!string.Equals(original, exported, StringComparison.Ordinal))
-    {
-        throw new InvalidOperationException(
-            "O round-trip Blockly alterou as ações de autenticação por código.");
-    }
-
-    var invalidFixtures = new[]
-    {
-        fixture.Replace(
-            "\"email-otp\"",
-            "\"alias inválido\"",
-            StringComparison.Ordinal),
-        fixture.Replace(
-            "\"notBeforeSource\": \"runtime.authentication.otpRequestedAt\"",
-            "\"notBeforeSource\": \"origem-inválida\"",
-            StringComparison.Ordinal),
-        fixture.Replace(
-            "\"runtime.authentication.otp\"",
-            "\"input.authentication.otp\"",
-            StringComparison.Ordinal),
-        fixture.Replace("120000", "999", StringComparison.Ordinal),
-        fixture.Replace("5000", "499", StringComparison.Ordinal),
-        fixture.Replace("120000", "1000", StringComparison.Ordinal)
-    };
-
-    foreach (var invalidFixture in invalidFixtures)
-    {
-        using var invalidDocument = JsonDocument.Parse(invalidFixture);
-        try
-        {
-            FlowDocumentValidator.Validate(invalidDocument.RootElement);
-            throw new InvalidOperationException(
-                "O microservidor aceitou uma configuração inválida de autenticação por código.");
-        }
-        catch (InvalidOperationException exception) when (
-            !exception.Message.StartsWith(
-                "O microservidor aceitou",
-                StringComparison.Ordinal))
-        {
-        }
-    }
-
-    foreach (var invalidFixture in invalidFixtures.Take(3).Append(invalidFixtures[^1]))
-    {
-        var error = await page.EvaluateAsync<string?>(
-            """
-            flowJson => {
-              try {
-                window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson));
-                return null;
-              } catch (error) {
-                return String(error?.message || error);
-              }
-            }
-            """,
-            invalidFixture);
-        if (string.IsNullOrWhiteSpace(error))
-        {
-            throw new InvalidOperationException(
-                "O editor aceitou uma configuração inválida de autenticação por código.");
-        }
-    }
-
-    Console.WriteLine(
-        "OK: round-trip e validações preservaram as ações de autenticação por código.");
-}
-
-static async Task CheckGeneralizedPropertiesRoundTripAsync(IPage page)
-{
-    const string fixture =
+    var locatorComponent = await client.GetFromJsonAsync<JsonObject>("/api/locators")
+        ?? throw new InvalidOperationException("Componente locators vazio.");
+    var locatorDocument = locatorComponent["document"]!.DeepClone().AsObject();
+    locatorDocument["locators"]!.AsArray().Add(JsonNode.Parse(
         """
         {
-          "schemaVersion": 1,
-          "name": "Round-trip das propriedades generalizadas",
-          "actions": [
+          "id": "editor-added",
+          "displayName": "Botão atualizado",
+          "candidates": [
             {
-              "id": "aguardar-unico",
-              "type": "wait",
-              "name": "Aguardar elemento único",
-              "selector": ".resultado",
-              "state": "visible",
-              "matchMode": "single"
-            },
-            {
-              "id": "selecionar-texto",
-              "type": "select2",
-              "name": "Selecionar por texto",
-              "selector": "#tipo",
-              "triggerSelector": ".select2-selection",
-              "optionSelector": ".select2-results__option",
-              "valueSource": "input.tipo",
-              "comparison": "caseInsensitive"
-            },
-            {
-              "id": "preencher-mascara",
-              "type": "fillMaskedCurrency",
-              "name": "Preencher máscara",
-              "selector": "#valor",
-              "valueSource": "input.valor",
-              "decimalPlaces": 3,
-              "delayMs": 15,
-              "commitKey": "Enter"
-            },
-            {
-              "id": "selecionar-nativo",
-              "type": "selectOption",
-              "name": "Selecionar opção nativa",
-              "selector": "#tipo-nativo",
-              "optionMode": "label",
-              "value": "Serviço"
-            },
-            {
-              "id": "marcar-aceite",
-              "type": "setChecked",
-              "name": "Marcar aceite",
-              "selector": "#aceite",
-              "value": true
-            },
-            {
-              "id": "pressionar-enter",
-              "type": "pressKey",
-              "name": "Pressionar Enter",
-              "selector": "#pesquisa",
-              "value": "Enter"
-            },
-            {
-              "id": "ler-linhas",
-              "type": "readElements",
-              "name": "Ler linhas",
-              "selector": ".linha",
-              "property": "text",
-              "maxItems": 50,
-              "target": "runtime.linhas"
-            },
-            {
-              "id": "assumir-relatorio",
-              "type": "switchPage",
-              "name": "Assumir relatório",
-              "property": "url",
-              "comparison": "contains",
-              "value": "/relatorio",
-              "readySelector": "#resultado"
-            },
-            {
-              "id": "fechar-relatorio",
-              "type": "closePage",
-              "name": "Fechar relatório",
-              "readySelector": "#origem"
-            },
-            {
-              "id": "verificar-unico",
-              "type": "if",
-              "name": "Verificar elemento único",
-              "condition": {
-                "type": "element",
-                "selector": ".confirmacao",
-                "state": "attached",
-                "matchMode": "single"
-              },
-              "actions": [
-                {
-                  "id": "guardar-confirmacao",
-                  "type": "setVariable",
-                  "name": "Guardar confirmação",
-                  "value": true,
-                  "target": "runtime.confirmado"
+              "id": "editor-added.original",
+              "origin": "developer",
+              "developerRole": "original",
+              "originalOrder": 0,
+              "recipe": {
+                "frames": [],
+                "target": {
+                  "strategy": "css",
+                  "selector": "#editor-added"
                 }
-              ]
-            },
-            {
-              "id": "verificar-lista-tipada",
-              "type": "if",
-              "name": "Verificar lista tipada",
-              "condition": {
-                "type": "value",
-                "leftValue": [1, 2, 3],
-                "operator": "contains",
-                "rightValue": 2
-              },
-              "actions": [
-                {
-                  "id": "guardar-condicao-verdadeira",
-                  "type": "setVariable",
-                  "name": "Guardar condição verdadeira",
-                  "value": true,
-                  "target": "runtime.condicaoTipada"
-                }
-              ],
-              "elseActions": [
-                {
-                  "id": "guardar-condicao-falsa",
-                  "type": "setVariable",
-                  "name": "Guardar condição falsa",
-                  "value": false,
-                  "target": "runtime.condicaoTipada"
-                }
-              ]
-            },
-            {
-              "id": "repetir-tentativas",
-              "type": "repeat",
-              "name": "Repetir tentativas",
-              "times": 2,
-              "indexVariable": "tentativa",
-              "actions": [
-                {
-                  "id": "guardar-tentativa",
-                  "type": "setVariable",
-                  "name": "Guardar tentativa",
-                  "valueSource": "loop.tentativa",
-                  "target": "runtime.ultimaTentativa"
-                }
-              ]
-            },
-            {
-              "id": "percorrer-documentos",
-              "type": "forEach",
-              "name": "Percorrer documentos",
-              "items": [
-                { "codigo": 1 },
-                { "codigo": 2 }
-              ],
-              "itemVariable": "documento",
-              "indexVariable": "indiceDocumento",
-              "actions": [
-                {
-                  "id": "executar-processamento-item",
-                  "type": "runSubflow",
-                  "name": "Executar processamento do item",
-                  "subflow": "processarItem"
-                }
-              ]
+              }
             }
           ],
-          "subflows": {
-            "processarItem": [
-              {
-                "id": "guardar-documento-atual",
-                "type": "setVariable",
-                "name": "Guardar documento atual",
-                "valueSource": "loop.documento",
-                "target": "runtime.ultimoDocumento"
-              }
-            ]
-          }
+          "fingerprints": []
         }
-        """;
+        """));
+    using var locatorsSaved = await client.PutAsJsonAsync(
+        "/api/locators",
+        new JsonObject
+        {
+            ["expectedRevision"] = afterFlowRevision,
+            ["document"] = locatorDocument
+        });
+    Check(locatorsSaved.IsSuccessStatusCode,
+        "API de locators publica sem duplicar receitas no fluxo");
+    var afterLocators = JsonNode.Parse(
+        await locatorsSaved.Content.ReadAsStringAsync())!.AsObject();
+    var afterLocatorsRevision = afterLocators["revision"]!.GetValue<string>();
 
-    var exportedJson = await page.EvaluateAsync<string>(
-        "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
-        fixture);
-    var original = SerializeCanonical(
-        DeserializeAndNormalize(fixture, "fixture-generalizada"));
-    var exported = SerializeCanonical(
-        DeserializeAndNormalize(exportedJson, "fixture-generalizada"));
-    if (!string.Equals(original, exported, StringComparison.Ordinal))
-    {
-        throw new InvalidOperationException(
-            "O round-trip Blockly alterou propriedades generalizadas.");
-    }
+    var policyComponent = await client.GetFromJsonAsync<JsonObject>("/api/policy")
+        ?? throw new InvalidOperationException("Componente policy vazio.");
+    var policyDocument = policyComponent["document"]!.DeepClone().AsObject();
+    policyDocument["locatorResilience"]!["mode"] = "fallback";
+    using var policySaved = await client.PutAsJsonAsync(
+        "/api/policy",
+        new JsonObject
+        {
+            ["expectedRevision"] = afterLocatorsRevision,
+            ["document"] = policyDocument
+        });
+    Check(policySaved.IsSuccessStatusCode,
+        "API de policy publica a política validada como parte do pacote");
 
-    Console.WriteLine(
-        "OK: round-trip preservou propriedades generalizadas e controle de fluxo.");
+    using var staleComponent = await client.PutAsJsonAsync(
+        "/api/flow",
+        new JsonObject
+        {
+            ["expectedRevision"] = componentRevision,
+            ["document"] = componentFlow
+        });
+    Check(staleComponent.StatusCode == HttpStatusCode.Conflict,
+        "API de componente também recusa revisão obsoleta");
+
+    var invalidLocators = locatorDocument.DeepClone().AsObject();
+    invalidLocators["locators"]!.AsArray()[0]!["candidates"] = new JsonArray();
+    var current = JsonNode.Parse(await policySaved.Content.ReadAsStringAsync())!.AsObject();
+    using var invalidComponent = await client.PutAsJsonAsync(
+        "/api/locators",
+        new JsonObject
+        {
+            ["expectedRevision"] = current["revision"]!.GetValue<string>(),
+            ["document"] = invalidLocators
+        });
+    Check(invalidComponent.StatusCode == HttpStatusCode.BadRequest,
+        "API de componente recusa conjunto cruzado inconsistente");
 }
 
-static async Task CheckSharedToolboxAsync(IPage page)
-{
-    var blocks = await page.EvaluateAsync<string[]>(
-        "() => window.RpaFlowEditorTesting.toolboxBlockTypes()");
-    var requiredBlocks = new[]
-    {
-        "rpa_navigate",
-        "rpa_click",
-        "rpa_click_optional",
-        "rpa_wait",
-        "rpa_fill",
-        "rpa_select_option",
-        "rpa_set_checked",
-        "rpa_press_key",
-        "rpa_type_sequentially",
-        "rpa_type_across_inputs",
-        "rpa_click_new_page",
-        "rpa_upload",
-        "rpa_wait_stable",
-        "rpa_preserve_fill",
-        "rpa_select2",
-        "rpa_currency",
-        "rpa_set_variable",
-        "rpa_capture_timestamp",
-        "rpa_wait_one_time_code",
-        "rpa_read_element",
-        "rpa_read_elements",
-        "rpa_switch_page",
-        "rpa_close_page",
-        "rpa_screenshot",
-        "rpa_download_click",
-        "rpa_download_request",
-        "rpa_safe_final",
-        "rpa_fail",
-        "rpa_transform_path",
-        "rpa_if_value",
-        "rpa_if_element",
-        "rpa_repeat",
-        "rpa_for_each",
-        "rpa_run_subflow",
-        "rpa_subflow_definition"
-    };
-    var missing = requiredBlocks.Where(block => !blocks.Contains(block)).ToArray();
-    if (missing.Length > 0)
-    {
-        throw new InvalidOperationException(
-            "A toolbox compartilhada ocultou blocos da biblioteca: " +
-            string.Join(", ", missing));
-    }
-
-    var formBlocks = await page.EvaluateAsync<string[]>(
-        "name => window.RpaFlowEditorTesting.toolboxCategoryBlockTypes(name)",
-        "Formulários");
-    var sequentialIndex = Array.IndexOf(formBlocks, "rpa_type_sequentially");
-    var acrossInputsIndex = Array.IndexOf(formBlocks, "rpa_type_across_inputs");
-    if (sequentialIndex < 0 || acrossInputsIndex != sequentialIndex + 1)
-    {
-        throw new InvalidOperationException(
-            "A digitação segmentada não está ao lado da digitação sequencial em Formulários.");
-    }
-
-    var waitBlocks = await page.EvaluateAsync<string[]>(
-        "name => window.RpaFlowEditorTesting.toolboxCategoryBlockTypes(name)",
-        "Esperas");
-    if (!waitBlocks.Contains("rpa_wait_one_time_code"))
-    {
-        throw new InvalidOperationException(
-            "O bloco de espera do código de autenticação saiu da categoria Esperas.");
-    }
-
-    Console.WriteLine("OK: toolbox expôs a biblioteca completa para todos os RPAs.");
-}
-
-static FlowDefinition DeserializeAndNormalize(string json, string project)
-{
-    var flow = JsonSerializer.Deserialize<FlowDefinition>(
-        json,
-        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-        ?? throw new InvalidOperationException($"Fluxo vazio no round-trip de {project}.");
-    FlowDefinitionValidator.Validate(flow);
-    NormalizeLegacyArtifactNames(flow.Actions);
-    foreach (var actions in flow.Subflows.Values)
-    {
-        NormalizeLegacyArtifactNames(actions);
-    }
-    return flow;
-}
-
-static void NormalizeLegacyArtifactNames(IEnumerable<FlowActionDefinition> actions)
-{
-    foreach (var action in actions)
-    {
-        if (string.IsNullOrWhiteSpace(action.FileName) &&
-            !string.IsNullOrWhiteSpace(action.ScreenshotName))
-        {
-            action.FileName = action.ScreenshotName;
-            action.ScreenshotName = null;
-        }
-
-        if (action.SeparateByExecution == true)
-        {
-            action.SeparateByExecution = null;
-        }
-
-        if (action.ConflictStrategy?.Equals(
-                "unique",
-                StringComparison.OrdinalIgnoreCase) == true)
-        {
-            action.ConflictStrategy = null;
-        }
-
-        if (action.MatchMode?.Equals(
-                "first",
-                StringComparison.OrdinalIgnoreCase) == true)
-        {
-            action.MatchMode = null;
-        }
-
-        if (action.Condition?.MatchMode?.Equals(
-                "first",
-                StringComparison.OrdinalIgnoreCase) == true)
-        {
-            action.Condition.MatchMode = null;
-        }
-
-        NormalizeLegacyArtifactNames(action.Actions);
-        NormalizeLegacyArtifactNames(action.ElseActions);
-    }
-}
-
-static string SerializeCanonical(FlowDefinition flow) =>
-    JsonSerializer.Serialize(flow, new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = true
-    });
-
-static Process StartEditor(string editorDll, string repositoryRoot, string editorUrl)
+static Process StartEditor(string editorDll, string projectRoot, string editorUrl)
 {
     var startInfo = new ProcessStartInfo("dotnet")
     {
@@ -757,7 +371,7 @@ static Process StartEditor(string editorDll, string repositoryRoot, string edito
     };
     startInfo.ArgumentList.Add(editorDll);
     startInfo.ArgumentList.Add("--project-root");
-    startInfo.ArgumentList.Add(Path.Combine(repositoryRoot, "examples", "RpaExemplo"));
+    startInfo.ArgumentList.Add(projectRoot);
     startInfo.ArgumentList.Add("--url");
     startInfo.ArgumentList.Add(editorUrl);
     startInfo.ArgumentList.Add("--no-open");
@@ -773,30 +387,20 @@ static async Task WaitForEditorAsync(string editorUrl, Process process)
     {
         if (process.HasExited)
         {
-            var error = await process.StandardError.ReadToEndAsync();
             throw new InvalidOperationException(
-                $"O editor de round-trip encerrou antes de iniciar: {error}");
+                "O editor encerrou antes de iniciar: " +
+                await process.StandardError.ReadToEndAsync());
         }
-
         try
         {
             using var response = await client.GetAsync($"{editorUrl}/api/session");
-            if (response.IsSuccessStatusCode)
-            {
-                return;
-            }
+            if (response.IsSuccessStatusCode) return;
         }
-        catch (HttpRequestException)
-        {
-        }
-        catch (TaskCanceledException)
-        {
-        }
-
+        catch (HttpRequestException) { }
+        catch (TaskCanceledException) { }
         await Task.Delay(100);
     }
-
-    throw new TimeoutException("O editor de round-trip não iniciou em 30 segundos.");
+    throw new TimeoutException("O editor não iniciou em 30 segundos.");
 }
 
 static int FindAvailablePort()
@@ -807,3 +411,11 @@ static int FindAvailablePort()
     listener.Stop();
     return port;
 }
+
+static void Check(bool condition, string description)
+{
+    if (!condition) throw new InvalidOperationException($"Falha: {description}.");
+    Console.WriteLine($"OK: {description}.");
+}
+
+file sealed record BlockInspection(string Type, string[] Fields);

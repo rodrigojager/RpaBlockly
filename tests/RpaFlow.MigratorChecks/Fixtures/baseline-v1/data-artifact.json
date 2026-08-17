@@ -1,0 +1,131 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Fixture sanitizada: data-artifact",
+  "Inputs": [],
+  "Actions": [
+    {
+      "Id": "catalogo-fail",
+      "Type": "fail",
+      "Name": "fail",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-transformpath",
+      "Type": "transformPath",
+      "Name": "transformPath",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Operation": "fileName",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-capturetimestamp",
+      "Type": "captureTimestamp",
+      "Name": "captureTimestamp",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-waitforonetimecode",
+      "Type": "waitForOneTimeCode",
+      "Name": "waitForOneTimeCode",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "ProviderAlias": "email-otp",
+      "NotBeforeSource": "runtime.requestedAt",
+      "Target": "runtime.resultado",
+      "TimeoutMs": 120000,
+      "PollIntervalMs": 5000,
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-setvariable",
+      "Type": "setVariable",
+      "Name": "setVariable",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-readelement",
+      "Type": "readElement",
+      "Name": "readElement",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Property": "text",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-readelements",
+      "Type": "readElements",
+      "Name": "readElements",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Property": "text",
+      "MaxItems": 100,
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-download",
+      "Type": "download",
+      "Name": "download",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "DownloadMode": "click",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-screenshot",
+      "Type": "screenshot",
+      "Name": "screenshot",
+      "FrameSelectors": [],
+      "FileName": "evidencia.png",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-safefinalconfirmation",
+      "Type": "safeFinalConfirmation",
+      "Name": "safeFinalConfirmation",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "SuccessSelector": ".sucesso",
+      "SuccessText": "Concluído",
+      "ProtocolSelector": ".protocolo",
+      "ProtocolPattern": "(?<protocol>[A-Z]+-[0-9]+)",
+      "CompletionTarget": "runtime.concluido",
+      "ConfirmationMessageTarget": "runtime.mensagem",
+      "ProtocolTarget": "runtime.protocolo",
+      "Actions": [],
+      "ElseActions": []
+    }
+  ],
+  "Subflows": {}
+}

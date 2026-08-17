@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using RpaFlow.Contracts;
+using FlowActionDefinition = RpaFlow.Contracts.V2.FlowActionDefinition;
+using FlowDefinitionValidator = RpaFlow.Contracts.V2.FlowDefinitionValidator;
 
 namespace RpaFlow.Runtime;
 

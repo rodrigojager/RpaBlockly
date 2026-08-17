@@ -3,7 +3,7 @@ namespace RpaFlow.Playwright;
 public static class ArtifactDestinationResolver
 {
     public static ArtifactDestination Resolve(
-        FlowActionDefinition action,
+        RpaFlow.Contracts.V2.FlowActionDefinition action,
         RpaContext context,
         string? fallbackFileName = null)
     {

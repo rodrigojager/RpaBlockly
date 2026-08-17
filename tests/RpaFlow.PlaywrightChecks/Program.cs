@@ -1,9 +1,15 @@
 using System.Net;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using RpaFlow.Contracts;
 using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
+using RpaFlow.Playwright.V2.Adaptive;
+using RpaFlow.Packages;
 using RpaFlow.Runtime;
+using RpaFlow.Migrator;
+using V2 = RpaFlow.Contracts.V2;
 
 var innermostFrame =
     """
@@ -505,15 +511,1279 @@ if (oneTimeCodeRequest is null ||
         "O handler Playwright não propagou corretamente a espera ao provider falso.");
 }
 
+var migrated = new V1ToV2Migrator().Migrate(flow, "fixture-playwright-v1.json");
+var migratedHash = CanonicalJson.ComputePackageHash(migrated.Documents);
+var migratedSnapshot = new RpaPackageSnapshot(
+    "fixture-diferencial",
+    new PackageRevision(migratedHash),
+    migrated.Documents,
+    new RpaPackageOrigin("inline", "teste-diferencial"));
+var migratedProvider = new FakeOneTimeCodeProvider(
+    new OneTimeCodeResult("654321", otpRequestedAt.AddSeconds(8)));
+var migratedResult = await new PlaywrightV2FlowExecutor(
+        migratedSnapshot,
+        options with { StorageStatePath = null, SaveStorageState = false },
+        oneTimeCodeProvider: migratedProvider,
+        timeProvider: new FixedTimeProvider(otpRequestedAt))
+    .ExecuteAsync(request with { ExecutionId = "playwright-migrado-v2" }, CancellationToken.None);
+if (!JsonNode.DeepEquals(result.Output, migratedResult.Output) ||
+    result.ExecutedActions != migratedResult.ExecutedActions)
+{
+    throw new InvalidOperationException(
+        "A execução strict do pacote migrado divergiu da mesma fixture V1.");
+}
+Console.WriteLine("OK: execução diferencial V1/V2 preservou output e ações observáveis.");
+
 await CheckExecutionGuardAsync(options);
 await CheckAfterActionCompletionAsync(options);
 await CheckTypeAcrossInputsCardinalityAsync(options, originUrl);
+await CheckV2LocatorResolverAsync(options.Browser);
+CheckAdaptiveReferenceGolden();
+await CheckLocatorLearningAsync();
+await CheckV2FlowExecutorAsync(options, originUrl);
+await CheckLearningDiagnosticsAsync(options);
+await CheckArtifactHardeningAsync(options.Browser);
+CheckV2LocatorArchitecture();
 
 Console.WriteLine(
     $"OK: blocos web, guards antes/depois da ação, if, repeat, forEach aninhado, " +
     $"subfluxo e cadeia de " +
     $"iframes estável entre frames auxiliares funcionaram em HTML local com " +
     $"o navegador '{options.Browser}'.");
+
+static async Task CheckV2LocatorResolverAsync(string browserName)
+{
+    var html =
+        """
+        <!doctype html>
+        <html>
+          <body>
+            <section id="painel" data-testid="painel-principal">
+              <h2>Área segura</h2>
+              <label for="email">E-mail</label>
+              <input id="email" name="email" placeholder="nome@exemplo.com">
+              <button id="submit" data-testid="enviar">Enviar</button>
+              <button class="secondary">Cancelar</button>
+              <button id="save-new" name="save-order" class="primary-v2"
+                aria-label="Salvar pedido">Salvar pedido</button>
+              <button class="duplicate">Duplicado</button>
+              <button class="duplicate">Duplicado</button>
+              <span class="message">Mensagem exata</span>
+              <ul><li class="item">Um</li><li class="item">Dois</li></ul>
+            </section>
+          </body>
+        </html>
+        """;
+    using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+    await using var browser = browserName.ToLowerInvariant() switch
+    {
+        "firefox" => await playwright.Firefox.LaunchAsync(
+            new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true }),
+        "webkit" => await playwright.Webkit.LaunchAsync(
+            new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true }),
+        _ => await playwright.Chromium.LaunchAsync(
+            new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true })
+    };
+    var page = await browser.NewPageAsync();
+    await page.GotoAsync(DataUrl(html));
+    var data = new FlowDataContext(new FlowExecutionRequest(
+        "resolver-v2",
+        new JsonObject { ["area"] = "Área segura" },
+        [],
+        []));
+
+    var catalog = new V2.LocatorCatalog
+    {
+        Locators =
+        [
+            Locator("css", V2.LocatorStrategy.Css, "#submit"),
+            Locator("xpath", V2.LocatorStrategy.XPath, "//button[@id='submit']"),
+            Locator("role", V2.LocatorStrategy.Role, role: "button", name: "Enviar"),
+            Locator("label", V2.LocatorStrategy.Label, text: "E-mail"),
+            Locator(
+                "placeholder",
+                V2.LocatorStrategy.Placeholder,
+                text: "nome@exemplo.com"),
+            Locator("text", V2.LocatorStrategy.Text, text: "Mensagem exata"),
+            Locator("testid", V2.LocatorStrategy.TestId, text: "enviar"),
+            Locator("raw", V2.LocatorStrategy.RawPlaywright, "button#submit"),
+            new V2.LocatorDefinition
+            {
+                Id = "scoped",
+                DisplayName = "Botão com escopo dinâmico",
+                Candidates =
+                [
+                    new V2.LocatorCandidate
+                    {
+                        Id = "scoped-primary",
+                        Origin = V2.LocatorCandidateOrigin.Developer,
+                        DeveloperRole = V2.DeveloperLocatorRole.Original,
+                        OriginalOrder = 0,
+                        Recipe = new V2.LocatorRecipe
+                        {
+                            Scope = new V2.LocatorExpression
+                            {
+                                Strategy = V2.LocatorStrategy.Css,
+                                Selector = "section",
+                                HasText = new V2.LocatorTextConstraint
+                                {
+                                    Source = "input.area"
+                                }
+                            },
+                            Target = new V2.LocatorExpression
+                            {
+                                Strategy = V2.LocatorStrategy.Role,
+                                Role = "button",
+                                Name = "Enviar",
+                                Exact = true
+                            }
+                        }
+                    }
+                ]
+            },
+            new V2.LocatorDefinition
+            {
+                Id = "fallback",
+                DisplayName = "Fallback ordenado",
+                Candidates =
+                [
+                    Candidate("fallback-missing", "#ausente", 0),
+                    Candidate("fallback-working", "#submit", 1)
+                ]
+            },
+            new V2.LocatorDefinition
+            {
+                Id = "all-invalid",
+                DisplayName = "Todos inválidos",
+                Candidates =
+                [
+                    Candidate("invalid-one", "#ausente-um", 0),
+                    Candidate("invalid-two", "#ausente-dois", 1)
+                ]
+            },
+            Locator("ambiguous", V2.LocatorStrategy.Css, "button"),
+            Locator("many", V2.LocatorStrategy.Css, "li.item"),
+            new V2.LocatorDefinition
+            {
+                Id = "adaptive",
+                DisplayName = "Alvo alterado",
+                Candidates = [Candidate("adaptive-old", "#save-old", 0)],
+                Fingerprints =
+                [
+                    new V2.LocatorFingerprint
+                    {
+                        Id = "adaptive-original",
+                        TagName = "button",
+                        AccessibleName = "Salvar pedido",
+                        Text = "Salvar pedido",
+                        Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["id"] = "save-old",
+                            ["name"] = "save-order",
+                            ["class"] = "primary"
+                        },
+                        Ancestors =
+                        [
+                            new V2.LocatorFingerprintNode
+                            {
+                                TagName = "section",
+                                Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+                                {
+                                    ["id"] = "painel"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            new V2.LocatorDefinition
+            {
+                Id = "adaptive-tie",
+                DisplayName = "Empate adaptativo",
+                Candidates = [Candidate("tie-old", "#duplicate-old", 0)],
+                Fingerprints =
+                [
+                    new V2.LocatorFingerprint
+                    {
+                        Id = "tie-original",
+                        TagName = "button",
+                        Text = "Duplicado",
+                        Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["class"] = "duplicate"
+                        }
+                    }
+                ]
+            }
+        ]
+    };
+    var strictPolicy = new V2.RpaPolicyDefinition();
+    var strictResolver = new LocatorResolver(catalog, strictPolicy);
+    foreach (var locatorId in new[]
+             {
+                 "css", "xpath", "role", "label", "placeholder", "text",
+                 "testid", "raw", "scoped"
+             })
+    {
+        var resolved = await strictResolver.ResolveAsync(
+            page,
+            new V2.LocatorUseDefinition
+            {
+                LocatorId = locatorId,
+                Cardinality = V2.LocatorCardinality.Single
+            },
+            data,
+            new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+            TimeSpan.FromSeconds(2),
+            CancellationToken.None);
+        if (resolved.Attempts.Count != 1 || !resolved.Attempts[0].Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"A estratégia V2 '{locatorId}' não resolveu em modo strict.");
+        }
+    }
+
+    const int loadIterations = 100;
+    var loadWatch = Stopwatch.StartNew();
+    for (var index = 0; index < loadIterations; index++)
+    {
+        var resolved = await strictResolver.ResolveAsync(
+            page,
+            new V2.LocatorUseDefinition
+            {
+                LocatorId = "css",
+                Cardinality = V2.LocatorCardinality.Single
+            },
+            data,
+            new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+            TimeSpan.FromSeconds(2),
+            CancellationToken.None);
+        if (resolved.Attempts.Count != 1 || !resolved.Attempts[0].Succeeded)
+        {
+            throw new InvalidOperationException(
+                "O teste de carga do resolver perdeu a resolução estrita.");
+        }
+    }
+
+    loadWatch.Stop();
+    if (loadWatch.Elapsed > TimeSpan.FromSeconds(30))
+    {
+        throw new InvalidOperationException(
+            $"Cem resoluções estritas excederam 30 s: {loadWatch.Elapsed}.");
+    }
+    Console.WriteLine(
+        $"OK: {loadIterations} resoluções estritas concluídas em " +
+        $"{loadWatch.ElapsedMilliseconds} ms.");
+
+    var fallbackPolicy = new V2.RpaPolicyDefinition
+    {
+        LocatorResilience = new V2.LocatorResiliencePolicy
+        {
+            Mode = V2.LocatorResilienceMode.Fallback,
+            MaximumResolutionMilliseconds = 3_000
+        }
+    };
+    var resolutionObserver = new RecordingFlowExecutionObserver();
+    var fallbackResolver = new LocatorResolver(
+        catalog,
+        fallbackPolicy,
+        observer: resolutionObserver);
+    var fallback = await fallbackResolver.ResolveAsync(
+        page,
+        new V2.LocatorUseDefinition
+        {
+            LocatorId = "fallback",
+            Cardinality = V2.LocatorCardinality.Single
+        },
+        data,
+        new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+        TimeSpan.FromSeconds(3),
+        CancellationToken.None);
+    if (fallback.Candidate.Id != "fallback-working" ||
+        fallback.Attempts.Count != 2 || fallback.Attempts[0].Succeeded)
+    {
+        throw new InvalidOperationException("O fallback V2 não preservou a ordem.");
+    }
+
+    var first = await fallbackResolver.ResolveAsync(
+        page,
+        new V2.LocatorUseDefinition
+        {
+            LocatorId = "ambiguous",
+            Cardinality = V2.LocatorCardinality.First
+        },
+        data,
+        new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+        TimeSpan.FromSeconds(2),
+        CancellationToken.None);
+    if (await first.Locator.CountAsync() != 1)
+    {
+        throw new InvalidOperationException("A cardinalidade first não materializou um alvo.");
+    }
+
+    var many = await fallbackResolver.ResolveAsync(
+        page,
+        new V2.LocatorUseDefinition
+        {
+            LocatorId = "many",
+            Cardinality = V2.LocatorCardinality.Many
+        },
+        data,
+        new LocatorResolutionRequirement(LocatorRequiredState.Attached),
+        TimeSpan.FromSeconds(2),
+        CancellationToken.None);
+    if (await many.Locator.CountAsync() != 2)
+    {
+        throw new InvalidOperationException("A cardinalidade many perdeu a coleção.");
+    }
+
+    try
+    {
+        await strictResolver.ResolveAsync(
+            page,
+            new V2.LocatorUseDefinition
+            {
+                LocatorId = "ambiguous",
+                Cardinality = V2.LocatorCardinality.Single
+            },
+            data,
+            new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+            TimeSpan.FromSeconds(2),
+            CancellationToken.None);
+        throw new InvalidOperationException("Locator ambíguo foi aceito como single.");
+    }
+    catch (LocatorResolutionException exception)
+        when (exception.Attempts.Single().FailureReason ==
+              LocatorResolutionFailureReason.Ambiguous)
+    {
+    }
+
+    try
+    {
+        await fallbackResolver.ResolveAsync(
+            page,
+            new V2.LocatorUseDefinition
+            {
+                LocatorId = "all-invalid",
+                Cardinality = V2.LocatorCardinality.Single
+            },
+            data,
+            new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+            TimeSpan.FromMilliseconds(250),
+            CancellationToken.None);
+        throw new InvalidOperationException("Fallback aceitou todos os candidatos inválidos.");
+    }
+    catch (LocatorResolutionException exception)
+        when (exception.Attempts.Count == 2 &&
+              exception.Attempts.All(attempt => !attempt.Succeeded))
+    {
+    }
+
+    var adaptivePolicy = new V2.RpaPolicyDefinition
+    {
+        LocatorResilience = new V2.LocatorResiliencePolicy
+        {
+            Mode = V2.LocatorResilienceMode.Adaptive,
+            LearningWriteBack = V2.LearningWriteBackMode.Memory,
+            Promotion = V2.LocatorPromotionMode.AfterSuccessfulExecution,
+            MinimumConfidence = 0.40,
+            MinimumRunnerUpGap = 0.08,
+            MaximumHeuristicNodes = 500,
+            MaximumResolutionMilliseconds = 3_000
+        }
+    };
+    var adaptiveResolver = new LocatorResolver(
+        catalog,
+        adaptivePolicy,
+        observer: resolutionObserver);
+    var adaptive = await adaptiveResolver.ResolveAsync(
+        page,
+        new V2.LocatorUseDefinition
+        {
+            LocatorId = "adaptive",
+            Cardinality = V2.LocatorCardinality.Single
+        },
+        data,
+        new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+        TimeSpan.FromSeconds(3),
+        CancellationToken.None);
+    var adaptiveAgain = await adaptiveResolver.ResolveAsync(
+        page,
+        new V2.LocatorUseDefinition
+        {
+            LocatorId = "adaptive",
+            Cardinality = V2.LocatorCardinality.Single
+        },
+        data,
+        new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+        TimeSpan.FromSeconds(3),
+        CancellationToken.None);
+    if (!adaptive.UsedHeuristic || adaptive.LearnedFingerprint is null ||
+        await adaptive.Locator.GetAttributeAsync("id") != "save-new" ||
+        adaptive.Candidate.Id != adaptiveAgain.Candidate.Id ||
+        adaptive.Confidence != adaptiveAgain.Confidence)
+    {
+        throw new InvalidOperationException(
+            "A heurística V2 não recuperou o mesmo alvo de forma determinística.");
+    }
+
+    try
+    {
+        await adaptiveResolver.ResolveAsync(
+            page,
+            new V2.LocatorUseDefinition
+            {
+                LocatorId = "adaptive-tie",
+                Cardinality = V2.LocatorCardinality.Single
+            },
+            data,
+            new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+            TimeSpan.FromSeconds(3),
+            CancellationToken.None);
+        throw new InvalidOperationException("A heurística V2 aceitou um empate.");
+    }
+    catch (LocatorResolutionException exception)
+        when (exception.Attempts.Last().FailureReason ==
+              LocatorResolutionFailureReason.Ambiguous)
+    {
+    }
+
+    var expectedDiagnosticKinds = new[]
+    {
+        "locatorResolutionStarted",
+        "locatorCandidateAccepted",
+        "locatorCandidateRejected",
+        "locatorResolutionCompleted",
+        "locatorResolutionFailed"
+    };
+    if (expectedDiagnosticKinds.Any(kind =>
+            !resolutionObserver.Events.Any(item => item.Kind == kind)) ||
+        resolutionObserver.Events.Any(item =>
+            item.ExecutionId != "resolver-v2" ||
+            item.Detail?.Contains("nome@exemplo.com", StringComparison.Ordinal) == true))
+    {
+        throw new InvalidOperationException(
+            "Os diagnósticos do resolver não cobriram o ciclo completo ou expuseram dados.");
+    }
+
+    await page.CloseAsync();
+    try
+    {
+        await fallbackResolver.ResolveAsync(
+            page,
+            new V2.LocatorUseDefinition
+            {
+                LocatorId = "fallback",
+                Cardinality = V2.LocatorCardinality.Single
+            },
+            data,
+            new LocatorResolutionRequirement(LocatorRequiredState.Visible),
+            TimeSpan.FromSeconds(1),
+            CancellationToken.None);
+        throw new InvalidOperationException("Resolver aceitou uma página encerrada.");
+    }
+    catch (LocatorResolutionException exception)
+        when (exception.Attempts.Count == 1 &&
+              exception.Attempts[0].FailureReason ==
+                  LocatorResolutionFailureReason.PageOrContextClosed)
+    {
+    }
+
+    Console.WriteLine(
+        "OK: resolver V2 compilou oito estratégias exatas, scope dinâmico, " +
+        "fallback ordenado, heurística determinística e cardinalidades seguras.");
+}
+
+static async Task CheckV2FlowExecutorAsync(
+    PlaywrightRuntimeOptions options,
+    string originUrl)
+{
+    static V2.LocatorUseDefinition Use(
+        string id,
+        V2.LocatorCardinality cardinality = V2.LocatorCardinality.Single) =>
+        new() { LocatorId = id, Cardinality = cardinality };
+
+    static V2.LocatorDefinition Locator(string id, string selector) =>
+        new()
+        {
+            Id = id,
+            DisplayName = id,
+            Candidates =
+            [
+                new V2.LocatorCandidate
+                {
+                    Id = id + ".primary",
+                    Origin = V2.LocatorCandidateOrigin.Developer,
+                    DeveloperRole = V2.DeveloperLocatorRole.Original,
+                    OriginalOrder = 0,
+                    Recipe = new V2.LocatorRecipe
+                    {
+                        Target = new V2.LocatorExpression
+                        {
+                            Strategy = V2.LocatorStrategy.Css,
+                            Selector = selector
+                        }
+                    }
+                }
+            ]
+        };
+
+    var definition = new V2.FlowDefinition
+    {
+        Name = "Execução V2 estrita",
+        Inputs =
+        [
+            new V2.FlowInputRequirementDefinition
+            {
+                Path = "input.pin",
+                Type = "string"
+            }
+        ],
+        Actions =
+        [
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-navigate",
+                Type = "navigate",
+                Name = "Abrir fixture V2",
+                Value = JsonSerializer.SerializeToElement(originUrl)
+            },
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-select",
+                Type = "selectOption",
+                Name = "Selecionar tipo",
+                Target = Use("tipo"),
+                OptionMode = "value",
+                Value = JsonSerializer.SerializeToElement("servico")
+            },
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-check",
+                Type = "setChecked",
+                Name = "Marcar aceite",
+                Target = Use("aceite"),
+                Value = JsonSerializer.SerializeToElement(true)
+            },
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-pin",
+                Type = "typeAcrossInputs",
+                Name = "Preencher PIN",
+                Target = Use("pin", V2.LocatorCardinality.Many),
+                ValueSource = "input.pin",
+                ClearFirst = true,
+                DelayMs = 0
+            },
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-read-items",
+                Type = "readElements",
+                Name = "Ler itens",
+                Target = Use("items", V2.LocatorCardinality.Many),
+                Property = "text",
+                Output = "runtime.items"
+            },
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-if",
+                Type = "if",
+                Name = "Validar lista",
+                Condition = new V2.FlowConditionDefinition
+                {
+                    Type = "value",
+                    LeftSource = "runtime.items",
+                    Operator = "contains",
+                    RightValue = JsonSerializer.SerializeToElement("Segundo")
+                },
+                Actions =
+                [
+                    new V2.FlowActionDefinition
+                    {
+                        Id = "v2-repeat",
+                        Type = "repeat",
+                        Name = "Repetir marcação",
+                        Times = 2,
+                        Actions =
+                        [
+                            new V2.FlowActionDefinition
+                            {
+                                Id = "v2-set-output",
+                                Type = "setVariable",
+                                Name = "Registrar resultado",
+                                Value = JsonSerializer.SerializeToElement("ok"),
+                                Output = "runtime.status"
+                            }
+                        ]
+                    }
+                ]
+            },
+            new V2.FlowActionDefinition
+            {
+                Id = "v2-read-check",
+                Type = "readElement",
+                Name = "Ler aceite",
+                Target = Use("aceite"),
+                Property = "checked",
+                Output = "runtime.checked"
+            }
+        ]
+    };
+    var catalog = new V2.LocatorCatalog
+    {
+        Locators =
+        [
+            Locator("tipo", "#tipo"),
+            Locator("aceite", "#aceite"),
+            Locator("pin", "#pin .pin-segment:not([style*='display:none'])"),
+            Locator("items", ".item")
+        ]
+    };
+    var policy = new V2.RpaPolicyDefinition
+    {
+        LocatorResilience = new V2.LocatorResiliencePolicy
+        {
+            Mode = V2.LocatorResilienceMode.Strict,
+            MaximumResolutionMilliseconds = 15_000
+        }
+    };
+    var documents = new RpaPackageDocuments(definition, catalog, policy);
+    var snapshot = new RpaPackageSnapshot(
+        "fixture-v2",
+        new PackageRevision("fixture-v2-r1"),
+        documents,
+        new RpaPackageOrigin("test", "memory"));
+    var observer = new RecordingFlowExecutionObserver();
+    var result = await new PlaywrightV2FlowExecutor(snapshot, options, observer)
+        .ExecuteAsync(
+            new FlowExecutionRequest(
+                "playwright-v2-local",
+                new JsonObject { ["pin"] = "123456" },
+                [],
+                []),
+            CancellationToken.None);
+
+    if (result.Output["status"]?.GetValue<string>() != "ok" ||
+        result.Output["checked"]?.GetValue<bool>() != true ||
+        result.Output["items"] is not JsonArray items ||
+        items.Count != 2 ||
+        result.ExecutedActions != 10)
+    {
+        throw new InvalidOperationException(
+            "O executor V2 estrito não preservou o comportamento observável esperado.");
+    }
+
+    var supported = V2FlowActionHandlerRegistry.Default.SupportedTypes;
+    if (!supported.SetEquals(FlowActionCatalog.SupportedTypes))
+    {
+        throw new InvalidOperationException(
+            "Os handlers V2 não cobrem exatamente os 32 tipos do catálogo.");
+    }
+
+
+    if (!observer.Events.Any(item =>
+            item.Kind == "locatorResolutionCompleted" &&
+            item.RpaId == "fixture-v2" &&
+            item.PackageRevision == "fixture-v2-r1" &&
+            item.PackageHash == snapshot.ContentHash &&
+            item.LocatorId == "tipo"))
+    {
+        throw new InvalidOperationException(
+            "O diagnóstico V2 não registrou RPA, revisão, hash e locator.");
+    }
+}
+
+static async Task CheckLearningDiagnosticsAsync(PlaywrightRuntimeOptions options)
+{
+    var url = DataUrl(
+        "<!doctype html><button id='submit-new' name='submit-order' " +
+        "aria-label='Enviar pedido'>Enviar pedido</button>");
+    var documents = new RpaPackageDocuments(
+        new V2.FlowDefinition
+        {
+            Name = "Diagnóstico de promoção",
+            Actions =
+            [
+                new V2.FlowActionDefinition
+                {
+                    Id = "open",
+                    Type = "navigate",
+                    Name = "Abrir",
+                    Value = JsonSerializer.SerializeToElement(url)
+                },
+                new V2.FlowActionDefinition
+                {
+                    Id = "submit",
+                    Type = "click",
+                    Name = "Enviar",
+                    Target = new V2.LocatorUseDefinition
+                    {
+                        LocatorId = "submit",
+                        Cardinality = V2.LocatorCardinality.Single
+                    }
+                }
+            ]
+        },
+        new V2.LocatorCatalog
+        {
+            Locators =
+            [
+                new V2.LocatorDefinition
+                {
+                    Id = "submit",
+                    DisplayName = "Enviar pedido",
+                    Candidates = [Candidate("submit-old", "#submit-old", 0)],
+                    Fingerprints =
+                    [
+                        new V2.LocatorFingerprint
+                        {
+                            Id = "submit-original",
+                            TagName = "button",
+                            AccessibleName = "Enviar pedido",
+                            Text = "Enviar pedido",
+                            Attributes = new Dictionary<string, string>
+                            {
+                                ["id"] = "submit-old",
+                                ["name"] = "submit-order"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        new V2.RpaPolicyDefinition
+        {
+            LocatorResilience = new V2.LocatorResiliencePolicy
+            {
+                Mode = V2.LocatorResilienceMode.Adaptive,
+                LearningWriteBack = V2.LearningWriteBackMode.Memory,
+                Promotion = V2.LocatorPromotionMode.AfterSuccessfulExecution,
+                MinimumConfidence = 0.35,
+                MinimumRunnerUpGap = 0.05,
+                MaximumHeuristicNodes = 100,
+                MaximumResolutionMilliseconds = 3_000
+            }
+        });
+    var snapshot = new RpaPackageSnapshot(
+        "learning-events",
+        new PackageRevision("learning-events-r1"),
+        documents,
+        new RpaPackageOrigin("test", "memory"));
+    var observer = new RecordingFlowExecutionObserver();
+    await new PlaywrightV2FlowExecutor(snapshot, options, observer)
+        .ExecuteAsync(
+            new FlowExecutionRequest("learning-events-execution", [], [], []),
+            CancellationToken.None);
+    if (!observer.Events.Any(item =>
+            item.Kind == "locatorPromotionCompleted" &&
+            item.ExecutionId == "learning-events-execution" &&
+            item.RpaId == "learning-events" &&
+            item.LocatorId == "submit" &&
+            !string.IsNullOrWhiteSpace(item.CandidateId)))
+    {
+        throw new InvalidOperationException(
+            "A promoção confirmada não emitiu o diagnóstico completo esperado.");
+    }
+}
+
+static async Task CheckArtifactHardeningAsync(string browserName)
+{
+    var repositoryRoot = Directory.GetCurrentDirectory();
+    var root = Path.Combine(
+        repositoryRoot,
+        "tmp",
+        "artifact-hardening",
+        Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var expired = Path.Combine(root, "20200101-000000000-expired");
+        Directory.CreateDirectory(expired);
+        await File.WriteAllTextAsync(Path.Combine(expired, "old.txt"), "antigo");
+        Directory.SetLastWriteTimeUtc(expired, DateTime.UtcNow.AddDays(-60));
+
+        using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+        await using var browser = browserName.ToLowerInvariant() switch
+        {
+            "firefox" => await playwright.Firefox.LaunchAsync(
+                new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true }),
+            "webkit" => await playwright.Webkit.LaunchAsync(
+                new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true }),
+            _ => await playwright.Chromium.LaunchAsync(
+                new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true })
+        };
+        var page = await browser.NewPageAsync();
+        await page.SetContentAsync(
+            "<!doctype html><input type='password' value='segredo-super'>" +
+            "<div data-private>texto-confidencial</div>" +
+            "<a href='https://example.invalid/path?token=segredo'>Link</a>");
+
+        var sizeLimited = new ExecutionArtifacts(
+            page,
+            root,
+            "size",
+            maximumArtifactBytes: 5,
+            maximumFiles: 10,
+            retention: TimeSpan.FromDays(30));
+        if (Directory.Exists(expired))
+        {
+            throw new InvalidOperationException("A retenção não removeu artefato expirado.");
+        }
+
+        await sizeLimited.SaveBytesAsync([1, 2, 3, 4, 5], "ok.bin");
+        await ExpectInvalidAsync(
+            () => sizeLimited.SaveBytesAsync([1, 2, 3, 4, 5, 6], "large.bin"),
+            "artefato acima do limite é recusado e removido");
+
+        var countLimited = new ExecutionArtifacts(
+            page,
+            root,
+            "count",
+            maximumArtifactBytes: 1_024,
+            maximumFiles: 1);
+        await countLimited.SaveBytesAsync([1], "first.bin");
+        await ExpectInvalidAsync(
+            () => countLimited.SaveBytesAsync([2], "second.bin"),
+            "quantidade máxima de artefatos é respeitada");
+
+        var diagnostics = new ExecutionArtifacts(
+            page,
+            root,
+            "diagnostics",
+            maximumArtifactBytes: 2 * 1024 * 1024,
+            maximumFiles: 10);
+        var captured = await diagnostics.CaptureFailureDiagnosticsAsync(
+            new InvalidOperationException("falha sanitizada"));
+        var html = await File.ReadAllTextAsync(captured.SanitizedHtmlPath!);
+        if (html.Contains("segredo-super", StringComparison.Ordinal) ||
+            html.Contains("texto-confidencial", StringComparison.Ordinal) ||
+            html.Contains("?token=segredo", StringComparison.Ordinal) ||
+            !html.Contains("[CONTEÚDO REDIGIDO]", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "O HTML diagnóstico não redigiu conteúdo sensível.");
+        }
+    }
+    finally
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var allowedRoot = Path.GetFullPath(Path.Combine(
+            repositoryRoot,
+            "tmp",
+            "artifact-hardening"));
+        if (!fullRoot.StartsWith(
+                allowedRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Diretório de artefatos saiu da área permitida.");
+        }
+
+        if (Directory.Exists(fullRoot))
+        {
+            Directory.Delete(fullRoot, recursive: true);
+        }
+    }
+}
+
+static async Task ExpectInvalidAsync(Func<Task> action, string description)
+{
+    try
+    {
+        await action();
+    }
+    catch (InvalidOperationException)
+    {
+        Console.WriteLine($"OK: {description}.");
+        return;
+    }
+
+    throw new InvalidOperationException($"Falha: {description}.");
+}
+
+static void CheckAdaptiveReferenceGolden()
+{
+    var goldenPath = Path.Combine(
+        Directory.GetCurrentDirectory(),
+        "tests",
+        "RpaFlow.PlaywrightChecks",
+        "Fixtures",
+        "adaptive",
+        "product.golden.json");
+    var golden = JsonNode.Parse(File.ReadAllText(goldenPath)) as JsonObject ??
+        throw new InvalidOperationException("Golden Scrapling inválido.");
+    if (golden["reference"]?["version"]?.GetValue<string>() != "0.4.14" ||
+        golden["reference"]?["commit"]?.GetValue<string>() !=
+            "5d213a2d4764002bfc4fed33c32fe09fa8b0bf7f" ||
+        golden["highestScore"]?.GetValue<double>() != 74.65 ||
+        golden["tieCount"]?.GetValue<int>() != 1 ||
+        golden["winners"]?[0]?["dataId"]?.GetValue<string>() != "p1")
+    {
+        throw new InvalidOperationException(
+            "O golden não corresponde ao Scrapling fixado ou perdeu seu vencedor.");
+    }
+
+    var fingerprint = new V2.LocatorFingerprint
+    {
+        Id = "p1-original",
+        TagName = "article",
+        Text = "Produto 1 Descrição 1",
+        Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["class"] = "product",
+            ["id"] = "p1"
+        },
+        Ancestors =
+        [
+            new V2.LocatorFingerprintNode
+            {
+                TagName = "section",
+                Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["class"] = "products"
+                }
+            }
+        ],
+        NextSiblings = [new V2.LocatorFingerprintNode { TagName = "article" }]
+    };
+    static AdaptiveElementSnapshot Candidate(string dataId, string text, int index) =>
+        new(
+            index,
+            "article",
+            null,
+            null,
+            text,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["class"] = "product new-class",
+                ["data-id"] = dataId
+            },
+            [
+                new V2.LocatorFingerprintNode
+                {
+                    TagName = "section",
+                    Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["class"] = "products"
+                    }
+                }
+            ],
+            [],
+            [new V2.LocatorFingerprintNode { TagName = "article" }],
+            Visible: true,
+            Enabled: true);
+    var scorer = new ScraplingBaselineScorer();
+    var first = scorer.Score(fingerprint, Candidate("p1", "Produto 1 Descrição 1", 0));
+    var second = scorer.Score(fingerprint, Candidate("p2", "Produto 2 Descrição 2", 1));
+    var sequence = new ScraplingCompatibleSequenceMatcher();
+    if (first.Baseline <= second.Baseline ||
+        Math.Abs(sequence.Compare("abcd", "abxd") - 0.75d) > 0.000001d ||
+        Math.Abs(sequence.CompareSequence(
+            new[] { "a", "b", "c" },
+            new[] { "a", "x", "c" }) - 2d / 3d) > 0.000001d)
+    {
+        throw new InvalidOperationException(
+            "O port C# não preservou os vetores-base do SequenceMatcher/ranking.");
+    }
+}
+
+static async Task CheckLocatorLearningAsync()
+{
+    static RpaPackageDocuments Documents(V2.LearningWriteBackMode mode) =>
+        new(
+            new V2.FlowDefinition
+            {
+                Name = "Aprendizado",
+                Actions =
+                [
+                    new V2.FlowActionDefinition
+                    {
+                        Id = "navigate",
+                        Type = "navigate",
+                        Name = "Abrir",
+                        Value = JsonSerializer.SerializeToElement("about:blank")
+                    }
+                ]
+            },
+            new V2.LocatorCatalog
+            {
+                Locators =
+                [
+                    new V2.LocatorDefinition
+                    {
+                        Id = "submit",
+                        DisplayName = "Enviar",
+                        Candidates =
+                        [
+                            LearnedCandidate(
+                                "submit.original",
+                                V2.LocatorCandidateOrigin.Developer,
+                                "#original",
+                                V2.DeveloperLocatorRole.Original),
+                            LearnedCandidate(
+                                "submit.alternative",
+                                V2.LocatorCandidateOrigin.Developer,
+                                "#alternative",
+                                V2.DeveloperLocatorRole.Alternative)
+                        ]
+                    }
+                ]
+            },
+            new V2.RpaPolicyDefinition
+            {
+                LocatorResilience = new V2.LocatorResiliencePolicy
+                {
+                    Mode = V2.LocatorResilienceMode.Adaptive,
+                    LearningWriteBack = mode,
+                    Promotion = mode == V2.LearningWriteBackMode.Disabled
+                        ? V2.LocatorPromotionMode.Disabled
+                        : V2.LocatorPromotionMode.AfterSuccessfulExecution,
+                    FailedPrimary = V2.FailedPrimaryBehavior.MoveToLast
+                }
+            });
+
+    static V2.LocatorCandidate LearnedCandidate(
+        string id,
+        V2.LocatorCandidateOrigin origin,
+        string selector,
+        V2.DeveloperLocatorRole? role = null) =>
+        new()
+        {
+            Id = id,
+            Origin = origin,
+            DeveloperRole = role,
+            OriginalOrder = role is null ? null : role == V2.DeveloperLocatorRole.Original ? 0 : 1,
+            LearnedAtUtc = origin == V2.LocatorCandidateOrigin.Heuristic
+                ? DateTimeOffset.Parse("2026-08-17T12:00:00Z")
+                : null,
+            Recipe = new V2.LocatorRecipe
+            {
+                Target = new V2.LocatorExpression
+                {
+                    Strategy = V2.LocatorStrategy.Css,
+                    Selector = selector
+                }
+            }
+        };
+
+    static LocatorLearningObservation Observation(string candidateId) =>
+        new(
+            "submit",
+            LearnedCandidate(
+                candidateId,
+                V2.LocatorCandidateOrigin.Heuristic,
+                "#learned"),
+            new V2.LocatorFingerprint
+            {
+                Id = candidateId + ".fingerprint",
+                TagName = "button",
+                Text = "Enviar"
+            },
+            FailedPrimary: true);
+
+    var memoryDocuments = Documents(V2.LearningWriteBackMode.Memory);
+    var memorySnapshot = new RpaPackageSnapshot(
+        "learning-memory",
+        new PackageRevision("memory-r1"),
+        memoryDocuments,
+        new RpaPackageOrigin("test", "memory"));
+    var memory = new LocatorLearningManager(memorySnapshot);
+    memory.Begin("failed");
+    memory.Observe("failed", Observation("submit.failed"));
+    if (!memory.TryGetOverride("failed", "submit", out _) ||
+        memory.TryGetOverride("other", "submit", out _))
+    {
+        throw new InvalidOperationException(
+            "Aprendizado provisório vazou entre execuções.");
+    }
+
+    var discarded = await memory.CompleteAsync(
+        "failed",
+        succeeded: false,
+        CancellationToken.None);
+    if (discarded.Status != LocatorLearningCompletionStatus.Discarded ||
+        memory.TryGetOverride("other", "submit", out _))
+    {
+        throw new InvalidOperationException("Execução falha não descartou o aprendizado.");
+    }
+
+    memory.Begin("success");
+    memory.Observe("success", Observation("submit.memory"));
+    var confirmed = await memory.CompleteAsync(
+        "success",
+        succeeded: true,
+        CancellationToken.None);
+    if (confirmed.Status != LocatorLearningCompletionStatus.ConfirmedInMemory ||
+        !memory.TryGetOverride("next", "submit", out var memoryOverride) ||
+        memoryOverride.Candidate.Id != "submit.memory")
+    {
+        throw new InvalidOperationException(
+            "Modo memory não confirmou o aprendizado após sucesso.");
+    }
+
+    memory.Begin("parallel-a");
+    memory.Begin("parallel-b");
+    memory.Observe("parallel-a", Observation("submit.a"));
+    memory.Observe("parallel-b", Observation("submit.b"));
+    if (!memory.TryGetOverride("parallel-a", "submit", out var overrideA) ||
+        !memory.TryGetOverride("parallel-b", "submit", out var overrideB) ||
+        overrideA.Candidate.Id != "submit.a" || overrideB.Candidate.Id != "submit.b")
+    {
+        throw new InvalidOperationException(
+            "Sessões de aprendizado paralelas compartilharam estado provisório.");
+    }
+
+    _ = await memory.CompleteAsync("parallel-a", false, CancellationToken.None);
+    _ = await memory.CompleteAsync("parallel-b", false, CancellationToken.None);
+
+    var disabled = new LocatorLearningManager(new RpaPackageSnapshot(
+        "learning-disabled",
+        new PackageRevision("disabled-r1"),
+        Documents(V2.LearningWriteBackMode.Disabled),
+        new RpaPackageOrigin("test", "disabled")));
+    disabled.Begin("disabled");
+    disabled.Observe("disabled", Observation("submit.disabled"));
+    var disabledResult = await disabled.CompleteAsync(
+        "disabled",
+        true,
+        CancellationToken.None);
+    if (disabledResult.Status != LocatorLearningCompletionStatus.NoChanges ||
+        disabled.TryGetOverride("next", "submit", out _))
+    {
+        throw new InvalidOperationException("Modo disabled confirmou aprendizado.");
+    }
+
+    await CheckPersistentModeAsync(
+        V2.LearningWriteBackMode.Source,
+        "learning-source");
+    await CheckPersistentModeAsync(
+        V2.LearningWriteBackMode.Overlay,
+        "learning-overlay");
+
+    async Task CheckPersistentModeAsync(
+        V2.LearningWriteBackMode mode,
+        string rpaId)
+    {
+        var store = new MemoryRpaPackageStore();
+        var documents = Documents(mode);
+        var initialWrite = await store.PublishAsync(
+            rpaId,
+            documents,
+            expectedRevision: null,
+            CancellationToken.None);
+        var snapshot = await store.LoadAsync(
+            rpaId,
+            initialWrite.Revision,
+            CancellationToken.None);
+        var manager = new LocatorLearningManager(snapshot, store);
+        manager.Begin("persist");
+        manager.Observe("persist", Observation("submit.persisted"));
+        var persisted = await manager.CompleteAsync(
+            "persist",
+            true,
+            CancellationToken.None);
+        var current = await store.LoadAsync(rpaId, null, CancellationToken.None);
+        var candidates = current.Locators.Locators.Single().Candidates;
+        if (persisted.Status != LocatorLearningCompletionStatus.Persisted ||
+            candidates[0].Id != "submit.persisted" ||
+            candidates[^1].Id != "submit.original")
+        {
+            throw new InvalidOperationException(
+                $"Modo {mode} não persistiu promoção e failedPrimary corretamente.");
+        }
+
+        var stale = new LocatorLearningManager(snapshot, store);
+        stale.Begin("conflict");
+        stale.Observe("conflict", Observation("submit.conflict"));
+        var conflict = await stale.CompleteAsync(
+            "conflict",
+            true,
+            CancellationToken.None);
+        if (conflict.Status != LocatorLearningCompletionStatus.RevisionConflict)
+        {
+            throw new InvalidOperationException(
+                $"Modo {mode} não detectou compare-and-swap obsoleto.");
+        }
+    }
+}
+
+static void CheckV2LocatorArchitecture()
+{
+    var repositoryRoot = Directory.GetCurrentDirectory();
+    var v2Directory = Path.Combine(
+        repositoryRoot,
+        "src",
+        "RpaFlow.Playwright",
+        "V2");
+    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "LocatorRecipeCompiler.cs"
+    };
+    var offenders = Directory.EnumerateFiles(v2Directory, "*.cs")
+        .Where(path => !allowed.Contains(Path.GetFileName(path)))
+        .Where(path => File.ReadAllText(path).Contains(".Locator(", StringComparison.Ordinal))
+        .Select(Path.GetFileName)
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    if (offenders.Length > 0)
+    {
+        throw new InvalidOperationException(
+            "Acesso direto a Page/Frame.Locator fora do compilador V2: " +
+            string.Join(", ", offenders));
+    }
+}
+
+static V2.LocatorDefinition Locator(
+    string id,
+    V2.LocatorStrategy strategy,
+    string? selector = null,
+    string? role = null,
+    string? name = null,
+    string? text = null) =>
+    new()
+    {
+        Id = id,
+        DisplayName = id,
+        Candidates =
+        [
+            new V2.LocatorCandidate
+            {
+                Id = id + "-primary",
+                Origin = V2.LocatorCandidateOrigin.Developer,
+                DeveloperRole = V2.DeveloperLocatorRole.Original,
+                OriginalOrder = 0,
+                Recipe = new V2.LocatorRecipe
+                {
+                    Target = new V2.LocatorExpression
+                    {
+                        Strategy = strategy,
+                        Selector = selector,
+                        Role = role,
+                        Name = name,
+                        Text = text,
+                        Exact = true
+                    }
+                }
+            }
+        ]
+    };
+
+static V2.LocatorCandidate Candidate(string id, string selector, int order) => new()
+{
+    Id = id,
+    Origin = V2.LocatorCandidateOrigin.Developer,
+    DeveloperRole = order == 0
+        ? V2.DeveloperLocatorRole.Original
+        : V2.DeveloperLocatorRole.Alternative,
+    OriginalOrder = order,
+    Recipe = new V2.LocatorRecipe
+    {
+        Target = new V2.LocatorExpression
+        {
+            Strategy = V2.LocatorStrategy.Css,
+            Selector = selector
+        }
+    }
+};
 
 static FlowActionDefinition Action(
     string id,
@@ -798,7 +2068,7 @@ file sealed class BlockingExecutionGuard(string blockedActionId) : IFlowActionEx
     public List<string> Calls { get; } = [];
 
     public ValueTask BeforeActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken)
     {
@@ -820,7 +2090,7 @@ file sealed class CompletingExecutionGuard(string boundaryActionId)
     public List<string> AfterCalls { get; } = [];
 
     public ValueTask BeforeActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken)
     {
@@ -829,7 +2099,7 @@ file sealed class CompletingExecutionGuard(string boundaryActionId)
     }
 
     public ValueTask<FlowActionExecutionDirective> AfterActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken)
     {
@@ -863,5 +2133,19 @@ file sealed class FakeOneTimeCodeProvider(OneTimeCodeResult result)
         cancellationToken.ThrowIfCancellationRequested();
         Requests.Add(request);
         return Task.FromResult(result);
+    }
+}
+
+file sealed class RecordingFlowExecutionObserver : IFlowExecutionObserver
+{
+    public List<FlowExecutionEvent> Events { get; } = [];
+
+    public ValueTask ObserveAsync(
+        FlowExecutionEvent executionEvent,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Events.Add(executionEvent);
+        return ValueTask.CompletedTask;
     }
 }

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "name": "Inválido por propriedade desconhecida",
+  "actions": [
+    {
+      "id": "wait",
+      "type": "wait",
+      "name": "Aguardar",
+      "target": {
+        "locatorId": "ready",
+        "cardinality": "single"
+      },
+      "unexpected": true
+    }
+  ],
+  "subflows": {}
+}

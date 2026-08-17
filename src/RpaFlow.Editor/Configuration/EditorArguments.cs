@@ -3,7 +3,6 @@ namespace RpaFlow.Editor.Configuration;
 public sealed record EditorArguments(
     string? ProjectRoot,
     string? ConfigurationFile,
-    string? FlowFile,
     bool OpenBrowser,
     string Url)
 {
@@ -12,7 +11,6 @@ public sealed record EditorArguments(
         return new EditorArguments(
             ReadValue(args, "--project-root"),
             ReadValue(args, "--configuration"),
-            ReadValue(args, "--flow"),
             !args.Contains("--no-open", StringComparer.OrdinalIgnoreCase),
             ReadValue(args, "--url") ?? "http://127.0.0.1:5187");
     }
