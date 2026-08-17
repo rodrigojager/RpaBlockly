@@ -10,6 +10,7 @@ import {
 import { actionCatalog } from "./action-catalog.js";
 import { setLocatorProvider } from "./field-locator-reference.js";
 import { initializeLocatorUi } from "./locator-ui.js";
+import { initializeRecorderImport } from "./recorder-import.js";
 import {
   actionFromBlock,
   applyEditableProperties,
@@ -56,6 +57,26 @@ let conflictDraft = null;
 const locatorUi = initializeLocatorUi(
   refresh,
   error => showMessage(error.message, true));
+
+initializeRecorderImport(result => {
+  updateState({
+    package: {
+      rpaId: result.rpaId,
+      revision: result.revision,
+      contentHash: result.contentHash,
+      origin: { kind: "recorder-import", location: result.evidenceArchive },
+      flow: result.flow,
+      locators: result.locators,
+      policy: result.policy,
+      warnings: result.warnings ?? []
+    },
+    conflict: null
+  });
+  loadFlow(workspace, result.flow);
+  locatorUi.render();
+  renderPolicy();
+  refresh();
+}, message => showMessage(message));
 
 workspace.addChangeListener(event => {
   if (event.type === Blockly.Events.SELECTED) {

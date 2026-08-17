@@ -47,6 +47,59 @@ export async function saveConfiguration(configuration) {
   });
 }
 
+export async function inspectRecorderBundle(file) {
+  const response = await fetch("/api/recorder/imports/inspect", {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      ...headers(),
+      "Content-Type": "application/octet-stream",
+      "X-File-Name": file.name
+    },
+    body: await file.arrayBuffer()
+  });
+  return readResponse(response);
+}
+
+export function getRecorderImport(stagingId, stagingToken) {
+  return recorderRequest(`/api/recorder/imports/${encodeURIComponent(stagingId)}`, stagingToken);
+}
+
+export function validateRecorderImport(stagingId, stagingToken, decision) {
+  return recorderRequest(
+    `/api/recorder/imports/${encodeURIComponent(stagingId)}/validate`,
+    stagingToken,
+    { method: "POST", body: JSON.stringify(decision) });
+}
+
+export function applyRecorderImport(stagingId, stagingToken, decision) {
+  return recorderRequest(
+    `/api/recorder/imports/${encodeURIComponent(stagingId)}/apply`,
+    stagingToken,
+    { method: "POST", body: JSON.stringify(decision) });
+}
+
+export async function deleteRecorderImport(stagingId, stagingToken) {
+  const response = await fetch(`/api/recorder/imports/${encodeURIComponent(stagingId)}`, {
+    method: "DELETE",
+    cache: "no-store",
+    headers: { ...headers(), "X-Recorder-Staging-Token": stagingToken }
+  });
+  if (!response.ok && response.status !== 404) await readResponse(response);
+}
+
+export async function recorderEvidence(stagingId, stagingToken, evidenceId, thumbnail = false) {
+  const response = await fetch(
+    `/api/recorder/imports/${encodeURIComponent(stagingId)}/evidence/` +
+      `${encodeURIComponent(evidenceId)}?thumbnail=${thumbnail}`,
+    {
+      cache: "no-store",
+      headers: { ...headers(), "X-Recorder-Staging-Token": stagingToken }
+    });
+  if (!response.ok) await readResponse(response);
+  return response.blob();
+}
+
 export class RevisionConflictError extends Error {
   constructor(message) {
     super(message || "A revisão do pacote mudou. Recarregue e compare antes de salvar.");
@@ -61,6 +114,13 @@ async function request(path, options = {}) {
     headers: { ...headers(), ...(options.headers ?? {}) }
   });
   return readResponse(response);
+}
+
+async function recorderRequest(path, stagingToken, options = {}) {
+  return request(path, {
+    ...options,
+    headers: { ...(options.headers ?? {}), "X-Recorder-Staging-Token": stagingToken }
+  });
 }
 
 async function readResponse(response) {

@@ -122,6 +122,60 @@ public static partial class RecorderContractValidator
         }
     }
 
+    public static void Validate(
+        RecorderSecretsIndexDocument index,
+        IReadOnlyList<RecorderEncryptedSecretEnvelope> envelopes,
+        string recipientKeyId)
+    {
+        ArgumentNullException.ThrowIfNull(index);
+        ArgumentNullException.ThrowIfNull(envelopes);
+        Require(index.SchemaVersion == 1, "schemaVersion de secrets deve ser 1.");
+        Require(index.Algorithm == "AES-256-GCM+RSA-OAEP-SHA-256",
+            "Algoritmo de secrets inválido.");
+        RequireUnique(index.Items, "referência de segredo");
+        RequireUnique(envelopes.Select(item => item.Reference), "envelope de segredo");
+        Require(index.Items.ToHashSet(StringComparer.Ordinal).SetEquals(
+            envelopes.Select(item => item.Reference)),
+            "secrets/index.json diverge dos envelopes.");
+        foreach (var envelope in envelopes)
+        {
+            Require(envelope.SchemaVersion == 1, "schemaVersion do envelope deve ser 1.");
+            Require(SecretReferencePattern().IsMatch(envelope.Reference),
+                "Referência de segredo inválida.");
+            Require(envelope.KeyId == recipientKeyId,
+                "keyId do envelope diverge do manifest.");
+            Require(envelope.Algorithm == index.Algorithm,
+                "Algoritmo do envelope diverge do índice.");
+            RequireBase64(envelope.Iv, 12, 12, "iv");
+            RequireBase64(envelope.Aad, 1, 2_000, "aad");
+            RequireBase64(envelope.Ciphertext, 17, 10_000, "ciphertext");
+            RequireBase64(envelope.WrappedKey, 256, 1_024, "wrappedKey");
+        }
+    }
+
+    public static void Validate(RecorderUploadsDocument uploads)
+    {
+        ArgumentNullException.ThrowIfNull(uploads);
+        Require(uploads.SchemaVersion == 1, "schemaVersion de uploads deve ser 1.");
+        RequireUnique(uploads.Items.Select(item => item.Name), "nome de upload");
+        long total = 0;
+        foreach (var item in uploads.Items)
+        {
+            Require(FileNamePattern().IsMatch(item.Name), "Nome sanitizado de upload inválido.");
+            Require(!DangerousUploadExtensionPattern().IsMatch(item.Name),
+                "Extensão de upload bloqueada.");
+            RequireText(item.MimeType, 200, "upload.mimeType");
+            Require(!item.MimeType.Contains('\r') && !item.MimeType.Contains('\n'),
+                "MIME de upload inválido.");
+            Require(item.Size is >= 0 and <= RecorderBundleLimits.MaximumUploadBytes,
+                "Upload excede o limite individual.");
+            Require(Sha256Pattern().IsMatch(item.Sha256), "Hash de upload inválido.");
+            if (item.Included) total = checked(total + item.Size);
+        }
+        Require(total <= RecorderBundleLimits.MaximumTotalUploadBytes,
+            "Uploads excedem o limite total.");
+    }
+
     public static void ValidateRelativePath(string path)
     {
         RequireText(path, 240, "path");
@@ -156,9 +210,37 @@ public static partial class RecorderContractValidator
         if (!condition) throw new InvalidOperationException(message);
     }
 
+    private static void RequireBase64(
+        string value,
+        int minimumBytes,
+        int maximumBytes,
+        string path)
+    {
+        try
+        {
+            var bytes = Convert.FromBase64String(value);
+            Require(bytes.Length >= minimumBytes && bytes.Length <= maximumBytes,
+                $"{path} possui tamanho inválido.");
+        }
+        catch (FormatException)
+        {
+            throw new InvalidOperationException($"{path} não contém Base64 válido.");
+        }
+    }
+
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]{2,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex IdPattern();
 
     [GeneratedRegex("^[A-Fa-f0-9]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex Sha256Pattern();
+
+    [GeneratedRegex("^secret\\.recorded\\.[A-Za-z][A-Za-z0-9_-]*$", RegexOptions.CultureInvariant)]
+    private static partial Regex SecretReferencePattern();
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$", RegexOptions.CultureInvariant)]
+    private static partial Regex FileNamePattern();
+
+    [GeneratedRegex("\\.(?:exe|dll|com|bat|cmd|ps1|js|mjs|html?|scr|msi)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DangerousUploadExtensionPattern();
 }

@@ -111,6 +111,48 @@ ExpectInvalid(() => RecorderContractValidator.Validate(integrity),
 ExpectInvalid(() => RecorderContractValidator.ValidateRelativePath("../escape.json"),
     "path traversal é rejeitado antes de ler o ZIP");
 
+var secretIndex = new RecorderSecretsIndexDocument
+{
+    Items = ["secret.recorded.password"]
+};
+var secretEnvelope = new RecorderEncryptedSecretEnvelope
+{
+    Reference = "secret.recorded.password",
+    KeyId = "recipient-key",
+    Iv = Convert.ToBase64String(new byte[12]),
+    Aad = Convert.ToBase64String("bundle:secret.recorded.password"u8),
+    Ciphertext = Convert.ToBase64String(new byte[32]),
+    WrappedKey = Convert.ToBase64String(new byte[256])
+};
+RecorderContractValidator.Validate(secretIndex, [secretEnvelope], "recipient-key");
+Check(true, "envelope híbrido de segredo é validado sem chave privada");
+secretEnvelope.KeyId = "wrong-key";
+ExpectInvalid(
+    () => RecorderContractValidator.Validate(secretIndex, [secretEnvelope], "recipient-key"),
+    "envelope com destinatário divergente é rejeitado");
+
+var uploads = new RecorderUploadsDocument
+{
+    Items =
+    [
+        new RecorderUploadItem
+        {
+            Name = "relatorio.csv",
+            MimeType = "text/csv",
+            Size = 10,
+            Sha256 = new string('A', 64),
+            Included = false
+        }
+    ]
+};
+RecorderContractValidator.Validate(uploads);
+Check(true, "upload registra metadados válidos sem inclusão silenciosa");
+uploads.Items[0].Name = "script.ps1";
+uploads.Items[0].Size = RecorderBundleLimits.MaximumUploadBytes + 1;
+ExpectInvalid(
+    () => RecorderContractValidator.Validate(uploads),
+    "upload acima do limite é rejeitado");
+
 Console.WriteLine("Contratos Recorder validados com sucesso.");
 
 T Read<T>(string relative) where T : class =>

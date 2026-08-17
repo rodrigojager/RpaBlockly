@@ -27,6 +27,7 @@
         <button id="reload-package" type="button" class="secondary">Recarregar revisão</button>
         <button id="reset-flow" type="button" class="secondary">Restaurar fluxo aberto</button>
         <button id="open-configuration" type="button" class="secondary">Configuração local</button>
+        <button id="open-recorder-import" type="button" class="secondary">Importar Recorder</button>
         <button id="export-package" type="button" class="secondary">Exportar documentos</button>
       </section>
 
@@ -124,6 +125,100 @@
         </header>
         <pre><code id="compare-content"></code></pre>
       </form>
+    </dialog>
+
+    <dialog id="recorder-import-dialog" aria-labelledby="recorder-import-title">
+      <div class="configuration-form recorder-wizard">
+        <header class="dialog-heading">
+          <div>
+            <p class="eyebrow">Recorder → pacote V2</p>
+            <h2 id="recorder-import-title">Importar gravação</h2>
+            <p class="dialog-description">
+              O ZIP é inspecionado em staging e nada muda no pacote antes da confirmação final.
+            </p>
+          </div>
+          <button id="close-recorder-import" type="button" class="secondary">Fechar</button>
+        </header>
+
+        <ol class="wizard-steps" aria-label="Etapas da importação">
+          <li data-recorder-step="select" class="active">1. Selecionar</li>
+          <li data-recorder-step="review">2. Revisar</li>
+          <li data-recorder-step="map">3. Mapear</li>
+          <li data-recorder-step="confirm">4. Confirmar</li>
+          <li data-recorder-step="apply">5. Aplicar</li>
+        </ol>
+
+        <section class="recorder-card">
+          <label class="full-field">
+            Bundle `.rpablockly.zip`
+            <input id="recorder-file" type="file" accept=".zip,.rpablockly.zip,application/zip">
+          </label>
+          <button id="inspect-recorder" type="button">Inspecionar sem alterar o pacote</button>
+          <p id="recorder-import-status" class="validation-message" role="status"></p>
+        </section>
+
+        <section id="recorder-review" class="recorder-review-grid" hidden>
+          <article class="recorder-card">
+            <h3>Resumo e proveniência</h3>
+            <dl id="recorder-summary" class="summary-grid"></dl>
+          </article>
+          <article class="recorder-card">
+            <h3>Conflitos detectados</h3>
+            <ul id="recorder-conflicts" class="warning-list"></ul>
+          </article>
+          <article class="recorder-card">
+            <h3>Pendências</h3>
+            <ul id="recorder-issues" class="mapping-list"></ul>
+          </article>
+          <article class="recorder-card">
+            <h3>Timeline</h3>
+            <ol id="recorder-timeline" class="mapping-list"></ol>
+          </article>
+          <article class="recorder-card evidence-preview-card">
+            <h3>Evidências estáticas</h3>
+            <div id="recorder-evidence" class="recorder-evidence">
+              <p>Nenhuma evidência.</p>
+            </div>
+            <div class="dialog-actions">
+              <button id="previous-recorder-evidence" type="button" class="secondary">Anterior</button>
+              <button id="next-recorder-evidence" type="button" class="secondary">Próxima</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="recorder-mappings" class="recorder-card" hidden>
+          <h3>Modo, mappings e conflitos</h3>
+          <div class="recorder-options-grid">
+            <label>Modo
+              <select id="recorder-mode">
+                <option value="replace">Substituir pacote</option>
+                <option value="appendMain">Acrescentar ao fluxo principal</option>
+                <option value="subflow">Importar como subflow</option>
+              </select>
+            </label>
+            <label>Nome do subflow
+              <input id="recorder-subflow-name" value="fluxoGravado" disabled>
+            </label>
+            <label class="recorder-check">
+              <input id="recorder-remap-conflicts" type="checkbox">
+              Autorizar remapeamento determinístico dos IDs em conflito
+            </label>
+          </div>
+          <div id="recorder-mapping-fields" class="mapping-fields"></div>
+          <p class="dialog-description">
+            Valores de `samples/` servem apenas como exemplo e nunca são publicados na configuração.
+          </p>
+        </section>
+
+        <section id="recorder-confirmation" class="recorder-card" hidden>
+          <h3>Validação antes do apply</h3>
+          <pre><code id="recorder-validation-preview"></code></pre>
+          <div class="dialog-actions">
+            <button id="validate-recorder-import" type="button">Validar decisão</button>
+            <button id="apply-recorder-import" type="button" disabled>Aplicar por compare-and-swap</button>
+          </div>
+        </section>
+      </div>
     </dialog>
 
     <footer>

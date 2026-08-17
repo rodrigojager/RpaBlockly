@@ -190,6 +190,40 @@ public sealed class RecorderComment
     public string Text { get; set; } = string.Empty;
 }
 
+public sealed class RecorderSecretsIndexDocument
+{
+    public int SchemaVersion { get; set; } = 1;
+    public string Algorithm { get; set; } = "AES-256-GCM+RSA-OAEP-SHA-256";
+    public List<string> Items { get; set; } = [];
+}
+
+public sealed class RecorderEncryptedSecretEnvelope
+{
+    public int SchemaVersion { get; set; } = 1;
+    public string Reference { get; set; } = string.Empty;
+    public string KeyId { get; set; } = string.Empty;
+    public string Algorithm { get; set; } = "AES-256-GCM+RSA-OAEP-SHA-256";
+    public string Iv { get; set; } = string.Empty;
+    public string Aad { get; set; } = string.Empty;
+    public string Ciphertext { get; set; } = string.Empty;
+    public string WrappedKey { get; set; } = string.Empty;
+}
+
+public sealed class RecorderUploadsDocument
+{
+    public int SchemaVersion { get; set; } = 1;
+    public List<RecorderUploadItem> Items { get; set; } = [];
+}
+
+public sealed class RecorderUploadItem
+{
+    public string Name { get; set; } = string.Empty;
+    public string MimeType { get; set; } = "application/octet-stream";
+    public long Size { get; set; }
+    public string Sha256 { get; set; } = string.Empty;
+    public bool Included { get; set; }
+}
+
 public enum RecorderSessionState { Idle, Recording, Paused, Finalizing, Completed, Failed }
 public enum RecorderEvidenceKind { Before, After }
 public enum RecorderMaskReason

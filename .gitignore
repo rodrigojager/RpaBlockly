@@ -10,6 +10,9 @@ __pycache__/
 *.py[cod]
 .package.lock
 /storage/
+.recorder-staging/
+.recorder-imports/
+.recorder-audit/
 appsettings.local.json
 appsettings.json
 *.bak

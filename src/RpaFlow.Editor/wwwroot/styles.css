@@ -326,6 +326,73 @@ dialog::backdrop {
   line-height: 1.45;
 }
 
+.recorder-wizard {
+  gap: 1rem;
+}
+
+.wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wizard-steps li {
+  padding: 0.55rem;
+  border-radius: 0.45rem;
+  color: #64748b;
+  background: #e2e8f0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.wizard-steps li.active {
+  color: #ffffff;
+  background: #176b65;
+}
+
+.recorder-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.recorder-card {
+  padding: 1rem;
+  border: 1px solid #d4dce8;
+  border-radius: 0.7rem;
+  background: #f8fafc;
+}
+
+.recorder-card h3,
+.recorder-card h4 {
+  margin: 0 0 0.75rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.8rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.summary-grid dt { font-weight: 800; }
+.summary-grid dd { margin: 0; overflow-wrap: anywhere; }
+.mapping-list { display: grid; gap: 0.45rem; margin: 0; padding-left: 1.25rem; font-size: 0.82rem; }
+.recorder-options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.recorder-check { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.82rem; }
+.recorder-check input { width: auto; margin-top: 0.2rem; }
+.mapping-fields { display: grid; gap: 0.55rem; margin-top: 1rem; }
+.mapping-row { display: grid; grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1fr); gap: 0.7rem; align-items: center; }
+.mapping-row code { overflow-wrap: anywhere; color: #475569; font-size: 0.78rem; }
+.evidence-preview-card { grid-column: 1 / -1; }
+.recorder-evidence { display: grid; min-height: 180px; place-items: center; overflow: hidden; border-radius: 0.55rem; color: #cbd5e1; background: #0f172a; }
+.recorder-evidence img { display: block; max-width: 100%; max-height: 420px; object-fit: contain; }
+
 h3 {
   margin: 0 0 0.8rem;
   font-size: 1rem;
@@ -429,6 +496,9 @@ textarea {
   }
 
   .configuration-grid,
+  .recorder-review-grid,
+  .recorder-options-grid,
+  .mapping-row,
   .variable-row,
   .new-variable-row {
     grid-template-columns: 1fr;

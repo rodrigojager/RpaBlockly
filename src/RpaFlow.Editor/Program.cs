@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using RpaFlow.Editor.Configuration;
 using RpaFlow.Editor.Infrastructure;
+using RpaFlow.Editor.Recorder;
 using RpaFlow.Editor.Security;
 using RpaFlow.Editor.Services;
 
@@ -15,10 +16,19 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot")
 });
 builder.WebHost.UseUrls(editorArguments.Url);
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize = RecorderBundleInspector.MaximumArchiveBytes);
 builder.Services.AddSingleton(editorPaths);
 builder.Services.AddSingleton<EditorSession>();
 builder.Services.AddSingleton<ProjectFileService>();
 builder.Services.AddSingleton<PackageEditorService>();
+builder.Services.AddSingleton<RecorderBundleInspector>();
+builder.Services.AddSingleton<RecorderStagingService>();
+builder.Services.AddSingleton<RecorderPackageMerger>();
+builder.Services.AddSingleton<RecorderEvidenceArchive>();
+builder.Services.AddSingleton<RecorderImportAudit>();
+builder.Services.AddSingleton<IRecorderPrivateKeyProvider, DisabledRecorderPrivateKeyProvider>();
+builder.Services.AddSingleton<RecorderImportService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -233,6 +243,136 @@ app.MapPut("/api/configuration", async (
     }
 });
 
+app.MapPost("/api/recorder/imports/inspect", async (
+    HttpRequest request,
+    EditorSession session,
+    RecorderImportService imports,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        var fileName = request.Headers["X-File-Name"].ToString();
+        if (!fileName.EndsWith(".rpablockly.zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.BadRequest(new { error = "Selecione um arquivo .rpablockly.zip." });
+        }
+        var bytes = await ReadLimitedBodyAsync(request, cancellationToken);
+        return Results.Json(await imports.InspectAsync(bytes, cancellationToken));
+    }
+    catch (Exception exception) when (exception is InvalidOperationException or
+                                             InvalidDataException or
+                                             JsonException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/api/recorder/imports/{stagingId}", async (
+    string stagingId,
+    HttpRequest request,
+    EditorSession session,
+    RecorderImportService imports,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        return Results.Json(await imports.GetAsync(
+            stagingId, StagingToken(request), cancellationToken));
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/api/recorder/imports/{stagingId}/evidence/{evidenceId}", async (
+    string stagingId,
+    string evidenceId,
+    bool? thumbnail,
+    HttpRequest request,
+    EditorSession session,
+    RecorderImportService imports,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        var evidence = await imports.GetEvidenceAsync(
+            stagingId,
+            StagingToken(request),
+            evidenceId,
+            thumbnail ?? false,
+            cancellationToken);
+        return Results.File(evidence.Bytes, "image/webp", evidence.FileName);
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/api/recorder/imports/{stagingId}/validate", async (
+    string stagingId,
+    HttpRequest request,
+    EditorSession session,
+    RecorderImportService imports,
+    RecorderImportApplyRequest decision,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    return Results.Json(await imports.ValidateAsync(
+        stagingId, StagingToken(request), decision, cancellationToken));
+});
+
+app.MapPost("/api/recorder/imports/{stagingId}/apply", async (
+    string stagingId,
+    HttpRequest request,
+    EditorSession session,
+    RecorderImportService imports,
+    RecorderImportApplyRequest decision,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        return Results.Json(await imports.ApplyAsync(
+            stagingId, StagingToken(request), decision, cancellationToken));
+    }
+    catch (RpaFlow.Packages.PackageRevisionConflictException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+    catch (Exception exception) when (exception is InvalidOperationException or JsonException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/recorder/imports/{stagingId}", async (
+    string stagingId,
+    HttpRequest request,
+    EditorSession session,
+    RecorderImportService imports,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        await imports.DeleteAsync(stagingId, StagingToken(request), cancellationToken);
+        return Results.NoContent();
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Lifetime.ApplicationStarted.Register(() =>
@@ -254,6 +394,39 @@ app.Lifetime.ApplicationStarted.Register(() =>
 });
 
 await app.RunAsync();
+
+static async Task<byte[]> ReadLimitedBodyAsync(
+    HttpRequest request,
+    CancellationToken cancellationToken)
+{
+    if (request.ContentLength is > RecorderBundleInspector.MaximumArchiveBytes)
+    {
+        throw new InvalidOperationException("O upload excede 50 MiB.");
+    }
+    using var output = new MemoryStream();
+    var buffer = new byte[64 * 1024];
+    while (true)
+    {
+        var read = await request.Body.ReadAsync(buffer, cancellationToken);
+        if (read == 0) break;
+        if (output.Length + read > RecorderBundleInspector.MaximumArchiveBytes)
+        {
+            throw new InvalidOperationException("O upload excede 50 MiB.");
+        }
+        await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+    }
+    return output.ToArray();
+}
+
+static string StagingToken(HttpRequest request)
+{
+    var token = request.Headers["X-Recorder-Staging-Token"].ToString();
+    if (string.IsNullOrWhiteSpace(token))
+    {
+        throw new KeyNotFoundException("Token do staging Recorder ausente.");
+    }
+    return token;
+}
 
 static async Task<IResult> ReadPackageComponentAsync<T>(
     HttpRequest request,
