@@ -273,7 +273,9 @@ internal sealed partial class RecorderBundleInspector
             }
         }
         var hasSecretEntries = bytes.Keys.Any(path => path.StartsWith("secrets/", StringComparison.Ordinal));
-        var hasUploadEntries = bytes.ContainsKey("recording/uploads.json");
+        var hasUploadEntries = bytes.ContainsKey("recording/uploads.json") ||
+            bytes.Keys.Any(path =>
+                path.StartsWith("samples/uploads/", StringComparison.Ordinal));
         if (manifest.HasSecrets != hasSecretEntries || manifest.HasUploads != hasUploadEntries)
         {
             throw new InvalidOperationException("Flags de segredos/uploads divergem do conteúdo.");

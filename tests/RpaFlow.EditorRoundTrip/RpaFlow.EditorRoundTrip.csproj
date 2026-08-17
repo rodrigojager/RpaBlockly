@@ -12,5 +12,7 @@
     <ProjectReference Include="..\..\src\RpaFlow.Editor\RpaFlow.Editor.csproj" />
     <ProjectReference Include="..\..\src\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
     <ProjectReference Include="..\..\src\RpaFlow.Packages\RpaFlow.Packages.csproj" />
+    <ProjectReference Include="..\..\src\RpaFlow.Playwright\RpaFlow.Playwright.csproj" />
+    <ProjectReference Include="..\..\src\RpaFlow.Runtime\RpaFlow.Runtime.csproj" />
   </ItemGroup>
 </Project>

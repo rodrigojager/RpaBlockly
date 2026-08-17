@@ -80,7 +80,12 @@ function initialize(): void {
   };
 
   document.addEventListener("click", (event) => void capture(event, "click"), true);
-  document.addEventListener("input", (event) => void capture(event, "input"), true);
+  document.addEventListener("input", (event) => {
+    const element = targetElement(event);
+    if (element instanceof HTMLSelectElement ||
+        element instanceof HTMLInputElement && element.type === "file") return;
+    void capture(event, "input");
+  }, true);
   document.addEventListener("change", (event) => {
     const element = targetElement(event);
     void capture(event, element instanceof HTMLSelectElement

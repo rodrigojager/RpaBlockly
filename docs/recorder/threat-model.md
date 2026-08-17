@@ -42,3 +42,16 @@ campo sensível, URL assinada e conteúdo de upload sem consentimento.
 
 Os gates de contrato, extensão, importador e E2E exercitam cada controle. Uma
 falha em segredo, integridade, path, limite ou CAS bloqueia o release.
+
+## Riscos residuais
+
+- texto pessoal visível fora de campos sensíveis pode aparecer em screenshot;
+- uma origem autorizada pode mudar de comportamento depois da gravação;
+- a segurança da chave privada e do canal de compartilhamento é responsabilidade
+  do ambiente destinatário;
+- permissões opcionais concedidas pelo usuário permanecem administráveis no
+  Chrome até serem revogadas.
+
+Esses riscos são mitigados por revisão visual, mappings explícitos, package
+revisionado, política conservadora `strict` e instruções de retenção. Nenhum deles
+autoriza captura silenciosa ou relaxamento do manifest.

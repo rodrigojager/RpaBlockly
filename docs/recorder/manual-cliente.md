@@ -1,0 +1,61 @@
+# Manual do cliente — Recorder V2
+
+O Recorder transforma interações feitas por uma pessoa no Chrome em um único
+arquivo `.rpablockly.zip`. O arquivo contém um pacote V2 nativo, a linha do tempo,
+pendências, evidências consentidas e metadados de integridade. Ele não contém um
+script autônomo de replay.
+
+## Instalar
+
+1. obtenha `rpablockly-recorder-1.0.0-rc.1.zip` e o arquivo `.sha256` da mesma release;
+2. confira o SHA-256 antes de descompactar;
+3. abra `chrome://extensions`, ative o modo do desenvolvedor e escolha
+   **Carregar sem compactação**;
+4. selecione a pasta descompactada e fixe o ícone do Recorder;
+5. abra uma página comum `http://` ou `https://` e clique no ícone.
+
+No PowerShell, a verificação do arquivo é:
+
+```powershell
+(Get-FileHash .\rpablockly-recorder-1.0.0-rc.1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+```
+
+O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
+
+## Gravar um roteiro
+
+1. informe um nome claro para a gravação;
+2. escolha se deseja evidências visuais e conteúdo de uploads;
+3. leia e aceite o aviso de privacidade;
+4. clique em **Iniciar** e conceda acesso somente à origem solicitada pelo Chrome;
+5. navegue normalmente, usando cliques, campos, checkbox, radio, select, upload,
+   SPA, novas páginas e iframes acessíveis;
+6. use **Pausar** se precisar fazer algo que não deve entrar no roteiro;
+7. escolha **Revisar e baixar**, resolva as pendências e confira a timeline;
+8. remova evidências desnecessárias e conclua o download.
+
+A sessão só é apagada automaticamente depois que o Chrome confirma o download.
+Cancelar remove explicitamente a sessão local.
+
+## Senhas, uploads e evidências
+
+Senhas ficam desligadas por padrão. A ativação exige uma chave pública RSA e um
+ID de destinatário; cada valor é cifrado imediatamente com AES-256-GCM, e a chave
+simétrica é encapsulada com RSA-OAEP-SHA-256. A chave privada nunca entra na
+extensão.
+
+Uploads registram nome, tipo, tamanho e hash. Os bytes só entram no ZIP quando a
+opção correspondente foi marcada. Extensões perigosas e arquivos acima dos
+limites são recusados.
+
+Antes de um screenshot, a extensão mascara campos sensíveis. Ainda assim, revise
+cada imagem: informações visíveis fora dos campos podem ser pessoais.
+
+## O que entregar ao desenvolvedor
+
+Entregue somente o `.rpablockly.zip` final. Informe separadamente quais entradas,
+segredos e anexos devem alimentar as referências exibidas pelo importador. Não
+edite o ZIP manualmente: qualquer alteração invalida a integridade.
+
+Consulte também [privacidade](privacidade.md) e
+[solução de problemas](troubleshooting.md).

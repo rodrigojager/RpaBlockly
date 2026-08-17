@@ -22,6 +22,16 @@ npm run check
 O build unpacked fica em `build/`. Ele é recriado do zero, não contém sourcemaps,
 CDN ou código remoto e não deve ser versionado.
 
+Para produzir o ZIP reproduzível e conferir o inventário de licenças:
+
+```powershell
+npm run licenses
+npm run release
+```
+
+O release compila duas vezes e exige igualdade byte a byte. O ZIP vai para
+`../../artifacts/` e o checksum versionado para `release/`.
+
 ## Instalação unpacked
 
 1. Abra `chrome://extensions`.
@@ -47,4 +57,7 @@ o opt-in exige um key ID e uma chave pública RSA/SPKI de pelo menos 2048 bits.
   `chrome.storage.session` restaura estado, sequência e eventos não sensíveis.
 
 Para detalhes de segurança, consulte o
-[threat model](../../docs/recorder/threat-model.md) e os ADRs 012 a 018.
+[threat model](../../docs/recorder/threat-model.md), o
+[manual do cliente](../../docs/recorder/manual-cliente.md), o
+[manual do desenvolvedor](../../docs/recorder/manual-desenvolvedor.md) e os ADRs
+012 a 018.

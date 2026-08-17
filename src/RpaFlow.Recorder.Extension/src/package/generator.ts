@@ -120,7 +120,7 @@ function toAction(
   };
   if (intent.type === "selectOption") action.optionMode = "value";
   if (intent.type === "upload" && intent.upload !== undefined) {
-    const key = `${String(index + 1).padStart(3, "0")}_${slug(intent.upload.name, "arquivo")}`;
+    const key = `file_${String(index + 1).padStart(3, "0")}_${slug(intent.upload.name, "arquivo")}`;
     const path = `attachments.recorded.${key}`;
     action.valueSource = path;
     inputs.push({ path, type: "string", required: true });

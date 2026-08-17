@@ -67,6 +67,25 @@ No editor, os 35 blocos cobrem os 32 tipos de ação. O pacote é aberto por rev
 salvar publica os três documentos atomicamente. Conflito de revisão nunca
 sobrescreve alterações silenciosamente.
 
+## Gravar um roteiro no Chrome
+
+O Recorder V2 é uma extensão Manifest V3 que captura interações consentidas,
+revisa localmente e exporta um único `.rpablockly.zip`. O pacote interno já usa
+os contratos oficiais da V2 e pode ser importado pelo wizard do editor sem edição
+manual de JSON.
+
+```powershell
+npm ci --ignore-scripts --prefix src/RpaFlow.Recorder.Extension
+npm run check --prefix src/RpaFlow.Recorder.Extension
+npm run release --prefix src/RpaFlow.Recorder.Extension
+```
+
+O build unpacked fica em `src/RpaFlow.Recorder.Extension/build`; o ZIP
+reproduzível fica em `artifacts/` e seu checksum versionado fica na pasta
+`release/` da extensão. Consulte o
+[manual do cliente](docs/recorder/manual-cliente.md) e o
+[manual do desenvolvedor](docs/recorder/manual-desenvolvedor.md).
+
 ## Executar localmente
 
 Copie a configuração versionável e mantenha segredos somente na cópia local:
@@ -148,6 +167,7 @@ O migrador nunca sobrescreve a origem e começa com policy `strict`.
 | `src/RpaFlow.Runtime` | dados por execução, observer, falhas e orçamento. |
 | `src/RpaFlow.Playwright` | resolver, heurística, handlers e artefatos. |
 | `src/RpaFlow.Editor` | editor Blockly local e APIs de pacote. |
+| `src/RpaFlow.Recorder.Extension` | extensão Chrome MV3, captura, revisão e bundle V2. |
 | `src/Rpa.Worker` | consumo SQL, execução, persistência e OTP por Graph. |
 | `tools/RpaFlow.Migrator` | conversão offline schema 1 → pacote V2. |
 | `tools/RpaFlow.Legacy.Contracts` | contrato histórico isolado. |
@@ -170,8 +190,9 @@ O check SQL aceita `RPABLOCKLY_SQLSERVER_TEST_CONNECTION`. Na CI, o job SQL usa
 um SQL Server descartável; localmente ele só usa Docker quando
 `RPABLOCKLY_RUN_SQL_DOCKER=true` for definido explicitamente.
 
-O SBOM SPDX 2.3 é gravado em `artifacts/sbom.spdx.json`. Metadados do release
-candidate ficam em `release/2.0.0-rc.1.json`.
+O SBOM SPDX 2.3 é gravado em `artifacts/sbom.spdx.json` e inclui NuGet e os dois
+inventários npm. Metadados do release candidate ficam em
+`release/2.0.0-rc.1.json`.
 
 ## Artefatos e dados
 

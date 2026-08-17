@@ -29,39 +29,45 @@ try {
         }
     }
 
-    $npmLockPath = Join-Path $repositoryRoot 'tools/schema-conformance/package-lock.json'
-    $npmInventory = & node -e "const fs=require('fs');const lock=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const rows=Object.entries(lock.packages).filter(([path,value])=>path&&value.version).map(([path,value])=>({path,...value}));process.stdout.write(JSON.stringify(rows));" $npmLockPath
-    if ($LASTEXITCODE -ne 0) { throw 'Não foi possível ler o package-lock npm.' }
-    $npmPackages = $npmInventory | ConvertFrom-Json
-    foreach ($entry in $npmPackages) {
-        if ([string]::IsNullOrWhiteSpace($entry.path) -or
-            [string]::IsNullOrWhiteSpace($entry.version)) {
-            continue
-        }
-        $name = $entry.name
-        if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = $entry.path -replace '^node_modules/', ''
-        }
-        $key = "npm:$name@$($entry.version)"
-        $declaredLicense = if ([string]::IsNullOrWhiteSpace($entry.license)) {
-            'NOASSERTION'
-        } else {
-            $entry.license
-        }
-        $downloadLocation = if ([string]::IsNullOrWhiteSpace($entry.resolved)) {
-            'NOASSERTION'
-        } else {
-            $entry.resolved
-        }
-        $packages[$key] = [ordered]@{
-            SPDXID = 'SPDXRef-Package-Npm-' + ($key -replace '[^A-Za-z0-9.-]', '-')
-            name = $name
-            versionInfo = $entry.version
-            downloadLocation = $downloadLocation
-            filesAnalyzed = $false
-            licenseConcluded = 'NOASSERTION'
-            licenseDeclared = $declaredLicense
-            supplier = 'NOASSERTION'
+    $npmLockPaths = @(
+        'tools/schema-conformance/package-lock.json',
+        'src/RpaFlow.Recorder.Extension/package-lock.json'
+    )
+    foreach ($relativeNpmLockPath in $npmLockPaths) {
+        $npmLockPath = Join-Path $repositoryRoot $relativeNpmLockPath
+        $npmInventory = & node -e "const fs=require('fs');const lock=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const rows=Object.entries(lock.packages).filter(([path,value])=>path&&value.version).map(([path,value])=>({path,...value}));process.stdout.write(JSON.stringify(rows));" $npmLockPath
+        if ($LASTEXITCODE -ne 0) { throw "Não foi possível ler $relativeNpmLockPath." }
+        $npmPackages = $npmInventory | ConvertFrom-Json
+        foreach ($entry in $npmPackages) {
+            if ([string]::IsNullOrWhiteSpace($entry.path) -or
+                [string]::IsNullOrWhiteSpace($entry.version)) {
+                continue
+            }
+            $name = $entry.name
+            if ([string]::IsNullOrWhiteSpace($name)) {
+                $name = $entry.path -replace '^node_modules/', ''
+            }
+            $key = "npm:$name@$($entry.version)"
+            $declaredLicense = if ([string]::IsNullOrWhiteSpace($entry.license)) {
+                'NOASSERTION'
+            } else {
+                $entry.license
+            }
+            $downloadLocation = if ([string]::IsNullOrWhiteSpace($entry.resolved)) {
+                'NOASSERTION'
+            } else {
+                $entry.resolved
+            }
+            $packages[$key] = [ordered]@{
+                SPDXID = 'SPDXRef-Package-Npm-' + ($key -replace '[^A-Za-z0-9.-]', '-')
+                name = $name
+                versionInfo = $entry.version
+                downloadLocation = $downloadLocation
+                filesAnalyzed = $false
+                licenseConcluded = 'NOASSERTION'
+                licenseDeclared = $declaredLicense
+                supplier = 'NOASSERTION'
+            }
         }
     }
 

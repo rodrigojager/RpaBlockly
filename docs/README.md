@@ -9,6 +9,12 @@ Comece pelo [README da raiz](../README.md). A documentação operacional da V2 �
 - [arquitetura e execução](referencia-markdown/arquitetura-e-execucao.md);
 - [worker e SQL Server](referencia-markdown/integracao-worker-banco.md);
 - [migração e rollback](v2/migracao-e-rollback.md);
+- [manual do cliente do Recorder](recorder/manual-cliente.md);
+- [manual do desenvolvedor do Recorder](recorder/manual-desenvolvedor.md);
+- [privacidade do Recorder](recorder/privacidade.md);
+- [troubleshooting do Recorder](recorder/troubleshooting.md);
+- [aceite em instalação limpa](recorder/teste-instalacao-limpa.md);
+- [evidências do gate REC-G12](recorder/release-gate.md);
 - [solução de problemas](referencia-markdown/tutorial-solucao-problemas-rpa-blockly.md);
 - [ADRs](adr/README.md).
 

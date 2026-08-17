@@ -22,9 +22,11 @@ try {
     }
     Write-Output 'Nenhuma vulnerabilidade NuGet conhecida foi reportada.'
 
-    npm audit --audit-level=high --ignore-scripts --no-fund --prefix tools/schema-conformance
-    if ($LASTEXITCODE -ne 0) {
-        throw 'A análise de dependências npm encontrou vulnerabilidade alta ou crítica.'
+    foreach ($npmProject in @('tools/schema-conformance', 'src/RpaFlow.Recorder.Extension')) {
+        npm audit --audit-level=high --ignore-scripts --no-fund --prefix $npmProject
+        if ($LASTEXITCODE -ne 0) {
+            throw "A análise de dependências npm encontrou vulnerabilidade alta ou crítica em $npmProject."
+        }
     }
     Write-Output 'Nenhuma vulnerabilidade npm alta ou crítica foi reportada.'
 }

@@ -17,13 +17,23 @@ try {
     npm run check --prefix tools/schema-conformance
     if ($LASTEXITCODE -ne 0) { throw 'A conformidade TypeScript dos schemas falhou.' }
 
+    npm ci --ignore-scripts --no-audit --no-fund --prefix src/RpaFlow.Recorder.Extension
+    if ($LASTEXITCODE -ne 0) { throw 'A restauração da extensão Recorder falhou.' }
+    npm run check --prefix src/RpaFlow.Recorder.Extension
+    if ($LASTEXITCODE -ne 0) { throw 'Os checks da extensão Recorder falharam.' }
+    npm run licenses --prefix src/RpaFlow.Recorder.Extension -- --verify
+    if ($LASTEXITCODE -ne 0) { throw 'O inventário de licenças do Recorder está desatualizado.' }
+    npm run release --prefix src/RpaFlow.Recorder.Extension -- --verify
+    if ($LASTEXITCODE -ne 0) { throw 'O build reproduzível do Recorder divergiu.' }
+
     $checks = @(
         'tests/RpaFlow.ContractsChecks/RpaFlow.ContractsChecks.csproj',
         'tests/RpaFlow.PackagesChecks/RpaFlow.PackagesChecks.csproj',
         'tests/RpaFlow.MigratorChecks/RpaFlow.MigratorChecks.csproj',
         'tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj',
         'tests/RpaBase.Checks/RpaBase.Checks.csproj',
-        'tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj'
+        'tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj',
+        'tests/RpaFlow.RecorderContractChecks/RpaFlow.RecorderContractChecks.csproj'
     )
     foreach ($project in $checks) {
         dotnet run --project $project --configuration Release --no-build

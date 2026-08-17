@@ -49,8 +49,11 @@ jobs:
         run: ./tools/Generate-Sbom.ps1
       - uses: actions/upload-artifact@v7
         with:
-          name: sbom-${{ matrix.os }}
-          path: artifacts/sbom.spdx.json
+          name: release-gates-${{ matrix.os }}
+          path: |
+            artifacts/sbom.spdx.json
+            artifacts/rpablockly-recorder-1.0.0-rc.1.zip
+            src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.1.zip.sha256
           if-no-files-found: error
 
   sql-server:

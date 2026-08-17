@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Frame da fixture</title></head>
+<body>
+  <button id="frame-action" data-testid="frame-action">Confirmar no iframe</button>
+  <output id="frame-result" aria-live="polite"></output>
+  <script>
+    document.querySelector("#frame-action").addEventListener("click", () => {
+      document.querySelector("#frame-result").textContent = "Iframe confirmado";
+    });
+  </script>
+</body>
+</html>

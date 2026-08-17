@@ -58,3 +58,20 @@ test("segredo é representado somente por secret.recorded", () => {
   assert.equal(generated.flow.actions[0]?.valueSource, "secret.recorded.value_0001");
   assert.doesNotMatch(JSON.stringify(generated), /senha-em-claro/u);
 });
+
+test("upload gera um data path válido sem caminho local do navegador", async () => {
+  const generated = generatePackage("Upload", [rawEvent(1, "upload", {
+    upload: {
+      name: "comprovante final.pdf",
+      mimeType: "application/pdf",
+      size: 42,
+      sha256: "0".repeat(64),
+      included: false
+    }
+  })]);
+  await validateGeneratedPackage(generated);
+  assert.match(
+    generated.flow.actions[0]?.valueSource ?? "",
+    /^attachments\.recorded\.file_001_/u);
+  assert.doesNotMatch(JSON.stringify(generated), /fakepath/iu);
+});

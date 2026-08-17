@@ -151,6 +151,12 @@ static bool IsIgnored(string root, string path)
         relative.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
         relative.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
         relative.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) ||
+        relative.StartsWith(
+            "src/RpaFlow.Recorder.Extension/build/",
+            StringComparison.OrdinalIgnoreCase) ||
+        relative.StartsWith(
+            "src/RpaFlow.Recorder.Extension/.test-build/",
+            StringComparison.OrdinalIgnoreCase) ||
         relative.Contains("/__pycache__/", StringComparison.OrdinalIgnoreCase) ||
         relative.StartsWith("tmp/", StringComparison.OrdinalIgnoreCase) ||
         relative.StartsWith("artifacts/", StringComparison.OrdinalIgnoreCase) ||

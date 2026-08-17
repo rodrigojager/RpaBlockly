@@ -52,6 +52,17 @@ As APIs `/api/package`, `/api/flow`, `/api/locators` e `/api/policy` sempre
 publicam um pacote completo e consistente. `/api/package/revisions` expõe o
 histórico; `/api/configuration` edita somente os campos autorizados pelo perfil.
 
+## Importar uma gravação
+
+O botão **Importar Recorder** abre um wizard de cinco etapas: selecionar, revisar,
+mapear, confirmar e aplicar. O backend inspeciona o ZIP sem extraí-lo, mantém um
+staging isolado e exige token próprio. Preview e validate são somente leitura.
+
+Antes do apply, mapeie referências `input.recorded.*`, `secret.recorded.*` e
+`attachments.recorded.*`. Escolha substituir, acrescentar ao principal ou criar
+um subflow. A publicação usa a revisão esperada; o bundle e os mappings ficam
+arquivados como evidência lateral.
+
 ## Referências
 
 - [guia operacional do editor](../../docs/referencia-markdown/guia-editor-blockly.md);
@@ -59,3 +70,4 @@ histórico; `/api/configuration` edita somente os campos autorizados pelo perfil
 - [catálogo de blocos](../../docs/referencia-markdown/catalogo-de-blocos.md);
 - [como adicionar um bloco](../../docs/referencia-markdown/como-adicionar-bloco.md);
 - [solução de problemas](../../docs/referencia-markdown/tutorial-solucao-problemas-rpa-blockly.md).
+- [manual do desenvolvedor do Recorder](../../docs/recorder/manual-desenvolvedor.md).

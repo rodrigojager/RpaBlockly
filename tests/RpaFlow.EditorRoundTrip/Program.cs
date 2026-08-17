@@ -10,6 +10,9 @@ using Microsoft.Playwright;
 using RpaFlow.Contracts.Recorder;
 using RpaFlow.Contracts.V2;
 using RpaFlow.Packages;
+using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
+using RpaFlow.Runtime;
 
 if (args.Length != 2)
 {
@@ -34,7 +37,7 @@ try
         await WaitForEditorAsync(editorUrl, editor);
         await CheckBrowserRoundTripAsync(editorUrl, testRoot);
         await CheckAtomicPackageApiAsync(editorUrl);
-        await CheckRecorderImportApiAsync(editorUrl, testRoot);
+        await CheckRecorderImportApiAsync(editorUrl, testRoot, repositoryRoot);
     }
     finally
     {
@@ -371,7 +374,10 @@ static async Task CheckAtomicPackageApiAsync(string editorUrl)
         "API de componente recusa conjunto cruzado inconsistente");
 }
 
-static async Task CheckRecorderImportApiAsync(string editorUrl, string testRoot)
+static async Task CheckRecorderImportApiAsync(
+    string editorUrl,
+    string testRoot,
+    string repositoryRoot)
 {
     using var client = new HttpClient { BaseAddress = new Uri(editorUrl) };
     var session = await client.GetFromJsonAsync<JsonObject>("/api/session")
@@ -487,6 +493,11 @@ static async Task CheckRecorderImportApiAsync(string editorUrl, string testRoot)
         subflowApplied["revision"]!.GetValue<string>());
 
     await RejectMaliciousRecorderBundlesAsync(client, importedDocuments);
+    await CheckProductionRecorderPipelineAsync(
+        client,
+        store,
+        repositoryRoot,
+        testRoot);
 
     using var delete = new HttpRequestMessage(
         HttpMethod.Delete,
@@ -495,6 +506,266 @@ static async Task CheckRecorderImportApiAsync(string editorUrl, string testRoot)
     using var deleted = await client.SendAsync(delete);
     Check(deleted.StatusCode == HttpStatusCode.NoContent,
         "cancelamento remove staging de forma idempotente");
+}
+
+static async Task CheckProductionRecorderPipelineAsync(
+    HttpClient client,
+    FileRpaPackageStore store,
+    string repositoryRoot,
+    string testRoot)
+{
+    var fixtureRoot = Path.Combine(repositoryRoot, "tests", "fixtures", "recorder-site");
+    await using var fixture = RecorderFixtureServer.Start(fixtureRoot);
+    var extensionRoot = Path.Combine(
+        repositoryRoot,
+        "src",
+        "RpaFlow.Recorder.Extension");
+    var contentScript = Path.Combine(extensionRoot, "build", "content", "content-script.js");
+    Check(File.Exists(contentScript),
+        "o E2E usa o content script compilado da extensão, não uma cópia de teste");
+
+    var uploadPath = Path.Combine(testRoot, "recorder-fixture-upload.txt");
+    await File.WriteAllTextAsync(
+        uploadPath,
+        "arquivo sanitizado da fixture\n",
+        new UTF8Encoding(false, true));
+    var messages = await CaptureRecorderMessagesAsync(
+        fixture.BaseUrl,
+        contentScript,
+        uploadPath);
+    Check(messages.Count >= 7,
+        "a extensão real captura formulário, SPA, upload, DOM dinâmico e iframe");
+    Check(messages.Any(item =>
+            item?["event"]?["type"]?.GetValue<string>() == "select"),
+        "a extensão registra a seleção nativa como selectOption");
+    var serializedMessages = messages.ToJsonString(new JsonSerializerOptions
+    {
+        WriteIndented = true
+    });
+    Check(!serializedMessages.Contains("fakepath", StringComparison.OrdinalIgnoreCase) &&
+          !serializedMessages.Contains("SegredoNuncaSerializado42!", StringComparison.Ordinal),
+        "a captura não serializa caminho do upload nem senha em texto claro");
+
+    var messagePath = Path.Combine(testRoot, "recorder-captured-messages.json");
+    var bundlePath = Path.Combine(testRoot, "recorder-production-bundle.rpablockly.zip");
+    await File.WriteAllTextAsync(
+        messagePath,
+        serializedMessages.ReplaceLineEndings("\n") + "\n",
+        new UTF8Encoding(false, true));
+    RunNode(
+        extensionRoot,
+        "scripts/export-captured.mjs",
+        messagePath,
+        bundlePath);
+    var bundle = await File.ReadAllBytesAsync(bundlePath);
+    var inspection = await InspectRecorderAsync(client, bundle);
+    Check(inspection.Preview["bundleId"]?.GetValue<string>() ==
+          "bundle-recorder-e2e-fixture",
+        "o editor real inspeciona o ZIP emitido pelo código de produção do Recorder");
+
+    var current = await store.LoadAsync("editor-test", null, CancellationToken.None);
+    var decision = RecorderDecision(current.Revision.Value, "replace");
+    var inputMappings = new JsonObject();
+    foreach (var path in Strings(inspection.Preview, "recordedInputPaths"))
+    {
+        inputMappings[path] = "input.fixture." + path.Split('.').Last();
+    }
+    var attachmentMappings = new JsonObject();
+    foreach (var path in Strings(inspection.Preview, "attachmentReferences"))
+    {
+        attachmentMappings[path] = "attachments.fixture." + path.Split('.').Last();
+    }
+    decision["inputMappings"] = inputMappings;
+    decision["attachmentMappings"] = attachmentMappings;
+    var validation = await PostRecorderDecisionAsync(
+        client,
+        inspection.StagingId,
+        inspection.StagingToken,
+        "validate",
+        decision);
+    Check(validation["canApply"]?.GetValue<bool>() == true,
+        "review e mapeamentos do bundle de produção são válidos antes do apply");
+    var applied = await PostRecorderDecisionAsync(
+        client,
+        inspection.StagingId,
+        inspection.StagingToken,
+        "apply",
+        decision);
+    Check(applied["flow"]?["actions"]?.AsArray().Count > 5,
+        "o editor aplica o roteiro gravado sem edição manual de JSON");
+
+    var snapshot = await store.LoadAsync("editor-test", null, CancellationToken.None);
+    var (input, attachments) = ReadExecutionData(
+        bundle,
+        inputMappings,
+        attachmentMappings,
+        uploadPath);
+    var options = new PlaywrightRuntimeOptions(
+        Headless: true,
+        Browser: Environment.GetEnvironmentVariable("RPABLOCKLY_CHECKS_BROWSER") ?? "chromium",
+        ActionTimeoutSeconds: 15,
+        UploadTimeoutSeconds: 15,
+        OutputDirectory: "recorder-e2e-artifacts",
+        ConfigurationDirectory: testRoot,
+        ReadinessQuietPeriodMs: 50,
+        FormStabilityMs: 50);
+    var strictObserver = new RecorderE2EObserver();
+    var strictResult = await new PlaywrightV2FlowExecutor(snapshot, options, strictObserver)
+        .ExecuteAsync(
+            new FlowExecutionRequest("recorder-e2e-strict", input, [], attachments),
+            CancellationToken.None);
+    Check(strictResult.ExecutedActions == snapshot.Flow.Actions.Count,
+        "o pacote importado executa integralmente em strict pelo file store");
+    Check(!strictObserver.Events.Any(item => item.Kind == "locatorFallbackSelected"),
+        "strict usa somente o candidato primário gravado");
+
+    fixture.ChangedDom = true;
+    var fallbackDocuments = snapshot.CopyDocuments();
+    fallbackDocuments.Policy.LocatorResilience.Mode = LocatorResilienceMode.Fallback;
+    _ = await store.PublishAsync(
+        "editor-test",
+        fallbackDocuments,
+        snapshot.Revision,
+        CancellationToken.None);
+    var fallbackSnapshot = await store.LoadAsync("editor-test", null, CancellationToken.None);
+    var fallbackObserver = new RecorderE2EObserver();
+    var fallbackResult = await new PlaywrightV2FlowExecutor(
+            fallbackSnapshot,
+            options,
+            fallbackObserver)
+        .ExecuteAsync(
+            new FlowExecutionRequest("recorder-e2e-fallback", input, [], attachments),
+            CancellationToken.None);
+    Check(fallbackResult.ExecutedActions == fallbackSnapshot.Flow.Actions.Count &&
+          fallbackObserver.Events.Any(item => item.Kind == "locatorFallbackSelected"),
+        "fallback conclui após a alteração controlada do localizador primário no DOM");
+}
+
+static async Task<JsonArray> CaptureRecorderMessagesAsync(
+    string baseUrl,
+    string contentScript,
+    string uploadPath)
+{
+    using var playwright = await Playwright.CreateAsync();
+    await using var browser = await playwright.Chromium.LaunchAsync(
+        new BrowserTypeLaunchOptions { Headless = true });
+    var context = await browser.NewContextAsync();
+    await context.AddInitScriptAsync(
+        """
+        (() => {
+          globalThis.__recorderMessages = [];
+          globalThis.chrome ??= {};
+          globalThis.chrome.runtime = {
+            sendMessage: async message => {
+              const owner = globalThis.top ?? globalThis;
+              owner.__recorderMessages ??= [];
+              owner.__recorderMessages.push(JSON.parse(JSON.stringify(message)));
+              return { ok: true };
+            },
+            onMessage: { addListener: listener => {
+              globalThis.__recorderOnMessage = listener;
+            } }
+          };
+        })();
+        """);
+    var page = await context.NewPageAsync();
+    await page.GotoAsync(
+        baseUrl + "/index.html",
+        new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    await page.AddScriptTagAsync(new PageAddScriptTagOptions
+    {
+        Path = contentScript,
+        Type = "module"
+    });
+    var frame = page.Frames.Single(item => item != page.MainFrame);
+    await frame.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+    await frame.AddScriptTagAsync(new FrameAddScriptTagOptions
+    {
+        Path = contentScript,
+        Type = "module"
+    });
+
+    await page.EvaluateAsync(
+        "() => { document.querySelector('#senha').value = 'SegredoNuncaSerializado42!'; }");
+    await page.FillAsync("#nome", "Maria da Silva");
+    await page.ClickAsync("#estado");
+    await page.Keyboard.PressAsync("ArrowDown");
+    await page.Keyboard.PressAsync("Enter");
+    await page.Keyboard.PressAsync("Tab");
+    await page.CheckAsync("#aceite");
+    await page.SetInputFilesAsync("#arquivo", uploadPath);
+    await page.ClickAsync("#spa-next");
+    await page.ClickAsync("#dynamic-action");
+    await frame.ClickAsync("#frame-action");
+    await page.WaitForFunctionAsync(
+        "() => (globalThis.__recorderMessages?.length ?? 0) >= 7");
+    var json = await page.EvaluateAsync<string>(
+        "() => JSON.stringify(globalThis.__recorderMessages ?? [])");
+    return JsonNode.Parse(json)?.AsArray()
+        ?? throw new InvalidOperationException("Mensagens da extensão estão vazias.");
+}
+
+static IReadOnlyList<string> Strings(JsonObject owner, string property) =>
+    owner[property]?.AsArray()
+        .Select(item => item?.GetValue<string>())
+        .Where(item => !string.IsNullOrWhiteSpace(item))
+        .Select(item => item!)
+        .ToArray() ?? [];
+
+static (JsonObject Input, JsonObject Attachments) ReadExecutionData(
+    byte[] bundle,
+    JsonObject inputMappings,
+    JsonObject attachmentMappings,
+    string uploadPath)
+{
+    using var stream = new MemoryStream(bundle);
+    using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+    var sampleEntry = archive.GetEntry("samples/inputs.sample.json")
+        ?? throw new InvalidOperationException("Bundle sem samples de entrada.");
+    using var reader = new StreamReader(sampleEntry.Open(), Encoding.UTF8);
+    var samples = JsonNode.Parse(reader.ReadToEnd())!.AsObject()["input"]!.AsObject();
+    var fixtureInput = new JsonObject();
+    foreach (var mapping in inputMappings)
+    {
+        var sourceKey = mapping.Key.Split('.').Last();
+        var targetKey = mapping.Value!.GetValue<string>().Split('.').Last();
+        fixtureInput[targetKey] = samples[sourceKey]?.DeepClone();
+    }
+    var fixtureAttachments = new JsonObject();
+    foreach (var mapping in attachmentMappings)
+    {
+        var targetKey = mapping.Value!.GetValue<string>().Split('.').Last();
+        fixtureAttachments[targetKey] = uploadPath;
+    }
+    return (
+        new JsonObject { ["fixture"] = fixtureInput },
+        new JsonObject { ["fixture"] = fixtureAttachments });
+}
+
+static void RunNode(string workingDirectory, params string[] arguments)
+{
+    var startInfo = new ProcessStartInfo("node")
+    {
+        WorkingDirectory = workingDirectory,
+        UseShellExecute = false,
+        CreateNoWindow = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true
+    };
+    foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+    using var process = Process.Start(startInfo)
+        ?? throw new InvalidOperationException("Não foi possível iniciar o exportador Recorder.");
+    var outputTask = process.StandardOutput.ReadToEndAsync();
+    var errorTask = process.StandardError.ReadToEndAsync();
+    process.WaitForExit();
+    var output = outputTask.GetAwaiter().GetResult();
+    var error = errorTask.GetAwaiter().GetResult();
+    if (process.ExitCode != 0)
+    {
+        throw new InvalidOperationException(
+            $"Exportador Recorder falhou ({process.ExitCode}): {error}\n{output}");
+    }
+    Console.WriteLine(output.Trim());
 }
 
 static async Task CheckRecorderSecretMappingAsync(
@@ -838,3 +1109,17 @@ file sealed record RecorderInspection(
     string StagingId,
     string StagingToken,
     JsonObject Preview);
+
+file sealed class RecorderE2EObserver : IFlowExecutionObserver
+{
+    public List<FlowExecutionEvent> Events { get; } = [];
+
+    public ValueTask ObserveAsync(
+        FlowExecutionEvent executionEvent,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Events.Add(executionEvent);
+        return ValueTask.CompletedTask;
+    }
+}
