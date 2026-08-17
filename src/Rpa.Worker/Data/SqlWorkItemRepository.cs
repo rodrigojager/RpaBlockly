@@ -10,7 +10,7 @@ namespace Rpa.Worker.Data;
 
 public sealed class SqlWorkItemRepository(
     RpaWorkerOptions options,
-    WorkerEnvironment environment)
+    WorkerEnvironment environment) : IWorkItemExecutionRepository
 {
     private readonly string _connectionString = environment.ConnectionString;
     private readonly RpaWorkerOptions _options = options;

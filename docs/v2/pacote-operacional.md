@@ -64,8 +64,8 @@ permite heurística apenas depois das receitas exatas e exige threshold, diferen
 para o segundo colocado, cardinalidade e estado válidos.
 
 Write-back: `disabled`, `memory`, `source` ou `overlay`. Promoção só ocorre após
-resultado final `Succeeded`; falha, retry, cancelamento ou encerramento inesperado
-descartam a sessão provisória.
+resultado final `Succeeded`; `Validated`, falha, retry, cancelamento ou
+encerramento inesperado descartam a sessão provisória.
 
 ## Layout do file store
 

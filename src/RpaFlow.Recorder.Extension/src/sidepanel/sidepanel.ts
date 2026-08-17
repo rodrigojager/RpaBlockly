@@ -276,6 +276,11 @@ async function send(request: RecorderRequest): Promise<Extract<RecorderResponse,
 }
 
 async function waitForDownload(downloadId: number): Promise<void> {
+  const current = (await chrome.downloads.search({ id: downloadId }))[0];
+  if (current?.state === "complete") return;
+  if (current?.state === "interrupted" || isBlockedDownloadDanger(current?.danger)) {
+    throw new Error("O Chrome não confirmou o download.");
+  }
   await new Promise<void>((resolve, reject) => {
     const listener = (delta: chrome.downloads.DownloadDelta): void => {
       if (delta.id !== downloadId) return;
@@ -286,13 +291,31 @@ async function waitForDownload(downloadId: number): Promise<void> {
       } else if (delta.state?.current === "complete") {
         chrome.downloads.onChanged.removeListener(listener);
         resolve();
-      } else if (delta.state?.current === "interrupted" || delta.danger?.current === "dangerous") {
+      } else if (delta.state?.current === "interrupted" ||
+          isBlockedDownloadDanger(delta.danger?.current)) {
         chrome.downloads.onChanged.removeListener(listener);
         reject(new Error("O Chrome não confirmou o download."));
       }
     };
     chrome.downloads.onChanged.addListener(listener);
+    void chrome.downloads.search({ id: downloadId }).then(([item]) => {
+      if (item?.state === "complete") {
+        chrome.downloads.onChanged.removeListener(listener);
+        resolve();
+      } else if (item?.state === "interrupted" || isBlockedDownloadDanger(item?.danger)) {
+        chrome.downloads.onChanged.removeListener(listener);
+        reject(new Error("O Chrome não confirmou o download."));
+      }
+    }, reject);
   });
+}
+
+function isBlockedDownloadDanger(value: string | undefined): boolean {
+  return new Set([
+    "file", "url", "content", "host", "unwanted", "blockedTooLarge",
+    "sensitiveContentBlock", "deepScannedFailed", "accountCompromise",
+    "blockedScanFailed"
+  ]).has(value ?? "");
 }
 
 async function loadComments(): Promise<BundleComment[]> {

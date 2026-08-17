@@ -42,7 +42,7 @@ export function normalizeEvents(source: ReadonlyArray<RawCaptureEvent>): Normali
         appendTargetIntent(normalizedEvent, "click", "Clicar", intents, issues);
         break;
       case "submit":
-        if (!hasRecentSubmitClick(normalizedEvent, events)) {
+        if (!hasRecentSubmitTrigger(normalizedEvent, events)) {
           appendTargetIntent(normalizedEvent, "click", "Enviar formulário", intents, issues);
         }
         break;
@@ -204,8 +204,10 @@ function associatePopup(
   causal.eventIds.push(popup.id);
 }
 
-function hasRecentSubmitClick(submit: RawCaptureEvent, events: RawCaptureEvent[]): boolean {
-  return events.some((candidate) => candidate.type === "click" &&
+function hasRecentSubmitTrigger(submit: RawCaptureEvent, events: RawCaptureEvent[]): boolean {
+  return events.some((candidate) =>
+    (candidate.type === "click" ||
+      candidate.type === "keydown" && candidate.key === "Enter") &&
     candidate.sequence < submit.sequence && submit.elapsedMs - candidate.elapsedMs <= 1_000 &&
     candidate.formKey !== undefined && candidate.formKey === submit.formKey);
 }

@@ -3,7 +3,7 @@ using RpaFlow.Runtime;
 
 namespace Rpa.Worker.Execution;
 
-public sealed class DatabaseFlowExecutionObserver(SqlWorkItemRepository repository)
+public sealed class DatabaseFlowExecutionObserver(IWorkItemExecutionRepository repository)
     : IFlowExecutionObserver
 {
     public ValueTask ObserveAsync(

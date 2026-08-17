@@ -4,6 +4,12 @@ using RpaFlow.Runtime;
 
 namespace RpaFlow.Playwright.V2;
 
+public enum LocatorLearningFinalizationMode
+{
+    Automatic,
+    Deferred
+}
+
 public sealed class PlaywrightV2FlowExecutor : IFlowExecutor
 {
     private readonly RpaFlow.Contracts.V2.FlowDefinition _definition;
@@ -11,6 +17,7 @@ public sealed class PlaywrightV2FlowExecutor : IFlowExecutor
     private readonly LocatorLearningManager? _learning;
     private readonly IFlowExecutionObserver _observer;
     private readonly RpaPackageSnapshot _snapshot;
+    private readonly LocatorLearningFinalizationMode _learningFinalization;
 
     public PlaywrightV2FlowExecutor(
         RpaPackageSnapshot snapshot,
@@ -20,11 +27,14 @@ public sealed class PlaywrightV2FlowExecutor : IFlowExecutor
         IOneTimeCodeProvider? oneTimeCodeProvider = null,
         TimeProvider? timeProvider = null,
         IRpaPackageWriter? sourceWriteBack = null,
-        IRpaPackageWriter? overlayWriteBack = null)
+        IRpaPackageWriter? overlayWriteBack = null,
+        LocatorLearningFinalizationMode learningFinalization =
+            LocatorLearningFinalizationMode.Automatic)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         _snapshot = snapshot;
         _observer = observer ?? NullFlowExecutionObserver.Instance;
+        _learningFinalization = learningFinalization;
         var flow = snapshot.Flow;
         var locators = snapshot.Locators;
         var policy = snapshot.Policy;
@@ -65,30 +75,64 @@ public sealed class PlaywrightV2FlowExecutor : IFlowExecutor
                 request,
                 _definition.Inputs.Select(FlowInputRequirement.From).ToArray(),
                 cancellationToken);
-            if (_learning is not null)
+            if (_learning is not null &&
+                _learningFinalization == LocatorLearningFinalizationMode.Automatic)
             {
-                var completion = await _learning.CompleteAsync(
-                    request.ExecutionId,
-                    succeeded: true,
+                await CompleteLearningAsync(
+                    request,
+                    LocatorLearningOutcome.Succeeded,
                     CancellationToken.None);
-                await ObserveLearningCompletionAsync(request, completion);
             }
 
             return result;
         }
-        catch
+        catch (OperationCanceledException)
         {
-            if (_learning is not null)
+            if (_learning is not null &&
+                _learningFinalization == LocatorLearningFinalizationMode.Automatic)
             {
-                var completion = await _learning.CompleteAsync(
-                    request.ExecutionId,
-                    succeeded: false,
+                await CompleteLearningAsync(
+                    request,
+                    LocatorLearningOutcome.Cancelled,
                     CancellationToken.None);
-                await ObserveLearningCompletionAsync(request, completion);
             }
 
             throw;
         }
+        catch
+        {
+            if (_learning is not null &&
+                _learningFinalization == LocatorLearningFinalizationMode.Automatic)
+            {
+                await CompleteLearningAsync(
+                    request,
+                    LocatorLearningOutcome.Failed,
+                    CancellationToken.None);
+            }
+
+            throw;
+        }
+    }
+
+    public async Task<LocatorLearningCompletion> CompleteLearningAsync(
+        FlowExecutionRequest request,
+        LocatorLearningOutcome outcome,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (_learning is null)
+        {
+            return new LocatorLearningCompletion(
+                request.ExecutionId,
+                LocatorLearningCompletionStatus.NoChanges);
+        }
+
+        var completion = await _learning.CompleteAsync(
+            request.ExecutionId,
+            outcome,
+            cancellationToken);
+        await ObserveLearningCompletionAsync(request, completion);
+        return completion;
     }
 
     private async Task ObserveLearningCompletionAsync(

@@ -1598,7 +1598,7 @@ static async Task CheckLocatorLearningAsync()
 
     var discarded = await memory.CompleteAsync(
         "failed",
-        succeeded: false,
+        LocatorLearningOutcome.Failed,
         CancellationToken.None);
     if (discarded.Status != LocatorLearningCompletionStatus.Discarded ||
         memory.TryGetOverride("other", "submit", out _))
@@ -1610,7 +1610,7 @@ static async Task CheckLocatorLearningAsync()
     memory.Observe("success", Observation("submit.memory"));
     var confirmed = await memory.CompleteAsync(
         "success",
-        succeeded: true,
+        LocatorLearningOutcome.Succeeded,
         CancellationToken.None);
     if (confirmed.Status != LocatorLearningCompletionStatus.ConfirmedInMemory ||
         !memory.TryGetOverride("next", "submit", out var memoryOverride) ||
@@ -1618,6 +1618,35 @@ static async Task CheckLocatorLearningAsync()
     {
         throw new InvalidOperationException(
             "Modo memory não confirmou o aprendizado após sucesso.");
+    }
+
+    foreach (var outcome in new[]
+             {
+                 LocatorLearningOutcome.Validated,
+                 LocatorLearningOutcome.Failed,
+                 LocatorLearningOutcome.Retry,
+                 LocatorLearningOutcome.Cancelled,
+                 LocatorLearningOutcome.Unexpected
+             })
+    {
+        var isolated = new LocatorLearningManager(new RpaPackageSnapshot(
+            $"learning-{outcome}",
+            new PackageRevision($"{outcome}-r1"),
+            Documents(V2.LearningWriteBackMode.Memory),
+            new RpaPackageOrigin("test", outcome.ToString())));
+        var execution = outcome.ToString();
+        isolated.Begin(execution);
+        isolated.Observe(execution, Observation($"submit.{outcome}"));
+        var result = await isolated.CompleteAsync(
+            execution,
+            outcome,
+            CancellationToken.None);
+        if (result.Status != LocatorLearningCompletionStatus.Discarded ||
+            isolated.TryGetOverride("next", "submit", out _))
+        {
+            throw new InvalidOperationException(
+                $"Resultado {outcome} não descartou o aprendizado provisório.");
+        }
     }
 
     memory.Begin("parallel-a");
@@ -1632,8 +1661,14 @@ static async Task CheckLocatorLearningAsync()
             "Sessões de aprendizado paralelas compartilharam estado provisório.");
     }
 
-    _ = await memory.CompleteAsync("parallel-a", false, CancellationToken.None);
-    _ = await memory.CompleteAsync("parallel-b", false, CancellationToken.None);
+    _ = await memory.CompleteAsync(
+        "parallel-a",
+        LocatorLearningOutcome.Cancelled,
+        CancellationToken.None);
+    _ = await memory.CompleteAsync(
+        "parallel-b",
+        LocatorLearningOutcome.Unexpected,
+        CancellationToken.None);
 
     var disabled = new LocatorLearningManager(new RpaPackageSnapshot(
         "learning-disabled",
@@ -1644,7 +1679,7 @@ static async Task CheckLocatorLearningAsync()
     disabled.Observe("disabled", Observation("submit.disabled"));
     var disabledResult = await disabled.CompleteAsync(
         "disabled",
-        true,
+        LocatorLearningOutcome.Succeeded,
         CancellationToken.None);
     if (disabledResult.Status != LocatorLearningCompletionStatus.NoChanges ||
         disabled.TryGetOverride("next", "submit", out _))
@@ -1679,7 +1714,7 @@ static async Task CheckLocatorLearningAsync()
         manager.Observe("persist", Observation("submit.persisted"));
         var persisted = await manager.CompleteAsync(
             "persist",
-            true,
+            LocatorLearningOutcome.Succeeded,
             CancellationToken.None);
         var current = await store.LoadAsync(rpaId, null, CancellationToken.None);
         var candidates = current.Locators.Locators.Single().Candidates;
@@ -1696,7 +1731,7 @@ static async Task CheckLocatorLearningAsync()
         stale.Observe("conflict", Observation("submit.conflict"));
         var conflict = await stale.CompleteAsync(
             "conflict",
-            true,
+            LocatorLearningOutcome.Succeeded,
             CancellationToken.None);
         if (conflict.Status != LocatorLearningCompletionStatus.RevisionConflict)
         {

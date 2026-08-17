@@ -24,9 +24,11 @@ pwsh src/RpaFlow.Playwright/bin/Release/net9.0/playwright.ps1 install chromium
 .\tools\Run-Checks.ps1
 ```
 
-O E2E usa o content script compilado em `build/`, grava a fixture de navegador,
-gera o bundle pelo código de produção, importa no editor, publica no file store e
-executa em `strict` e `fallback`.
+O E2E carrega manifesto, service worker e side panel MV3 no Chromium, usa o
+content script compilado em `build/`, grava a fixture de navegador, gera o bundle
+pelo código de produção, importa no editor, publica no file store e atravessa o
+worker até o runtime em `strict`. Uma segunda execução comprova `fallback` após a
+alteração controlada do DOM.
 
 ## Importar no editor
 

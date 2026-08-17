@@ -6,7 +6,7 @@
   "policySchemaVersion": 1,
   "recorderVersion": "1.0.0-rc.1",
   "recorderArtifact": "rpablockly-recorder-1.0.0-rc.1.zip",
-  "recorderChecksum": "18bc8e741ec8011cc4b5092769ec51b8c8f9585506d5989926f7c6c403859bb4",
+  "recorderChecksum": "a17745ec5fc086261ba5290ed6443fa0122d3ad08d52e2c81e6a382cf5f164b3",
   "documents": [
     "flow.production.json",
     "locators.production.json",

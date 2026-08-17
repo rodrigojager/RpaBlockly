@@ -14,6 +14,16 @@ public enum LocatorLearningCompletionStatus
     PersistenceFailed
 }
 
+public enum LocatorLearningOutcome
+{
+    Succeeded,
+    Validated,
+    Failed,
+    Retry,
+    Cancelled,
+    Unexpected
+}
+
 public sealed record LocatorLearningObservation(
     string LocatorId,
     LocatorCandidate Candidate,
@@ -133,7 +143,7 @@ public sealed class LocatorLearningManager
 
     public async Task<LocatorLearningCompletion> CompleteAsync(
         string executionId,
-        bool succeeded,
+        LocatorLearningOutcome outcome,
         CancellationToken cancellationToken)
     {
         if (!_sessions.TryRemove(executionId, out var session))
@@ -143,11 +153,12 @@ public sealed class LocatorLearningManager
                 LocatorLearningCompletionStatus.NoChanges);
         }
 
-        if (!succeeded)
+        if (outcome != LocatorLearningOutcome.Succeeded)
         {
             return new LocatorLearningCompletion(
                 executionId,
                 LocatorLearningCompletionStatus.Discarded,
+                Detail: $"Resultado final: {outcome}.",
                 Observations: session.Observations.Select(Clone).ToArray());
         }
 

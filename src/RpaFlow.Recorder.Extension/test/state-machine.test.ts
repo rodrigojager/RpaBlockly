@@ -28,6 +28,28 @@ test("máquina de estados recupera checkpoint após suspensão", async () => {
   assert.throws(() => transition(checkpoint, "completed", clock), /Transição inválida/u);
 });
 
+test("checkpoint sobrevive à suspensão simulada em cada estado", async () => {
+  const clock = { now: () => new Date("2026-08-17T18:00:00.000Z") };
+  const options = {
+    captureScreenshots: true,
+    captureSecrets: false,
+    includeUploads: false
+  };
+  const idle = createCheckpoint("Estados", "https://fixture.test", options, clock);
+  const recording = transition(idle, "recording", clock);
+  const paused = transition(recording, "paused", clock);
+  const finalizing = transition(recording, "finalizing", clock);
+  const completed = transition(finalizing, "completed", clock);
+  const failed = transition(recording, "failed", clock);
+
+  for (const checkpoint of [idle, recording, paused, finalizing, completed, failed]) {
+    const adapter = new MemoryStorage();
+    await new RecorderCheckpointStore(adapter).save(checkpoint);
+    const recoveredAfterRestart = await new RecorderCheckpointStore(adapter).load();
+    assert.deepEqual(recoveredAfterRestart, checkpoint, `estado ${checkpoint.state}`);
+  }
+});
+
 test("checkpoint rejeita segredo em texto claro", () => {
   const event = rawEvent(1, "input", {
     secretReference: "secret.recorded.password",

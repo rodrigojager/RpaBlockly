@@ -68,7 +68,15 @@ function initialize(): void {
     } else if (type === "keydown" && domEvent instanceof KeyboardEvent) {
       base.key = domEvent.key;
     } else if (type === "upload" && element instanceof HTMLInputElement && element.files?.[0] !== undefined) {
-      base.upload = await captureUpload(element.files[0], options.includeUploads);
+      try {
+        base.upload = await captureUpload(element.files[0], options.includeUploads);
+      } catch (error) {
+        base.type = "unsupported";
+        base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+        base.unsupportedReason = error instanceof Error
+          ? error.message
+          : "O upload não atende à política de segurança.";
+      }
     }
     const request: RecorderRequest = {
       type: "RECORDER_CAPTURE_EVENT",
@@ -151,6 +159,28 @@ function snapshotElement(element: Element, event: Event): ElementSnapshot {
   const role = roleFor(element);
   const text = sanitizeText(element.textContent ?? undefined, 300);
   const frameContext = frameExpressions();
+  let candidates = candidateObservations(
+    element,
+    role,
+    accessibleName,
+    text,
+    document);
+  let scope: Expression | undefined;
+  if (!candidates.some((candidate) =>
+    candidate.matchCount === 1 && candidate.matchesTarget &&
+    !candidate.sensitive && !candidate.dynamic &&
+    candidate.key !== "structuralCss" && candidate.key !== "xpath")) {
+    const stableScope = findStableScope(element);
+    if (stableScope !== undefined) {
+      scope = stableScope.expression;
+      candidates = candidateObservations(
+        element,
+        role,
+        accessibleName,
+        text,
+        stableScope.element);
+    }
+  }
   return {
     tagName: element.tagName.toLowerCase(),
     ...(role === undefined ? {} : { role }),
@@ -160,8 +190,9 @@ function snapshotElement(element: Element, event: Event): ElementSnapshot {
     ancestors: relatedNodes(element.parentElement, "parent"),
     previousSiblings: siblingNodes(element, "previous"),
     nextSiblings: siblingNodes(element, "next"),
-    candidates: candidateObservations(element, role, accessibleName, text),
+    candidates,
     frames: frameContext.expressions,
+    ...(scope === undefined ? {} : { scope }),
     closedShadowRoot: event.composedPath()[0] !== event.target &&
       event.target instanceof Element && event.target.shadowRoot === null,
     inaccessibleFrame: frameContext.inaccessible,
@@ -173,36 +204,42 @@ function candidateObservations(
   element: Element,
   role: string | undefined,
   accessibleName: string | undefined,
-  text: string | undefined
+  text: string | undefined,
+  root: Document | ShadowRoot | Element
 ): CandidateObservation[] {
   const result: CandidateObservation[] = [];
   const testId = element.getAttribute("data-testid") ?? element.getAttribute("data-test-id");
   if (testId) add("testId", { strategy: "testId", text: testId }, `[data-testid="${cssString(testId)}"],[data-test-id="${cssString(testId)}"]`);
   if (role && accessibleName) addFiltered("role", { strategy: "role", role, name: accessibleName },
-    [...document.querySelectorAll("*")].filter((candidate) => roleFor(candidate) === role && accessibleNameFor(candidate) === accessibleName));
+    allElements(root).filter((candidate) => roleFor(candidate) === role && accessibleNameFor(candidate) === accessibleName));
   const label = labelFor(element);
-  if (label) addFiltered("label", { strategy: "label", text: label }, elementsByLabel(label));
+  if (label) addFiltered("label", { strategy: "label", text: label }, elementsByLabel(label, root));
   for (const name of ["name", "title", "aria-label"] as const) {
     const value = element.getAttribute(name);
     if (value) add("stableAttribute", { strategy: "css", selector: `[${name}="${cssString(value)}"]` }, `[${name}="${cssString(value)}"]`);
   }
   const placeholder = element.getAttribute("placeholder");
   if (placeholder) addFiltered("placeholder", { strategy: "placeholder", text: placeholder },
-    [...document.querySelectorAll("input,textarea")].filter((candidate) => candidate.getAttribute("placeholder") === placeholder));
+    querySelectorAllDeep("input,textarea", root).filter((candidate) => candidate.getAttribute("placeholder") === placeholder));
   if (text && text.length <= 200) addFiltered("text", { strategy: "text", text, exact: true },
-    [...document.querySelectorAll(element.tagName)].filter((candidate) => sanitizeText(candidate.textContent ?? undefined, 300) === text));
+    querySelectorAllDeep(element.tagName, root).filter((candidate) => sanitizeText(candidate.textContent ?? undefined, 300) === text));
   if (element.id) add("stableId", { strategy: "css", selector: `#${cssEscape(element.id)}` }, `#${cssEscape(element.id)}`);
   const shortCss = shortCssFor(element);
   add("shortCss", { strategy: "css", selector: shortCss }, shortCss);
-  const structuralCss = structuralCssFor(element);
+  const structuralCss = structuralCssFor(
+    element,
+    root instanceof Element ? root : undefined);
   add("structuralCss", { strategy: "css", selector: structuralCss }, structuralCss);
-  const xpath = xpathFor(element);
-  addFiltered("xpath", { strategy: "xpath", selector: xpath }, evaluateXPath(xpath));
+  const xpath = xpathFor(element, root instanceof Element ? root : undefined);
+  addFiltered(
+    "xpath",
+    { strategy: "xpath", selector: xpath },
+    root instanceof ShadowRoot ? [] : evaluateXPath(xpath, root));
   return result;
 
   function add(key: CandidateObservation["key"], expression: Expression, selector: string): void {
     let matches: Element[] = [];
-    try { matches = [...document.querySelectorAll(selector)]; } catch { /* diagnóstico abaixo */ }
+    try { matches = querySelectorAllDeep(selector, root); } catch { /* diagnóstico abaixo */ }
     addFiltered(key, expression, matches);
   }
   function addFiltered(
@@ -220,6 +257,65 @@ function candidateObservations(
       dynamic: [...Object.values(expression)].some((value) => typeof value === "string" && isDynamicToken(value))
     });
   }
+}
+
+function findStableScope(
+  element: Element
+): { element: Element; expression: Expression } | undefined {
+  let current = composedParent(element);
+  while (current !== undefined) {
+    const candidates: Array<{ selector: string; expression: Expression }> = [];
+    if (current.id && !isDynamicToken(current.id)) {
+      const selector = `#${cssEscape(current.id)}`;
+      candidates.push({ selector, expression: { strategy: "css", selector } });
+    }
+    for (const name of ["data-testid", "data-test-id", "name"] as const) {
+      const value = current.getAttribute(name);
+      if (value && !isDynamicToken(value) && !isSensitiveToken(name, value)) {
+        const selector = `[${name}="${cssString(value)}"]`;
+        candidates.push({ selector, expression: { strategy: "css", selector } });
+      }
+    }
+    for (const candidate of candidates) {
+      const matches = querySelectorAllDeep(candidate.selector, document);
+      if (matches.length === 1 && matches[0] === current) {
+        return { element: current, expression: candidate.expression };
+      }
+    }
+    current = composedParent(current);
+  }
+  return undefined;
+}
+
+function composedParent(element: Element): Element | undefined {
+  if (element.parentElement !== null) return element.parentElement;
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot ? root.host : undefined;
+}
+
+function querySelectorAllDeep(
+  selector: string,
+  root: Document | ShadowRoot | Element
+): Element[] {
+  const result = new Set<Element>();
+  visit(root);
+  return [...result];
+
+  function visit(current: Document | ShadowRoot | Element): void {
+    for (const match of current.querySelectorAll(selector)) result.add(match);
+    for (const candidate of current.querySelectorAll("*")) {
+      if (candidate.shadowRoot !== null) visit(candidate.shadowRoot);
+    }
+  }
+}
+
+function allElements(root: Document | ShadowRoot | Element): Element[] {
+  return querySelectorAllDeep("*", root);
+}
+
+function isSensitiveToken(name: string, value: string): boolean {
+  return /(?:password|passwd|secret|token|authorization|cookie|api[-_]?key)/iu.test(
+    `${name}=${value}`);
 }
 
 function prepareScreenshot(target: Element | undefined, overlays: HTMLElement[]): EvidenceMask[] {
@@ -353,8 +449,12 @@ function labelFor(element: Element): string | undefined {
   return undefined;
 }
 
-function elementsByLabel(text: string): Element[] {
-  return [...document.querySelectorAll("input,select,textarea,button")].filter((candidate) => labelFor(candidate) === text);
+function elementsByLabel(
+  text: string,
+  root: Document | ShadowRoot | Element
+): Element[] {
+  return querySelectorAllDeep("input,select,textarea,button", root)
+    .filter((candidate) => labelFor(candidate) === text);
 }
 
 function roleFor(element: Element): string | undefined {
@@ -398,10 +498,10 @@ function shortCssFor(element: Element): string {
     : element.tagName.toLowerCase();
 }
 
-function structuralCssFor(element: Element): string {
+function structuralCssFor(element: Element, stopAt?: Element): string {
   const parts: string[] = [];
   let current: Element | null = element;
-  while (current !== null && parts.length < 6) {
+  while (current !== null && current !== stopAt && parts.length < 6) {
     let part = current.tagName.toLowerCase();
     const siblings = current.parentElement === null
       ? []
@@ -413,10 +513,10 @@ function structuralCssFor(element: Element): string {
   return parts.join(" > ");
 }
 
-function xpathFor(element: Element): string {
+function xpathFor(element: Element, stopAt?: Element): string {
   const parts: string[] = [];
   let current: Element | null = element;
-  while (current !== null) {
+  while (current !== null && current !== stopAt) {
     const tag = current.tagName.toLowerCase();
     const siblings = current.parentElement === null
       ? []
@@ -424,12 +524,16 @@ function xpathFor(element: Element): string {
     parts.unshift(`${tag}[${Math.max(1, siblings.indexOf(current) + 1)}]`);
     current = current.parentElement;
   }
-  return `/${parts.join("/")}`;
+  return stopAt === undefined ? `/${parts.join("/")}` : `.//${parts.join("/")}`;
 }
 
-function evaluateXPath(xpath: string): Element[] {
+function evaluateXPath(
+  xpath: string,
+  root: Document | Element
+): Element[] {
   const result: Element[] = [];
-  const iterator = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE);
+  const owner = root instanceof Document ? root : root.ownerDocument;
+  const iterator = owner.evaluate(xpath, root, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE);
   let node = iterator.iterateNext();
   while (node !== null) {
     if (node instanceof Element) result.push(node);

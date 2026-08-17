@@ -10,6 +10,7 @@ import { EncryptedSecretStore } from "../security/secret-store.js";
 import { encryptSecret, validateRecipientKey } from "../security/secrets.js";
 import { isRecorderRequest, type RecorderRequest, type RecorderResponse } from "../shared/messages.js";
 import { UploadStore } from "../uploads/upload-store.js";
+import { validateUploadTotals } from "../uploads/uploads.js";
 
 const checkpointStore = new RecorderCheckpointStore(new ChromeSessionStorage());
 const evidenceStore = new EvidenceStore();
@@ -17,12 +18,6 @@ const secretStore = new EncryptedSecretStore();
 const uploadStore = new UploadStore();
 const screenshotLimiter = new ScreenshotRateLimiter();
 let queue = Promise.resolve();
-
-void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-
-chrome.action.onClicked.addListener((tab) => {
-  if (tab.windowId !== undefined) void chrome.sidePanel.open({ windowId: tab.windowId });
-});
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (!isRecorderRequest(message) || sender.id !== chrome.runtime.id) return false;
@@ -34,6 +29,16 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     } satisfies RecorderResponse));
   return true;
 });
+
+if (chrome.sidePanel !== undefined) {
+  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch(() => undefined);
+  chrome.action.onClicked.addListener((tab) => {
+    if (tab.windowId !== undefined) {
+      void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
+    }
+  });
+}
 
 chrome.tabs.onCreated.addListener((tab) => {
   queue = queue.then(async () => {
@@ -143,7 +148,11 @@ async function start(request: Extract<RecorderRequest, { type: "RECORDER_START" 
       pem: request.options.recipientPublicKeyPem
     });
   }
-  const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
+  const requestedOrigins = { origins: [`${origin}/*`] };
+  const alreadyGranted = await chrome.permissions.contains(requestedOrigins);
+  const granted = alreadyGranted
+    ? true
+    : await chrome.permissions.request(requestedOrigins);
   if (!granted) throw new Error("A permissão para a origem ativa não foi concedida.");
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined || tab.url === undefined || new URL(tab.url).origin !== origin) {
@@ -219,9 +228,27 @@ async function appendCapturedEvent(
     event = { ...event, secretReference: reference };
   }
   if (event.upload?.contentBase64 !== undefined) {
-    await uploadStore.put(event.upload);
-    const { contentBase64: _content, ...metadata } = event.upload;
-    event = { ...event, upload: metadata };
+    const proposed = event.upload;
+    const existing = (await uploadStore.list()).filter((upload) =>
+      upload.sha256 === undefined || proposed.sha256 === undefined
+        ? upload.name !== proposed.name || upload.size !== proposed.size
+        : upload.sha256 !== proposed.sha256);
+    try {
+      validateUploadTotals([...existing, proposed]);
+      await uploadStore.put(proposed);
+      const { contentBase64: _content, ...metadata } = proposed;
+      event = { ...event, upload: metadata };
+    } catch (error) {
+      const { upload: _upload, ...withoutUpload } = event;
+      event = {
+        ...withoutUpload,
+        type: "unsupported",
+        unsupportedCode: "UNSUPPORTED_INTERACTION",
+        unsupportedReason: error instanceof Error
+          ? error.message
+          : "O upload excedeu os limites da sessão."
+      };
+    }
   }
   const updated: RecorderCheckpoint = {
     ...checkpoint,
@@ -243,6 +270,8 @@ async function captureScreenshot(
   sender: chrome.runtime.MessageSender
 ): Promise<void> {
   if (!screenshotLimiter.tryAcquire(Date.now()) || sender.tab?.id === undefined || sender.tab.windowId === undefined) return;
+  const currentTab = await chrome.tabs.get(sender.tab.id);
+  if (!currentTab.active || currentTab.windowId !== sender.tab.windowId) return;
   const generated = generatePackage(checkpoint.name, checkpoint.events, checkpoint.resolvedIssueIds);
   const intent = generated.intents.find((candidate) => candidate.eventIds.includes(event.id));
   if (intent === undefined) return;
@@ -296,6 +325,7 @@ async function fail(_reason: string): Promise<RecorderResponse> {
   }
   const checkpoint = transition(current, "failed");
   await checkpointStore.save(checkpoint);
+  await clearSensitiveStores();
   return { ok: true, checkpoint };
 }
 
@@ -313,6 +343,10 @@ async function clearSession(): Promise<void> {
   await Promise.all([
     checkpointStore.clear(), evidenceStore.clear(), secretStore.clear(), uploadStore.clear()
   ]);
+}
+
+async function clearSensitiveStores(): Promise<void> {
+  await Promise.all([evidenceStore.clear(), secretStore.clear(), uploadStore.clear()]);
 }
 
 async function requireCheckpoint(): Promise<RecorderCheckpoint> {
@@ -344,6 +378,7 @@ async function appendBrowserEvent(
   if (elapsed(checkpoint, now) > 480 * 60 * 1_000) {
     const failed = transition(checkpoint, "failed");
     await checkpointStore.save(failed);
+    await clearSensitiveStores();
     return;
   }
   const event: RawCaptureEvent = {

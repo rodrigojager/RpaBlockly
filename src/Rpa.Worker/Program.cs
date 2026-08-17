@@ -72,6 +72,8 @@ builder.Services.AddSingleton(workerEnvironment);
 builder.Services.AddSingleton(packageRegistry);
 builder.Services.AddSingleton<IOneTimeCodeProvider, MicrosoftGraphEmailOneTimeCodeProvider>();
 builder.Services.AddSingleton<SqlWorkItemRepository>();
+builder.Services.AddSingleton<IWorkItemExecutionRepository>(services =>
+    services.GetRequiredService<SqlWorkItemRepository>());
 builder.Services.AddSingleton<WorkItemProcessor>();
 builder.Services.AddHostedService<RpaBackgroundService>();
 

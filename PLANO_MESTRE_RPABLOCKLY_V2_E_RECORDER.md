@@ -29,7 +29,7 @@ Nenhum código do Recorder deve ser iniciado antes da aprovação do gate `V2-G1
 
 Baseline auditada em 17 de agosto de 2026:
 
-- diretório exclusivo de trabalho: `C:\Users\rodrigo.pinheiro\Desktop\Base-RPA-Blockly`;
+- diretório exclusivo de trabalho: a raiz deste repositório;
 - branch de trabalho: `feature/rpablockly-v2`;
 - commit de partida: `03b74fe2197a`;
 - runtime: .NET 9;
@@ -43,7 +43,7 @@ Baseline auditada em 17 de agosto de 2026:
 - armazenamento atual: caminho de fluxo e configuração definido por RPA, sem pacote, revisão ou compare-and-swap;
 - ausentes: schemas V2, catálogo separado de localizadores, política separada, package stores, provider SQL de pacotes, migrador V1 → V2, extensão e importador Recorder.
 
-Nenhuma fase deste plano autoriza editar arquivos fora de `C:\Users\rodrigo.pinheiro\Desktop\Base-RPA-Blockly`.
+Nenhuma fase deste plano autoriza editar arquivos fora da raiz deste repositório.
 
 ### 2.1 Consequências desta auditoria
 

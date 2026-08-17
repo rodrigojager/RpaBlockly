@@ -6,7 +6,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Playwright;
+using Rpa.Worker.Configuration;
+using Rpa.Worker.Data;
+using Rpa.Worker.Domain;
+using Rpa.Worker.Execution;
 using RpaFlow.Contracts.Recorder;
 using RpaFlow.Contracts.V2;
 using RpaFlow.Packages;
@@ -529,15 +534,30 @@ static async Task CheckProductionRecorderPipelineAsync(
         uploadPath,
         "arquivo sanitizado da fixture\n",
         new UTF8Encoding(false, true));
+    await RecorderExtensionLifecycle.VerifyLoadedAsync(
+        Path.Combine(extensionRoot, "build"),
+        testRoot);
+    Check(true,
+        "o Chromium carrega manifesto, service worker e side panel MV3 empacotados");
     var messages = await CaptureRecorderMessagesAsync(
         fixture.BaseUrl,
         contentScript,
         uploadPath);
-    Check(messages.Count >= 7,
-        "a extensão real captura formulário, SPA, upload, DOM dinâmico e iframe");
+    Check(messages.Count >= 9,
+        "a extensão captura formulário, SPA, upload, scope, shadow DOM aberto, DOM dinâmico e iframe");
     Check(messages.Any(item =>
             item?["event"]?["type"]?.GetValue<string>() == "select"),
         "a extensão registra a seleção nativa como selectOption");
+    Check(messages.Any(item =>
+            item?["event"]?["target"]?["scope"]?["selector"]?
+                .GetValue<string>() == "[data-testid=\"scope-primary\"]"),
+        "a extensão cria scope estável quando o alvo não é globalmente único");
+    Check(messages.Any(item =>
+            item?["event"]?["target"]?["attributes"]?["data-testid"]?
+                .GetValue<string>() == "shadow-action" &&
+            item?["event"]?["target"]?["closedShadowRoot"]?
+                .GetValue<bool>() == false),
+        "a extensão captura alvo executável dentro de shadow root aberto");
     var serializedMessages = messages.ToJsonString(new JsonSerializerOptions
     {
         WriteIndented = true
@@ -609,14 +629,17 @@ static async Task CheckProductionRecorderPipelineAsync(
         ConfigurationDirectory: testRoot,
         ReadinessQuietPeriodMs: 50,
         FormStabilityMs: 50);
-    var strictObserver = new RecorderE2EObserver();
-    var strictResult = await new PlaywrightV2FlowExecutor(snapshot, options, strictObserver)
-        .ExecuteAsync(
-            new FlowExecutionRequest("recorder-e2e-strict", input, [], attachments),
-            CancellationToken.None);
-    Check(strictResult.ExecutedActions == snapshot.Flow.Actions.Count,
-        "o pacote importado executa integralmente em strict pelo file store");
-    Check(!strictObserver.Events.Any(item => item.Kind == "locatorFallbackSelected"),
+    var workerRepository = await ExecuteRecorderPackageThroughWorkerAsync(
+        repositoryRoot,
+        testRoot,
+        input,
+        attachments,
+        options.Browser);
+    Check(workerRepository.Status == "Succeeded" &&
+          workerRepository.ExecutedActions == snapshot.Flow.Actions.Count &&
+          workerRepository.Failure is null,
+        "Recorder → ZIP → Editor → File Store → Worker → Runtime conclui em strict");
+    Check(!workerRepository.Events.Any(item => item.Kind == "locatorFallbackSelected"),
         "strict usa somente o candidato primário gravado");
 
     fixture.ChangedDom = true;
@@ -639,6 +662,107 @@ static async Task CheckProductionRecorderPipelineAsync(
     Check(fallbackResult.ExecutedActions == fallbackSnapshot.Flow.Actions.Count &&
           fallbackObserver.Events.Any(item => item.Kind == "locatorFallbackSelected"),
         "fallback conclui após a alteração controlada do localizador primário no DOM");
+
+    var adaptiveDocuments = fallbackSnapshot.CopyDocuments();
+    adaptiveDocuments.Policy.LocatorResilience.Mode = LocatorResilienceMode.Adaptive;
+    adaptiveDocuments.Policy.LocatorResilience.LearningWriteBack =
+        LearningWriteBackMode.Memory;
+    adaptiveDocuments.Policy.LocatorResilience.Promotion =
+        LocatorPromotionMode.AfterSuccessfulExecution;
+    _ = await store.PublishAsync(
+        "editor-test",
+        adaptiveDocuments,
+        fallbackSnapshot.Revision,
+        CancellationToken.None);
+    var safeBoundaryActionId = adaptiveDocuments.Flow.Actions[^1].Id;
+    var validatedRepository = await ExecuteRecorderPackageThroughWorkerAsync(
+        repositoryRoot,
+        testRoot,
+        input,
+        attachments,
+        options.Browser,
+        WorkerExecutionMode.SafeValidation,
+        safeBoundaryActionId);
+    Check(validatedRepository.Status == "Validated" &&
+          validatedRepository.Events.Any(item =>
+              item.Kind == "locatorPromotionDiscarded") &&
+          !validatedRepository.Events.Any(item =>
+              item.Kind == "locatorPromotionCompleted"),
+        "worker descarta aprendizado adaptativo quando o resultado final é Validated");
+}
+
+static async Task<RecorderWorkerRepository> ExecuteRecorderPackageThroughWorkerAsync(
+    string repositoryRoot,
+    string testRoot,
+    JsonObject input,
+    JsonObject attachments,
+    string browser,
+    WorkerExecutionMode executionMode = WorkerExecutionMode.Production,
+    string? safeValidationBoundaryActionId = null)
+{
+    var options = new RpaWorkerOptions
+    {
+        Enabled = true,
+        ExecutionMode = executionMode,
+        WorkerId = "recorder-e2e-worker",
+        HeartbeatSeconds = 3_600,
+        CaseTimeoutMinutes = 2,
+        Definitions = new Dictionary<string, RpaDefinitionOptions>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ["recorder-e2e"] = new RpaDefinitionOptions
+            {
+                Enabled = true,
+                ClaimEnabled = true,
+                SafeValidationBoundaryActionId = safeValidationBoundaryActionId,
+                Package = new RpaPackageReferenceOptions
+                {
+                    RpaId = "editor-test",
+                    Provider = "File",
+                    OriginName = "source",
+                    Location = Path.Combine(testRoot, "package-store")
+                },
+                Runtime = new RpaRuntimeOptions
+                {
+                    Headless = true,
+                    Browser = browser,
+                    ActionTimeoutSeconds = 15,
+                    UploadTimeoutSeconds = 15,
+                    ReadinessQuietPeriodMs = 50,
+                    FormStabilityMs = 50
+                }
+            }
+        }
+    };
+    var paths = new WorkerPaths(
+        testRoot,
+        repositoryRoot,
+        Path.Combine(testRoot, "worker-artifacts"),
+        Path.Combine(testRoot, "worker-sessions"));
+    Directory.CreateDirectory(paths.ArtifactRoot);
+    Directory.CreateDirectory(paths.SessionStateRoot);
+    var environment = new WorkerEnvironment(string.Empty, paths);
+    var registry = RpaPackageRegistryFactory.Create(options, environment);
+    var repository = new RecorderWorkerRepository();
+    var processor = new WorkItemProcessor(
+        options,
+        environment,
+        registry,
+        repository,
+        new RecorderOneTimeCodeProvider(),
+        NullLogger<WorkItemProcessor>.Instance);
+    var workItem = new RpaWorkItem(
+        Guid.NewGuid(),
+        "recorder-e2e",
+        "recorder-e2e-batch",
+        null,
+        1,
+        1,
+        input.ToJsonString(),
+        "{}",
+        attachments.ToJsonString());
+    await processor.ProcessAsync(workItem, CancellationToken.None);
+    return repository;
 }
 
 static async Task<JsonArray> CaptureRecorderMessagesAsync(
@@ -696,9 +820,11 @@ static async Task<JsonArray> CaptureRecorderMessagesAsync(
     await page.SetInputFilesAsync("#arquivo", uploadPath);
     await page.ClickAsync("#spa-next");
     await page.ClickAsync("#dynamic-action");
+    await page.ClickAsync("[data-testid='scope-primary'] button");
+    await page.Locator("#shadow-host").Locator("[data-testid='shadow-action']").ClickAsync();
     await frame.ClickAsync("#frame-action");
     await page.WaitForFunctionAsync(
-        "() => (globalThis.__recorderMessages?.length ?? 0) >= 7");
+        "() => (globalThis.__recorderMessages?.length ?? 0) >= 9");
     var json = await page.EvaluateAsync<string>(
         "() => JSON.stringify(globalThis.__recorderMessages ?? [])");
     return JsonNode.Parse(json)?.AsArray()
@@ -1122,4 +1248,98 @@ file sealed class RecorderE2EObserver : IFlowExecutionObserver
         Events.Add(executionEvent);
         return ValueTask.CompletedTask;
     }
+}
+
+file sealed class RecorderWorkerRepository : IWorkItemExecutionRepository
+{
+    public string? Status { get; private set; }
+
+    public int ExecutedActions { get; private set; }
+
+    public Exception? Failure { get; private set; }
+
+    public List<FlowExecutionEvent> Events { get; } = [];
+
+    public Task StartExecutionAsync(
+        string executionId,
+        RpaWorkItem workItem,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    public Task SetExecutionPackageAsync(
+        string executionId,
+        string originName,
+        RpaPackageSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (snapshot.RpaId != "editor-test" || originName != "source")
+        {
+            throw new InvalidOperationException("O worker não fixou o pacote importado esperado.");
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RenewLeaseAsync(Guid workItemId, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    public Task CompleteAsync(
+        string executionId,
+        RpaWorkItem workItem,
+        string status,
+        string outputJson,
+        int executedActions,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Status = status;
+        ExecutedActions = executedActions;
+        return Task.CompletedTask;
+    }
+
+    public Task FailAsync(
+        string executionId,
+        RpaWorkItem workItem,
+        Exception exception,
+        bool allowRetry,
+        CancellationToken cancellationToken)
+    {
+        Failure = exception;
+        Status = allowRetry && workItem.AttemptCount < workItem.MaxAttempts
+            ? "Retry"
+            : "Failed";
+        return Task.CompletedTask;
+    }
+
+    public Task SaveOutputsAsync(
+        string executionId,
+        RpaWorkItem workItem,
+        IReadOnlyList<MaterializedOutput> outputs,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task SaveArtifactsAsync(
+        string executionId,
+        RpaWorkItem workItem,
+        IReadOnlyList<MaterializedArtifact> artifacts,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task AppendEventAsync(
+        FlowExecutionEvent executionEvent,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Events.Add(executionEvent);
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class RecorderOneTimeCodeProvider : IOneTimeCodeProvider
+{
+    public Task<OneTimeCodeResult> WaitForCodeAsync(
+        OneTimeCodeRequest request,
+        CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("A fixture Recorder não solicita código de uso único.");
 }
