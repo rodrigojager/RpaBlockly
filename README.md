@@ -171,6 +171,7 @@ O migrador nunca sobrescreve a origem e começa com policy `strict`.
 | `src/Rpa.Worker` | consumo SQL, execução, persistência e OTP por Graph. |
 | `tools/RpaFlow.Migrator` | conversão offline schema 1 → pacote V2. |
 | `tools/RpaFlow.Legacy.Contracts` | contrato histórico isolado. |
+| `tools/RpaFlow.RecorderFixture` | site local loopback para aceite strict/fallback do Recorder. |
 | `examples/` e `templates/` | exemplo e scaffold operacionais V2. |
 | `tests/` | checks executáveis de contrato, stores, editor, worker e navegador. |
 

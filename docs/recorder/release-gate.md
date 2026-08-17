@@ -12,7 +12,7 @@
 | REC-137 | Threat model, `THIRD_PARTY_NOTICES.md`, SBOM SPDX e auditorias NuGet/npm fazem parte do gate. |
 | REC-138 | `release.mjs` faz dois builds byte a byte e verifica o checksum versionado. |
 | REC-139 | Manuais de cliente, desenvolvedor, privacidade e troubleshooting estão em `docs/recorder`. |
-| REC-140 | O roteiro de instalação limpa está versionado para sign-off por pessoa independente antes da promoção de RC para GA. |
+| REC-140 | Launcher loopback, área descartável, controles sem edição de JSON, verificador de privacidade, roteiro fechado e relatório pendente estão versionados. A promoção para GA ainda exige execução e sign-off por pessoa independente. |
 
 Comandos bloqueantes:
 
@@ -23,5 +23,6 @@ Comandos bloqueantes:
 ```
 
 O gate automatizado não substitui o sign-off humano descrito em
-`teste-instalacao-limpa.md`. O release permanece identificado como RC até essa
-evidência externa ser registrada.
+`teste-instalacao-limpa.md`. O estado explícito está em
+`relatorio-instalacao-limpa.md`; o release permanece identificado como RC até
+essa evidência externa ser preenchida e aprovada.

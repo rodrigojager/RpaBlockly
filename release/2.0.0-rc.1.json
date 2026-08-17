@@ -7,6 +7,12 @@
   "recorderVersion": "1.0.0-rc.1",
   "recorderArtifact": "rpablockly-recorder-1.0.0-rc.1.zip",
   "recorderChecksum": "a17745ec5fc086261ba5290ed6443fa0122d3ad08d52e2c81e6a382cf5f164b3",
+  "releaseStatus": "release-candidate",
+  "humanAcceptance": {
+    "requirement": "REC-140",
+    "status": "pending",
+    "report": "docs/recorder/relatorio-instalacao-limpa.md"
+  },
   "documents": [
     "flow.production.json",
     "locators.production.json",

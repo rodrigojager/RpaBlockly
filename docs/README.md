@@ -14,6 +14,7 @@ Comece pelo [README da raiz](../README.md). A documentação operacional da V2 �
 - [privacidade do Recorder](recorder/privacidade.md);
 - [troubleshooting do Recorder](recorder/troubleshooting.md);
 - [aceite em instalação limpa](recorder/teste-instalacao-limpa.md);
+- [relatório do aceite humano REC-140](recorder/relatorio-instalacao-limpa.md);
 - [evidências do gate REC-G12](recorder/release-gate.md);
 - [solução de problemas](referencia-markdown/tutorial-solucao-problemas-rpa-blockly.md);
 - [ADRs](adr/README.md).

@@ -27,5 +27,6 @@
     <Project Path="tools/RpaFlow.ContractGenerator/RpaFlow.ContractGenerator.csproj" />
     <Project Path="tools/RpaFlow.Legacy.Contracts/RpaFlow.Legacy.Contracts.csproj" />
     <Project Path="tools/RpaFlow.Migrator/RpaFlow.Migrator.csproj" />
+    <Project Path="tools/RpaFlow.RecorderFixture/RpaFlow.RecorderFixture.csproj" />
   </Folder>
 </Solution>

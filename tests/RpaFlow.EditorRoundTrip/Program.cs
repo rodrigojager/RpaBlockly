@@ -84,7 +84,26 @@ static async Task PrepareProjectAsync(string repositoryRoot, string testRoot)
         Path.Combine(testRoot, "EditorTest.csproj"),
         "<Project Sdk=\"Microsoft.NET.Sdk\" />\n",
         utf8);
-    await File.WriteAllTextAsync(Path.Combine(testRoot, "appsettings.json"), "{}\n", utf8);
+    await File.WriteAllTextAsync(
+        Path.Combine(testRoot, "appsettings.json"),
+        """
+        {
+          "Runtime": {
+            "ActionTimeoutSeconds": 30,
+            "BusySelectors": [".loading"]
+          },
+          "Input": {
+            "Url": "https://original.test/",
+            "Aceite": false
+          },
+          "Blockly": {
+            "Variables": {
+              "preservada": "sim"
+            }
+          }
+        }
+        """.ReplaceLineEndings("\n") + "\n",
+        utf8);
     await File.WriteAllTextAsync(
         Path.Combine(testRoot, "rpa.editor.json"),
         """
@@ -94,7 +113,31 @@ static async Task PrepareProjectAsync(string repositoryRoot, string testRoot)
           "configurationFile": "appsettings.json",
           "rpaId": "editor-test",
           "packageStoreRoot": "package-store",
-          "configurationFields": []
+          "configurationFields": [
+            {
+              "path": "Input.Url",
+              "label": "URL inicial",
+              "source": "input.url",
+              "type": "url"
+            },
+            {
+              "path": "Input.Aceite",
+              "label": "Aceite",
+              "source": "input.aceite",
+              "type": "checkbox"
+            },
+            {
+              "path": "Runtime.ActionTimeoutSeconds",
+              "label": "Timeout",
+              "type": "number"
+            },
+            {
+              "path": "Runtime.BusySelectors",
+              "label": "Loaders",
+              "type": "stringList",
+              "nullable": true
+            }
+          ]
         }
         """.ReplaceLineEndings("\n") + "\n",
         utf8);
@@ -192,16 +235,44 @@ static async Task CheckBrowserRoundTripAsync(string editorUrl, string testRoot)
     Check(pickerValue == "secondary",
         "FieldLocatorReference persiste somente o locatorId escolhido");
 
-    var policyJson = await page.InputValueAsync("#policy-json");
-    var policyDraft = JsonNode.Parse(policyJson)!.AsObject();
-    policyDraft["locatorResilience"]!["mode"] = "fallback";
-    await page.FillAsync("#policy-json", policyDraft.ToJsonString(
-        new JsonSerializerOptions { WriteIndented = true }));
+    Check(await page.GetAttributeAsync("#policy-json", "readonly") is not null,
+        "JSON da policy é somente visualização e não exige edição manual");
+    await page.SelectOptionAsync("#policy-mode", "fallback");
     await page.ClickAsync("#save-policy-draft");
     var appliedPolicy = JsonNode.Parse(await page.EvaluateAsync<string>(
         "() => JSON.stringify(window.RpaFlowEditorTesting.packagePolicy())"))!.AsObject();
     Check(appliedPolicy["locatorResilience"]?["mode"]?.GetValue<string>() == "fallback",
-        "drawer de policy valida e aplica a política ao rascunho");
+        "controles tipados da policy aplicam fallback ao rascunho");
+
+    await page.ClickAsync("#open-configuration");
+    await page.Locator("#configuration-dialog").WaitForAsync(
+        new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+    Check(await page.Locator("#configuration-dialog").GetAttributeAsync("open") is not null,
+        "configuração local abre em formulário tipado");
+    await page.FillAsync(
+        "[data-configuration-path='Input.Url']",
+        "https://alterada.test/");
+    await page.CheckAsync("[data-configuration-path='Input.Aceite']");
+    await page.FillAsync(
+        "[data-configuration-path='Runtime.ActionTimeoutSeconds']",
+        "45");
+    await page.FillAsync(
+        "[data-configuration-path='Runtime.BusySelectors']",
+        ".loading\n[aria-busy='true']");
+    await page.ClickAsync("#save-configuration");
+    await page.Locator("#configuration-dialog").WaitForAsync(
+        new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    var savedConfiguration = JsonNode.Parse(await File.ReadAllTextAsync(
+        Path.Combine(testRoot, "appsettings.json")))!.AsObject();
+    Check(savedConfiguration["Input"]?["Url"]?.GetValue<string>() ==
+          "https://alterada.test/" &&
+          savedConfiguration["Input"]?["Aceite"]?.GetValue<bool>() == true &&
+          savedConfiguration["Runtime"]?["ActionTimeoutSeconds"]?.GetValue<int>() == 45 &&
+          savedConfiguration["Runtime"]?["BusySelectors"]?.AsArray().Count == 2,
+        "formulário salva URL, booleano, número e lista sem editar JSON");
+    Check(savedConfiguration["Blockly"]?["Variables"]?["preservada"]
+              ?.GetValue<string>() == "sim",
+        "campos ocultos da configuração são preservados");
 
     await page.ClickAsync("#open-recorder-import");
     Check(await page.Locator("#recorder-import-dialog").GetAttributeAsync("open") is not null,

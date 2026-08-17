@@ -30,6 +30,19 @@ pelo código de produção, importa no editor, publica no file store e atravessa
 worker até o runtime em `strict`. Uma segunda execução comprova `fallback` após a
 alteração controlada do DOM.
 
+Para inspeção humana, a mesma fixture possui um launcher público e restrito a
+loopback:
+
+```powershell
+dotnet run --project tools/RpaFlow.RecorderFixture
+dotnet run --project tools/RpaFlow.RecorderFixture -- --changed-dom
+```
+
+O primeiro comando preserva o DOM gravado; o segundo remove apenas o
+`data-testid` primário da ação dinâmica. O procedimento independente completo,
+inclusive a área descartável e o relatório, está no
+[roteiro REC-140](teste-instalacao-limpa.md).
+
 ## Importar no editor
 
 1. abra o pacote de destino e clique em **Importar Recorder**;
@@ -40,6 +53,10 @@ alteração controlada do DOM.
    subflow;
 5. autorize remapeamento apenas depois de revisar as colisões;
 6. valide, aplique e reabra a revisão publicada.
+
+A configuração local e a policy possuem controles tipados na interface. O JSON
+mostrado na policy é uma visualização gerada, não o caminho necessário para mudar
+entre `strict`, `fallback` e `adaptive`.
 
 As amostras ajudam na revisão, mas não são publicadas como dados operacionais.
 O bundle original e os mappings ficam como evidência lateral da revisão.

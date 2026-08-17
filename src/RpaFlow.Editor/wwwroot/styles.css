@@ -223,6 +223,25 @@ button.secondary {
   min-height: 60vh;
 }
 
+.json-editor.compact {
+  min-height: 10rem;
+  margin-top: 0.6rem;
+}
+
+.policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.policy-grid label {
+  display: grid;
+  gap: 0.35rem;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .warning-list {
   margin: 0 0 0.8rem;
   padding: 0.7rem 0.7rem 0.7rem 1.8rem;
@@ -496,6 +515,7 @@ textarea {
   }
 
   .configuration-grid,
+  .policy-grid,
   .recorder-review-grid,
   .recorder-options-grid,
   .mapping-row,

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using RpaFlow.Contracts;
 using RpaFlow.Packages;
@@ -99,6 +100,23 @@ foreach (var file in ownedFiles)
     }
 }
 Check(true, "não há referência de cliente externo, mojibake nem chave privada");
+
+var releaseMetadata = JsonNode.Parse(ReadStrict(
+    Path.Combine(repositoryRoot, "release", "2.0.0-rc.1.json")))?.AsObject()
+    ?? throw new InvalidOperationException("Metadados do release candidate estão vazios.");
+var acceptanceReport = ReadStrict(Path.Combine(
+    repositoryRoot,
+    "docs",
+    "recorder",
+    "relatorio-instalacao-limpa.md"));
+Check(
+    releaseMetadata["releaseStatus"]?.GetValue<string>() == "release-candidate" &&
+    releaseMetadata["humanAcceptance"]?["requirement"]?.GetValue<string>() == "REC-140" &&
+    releaseMetadata["humanAcceptance"]?["status"]?.GetValue<string>() == "pending" &&
+    acceptanceReport.Contains(
+        "PENDENTE — NÃO EXECUTADO POR PESSOA INDEPENDENTE",
+        StringComparison.Ordinal),
+    "release permanece RC enquanto o aceite humano REC-140 está pendente");
 
 var forbiddenNames = Directory.EnumerateFiles(repositoryRoot, "*", SearchOption.AllDirectories)
     .Where(path => !IsIgnored(repositoryRoot, path))

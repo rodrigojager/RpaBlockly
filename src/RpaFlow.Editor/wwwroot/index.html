@@ -95,7 +95,54 @@
             A política pertence à mesma revisão do fluxo e do catálogo. O backend valida
             combinações de modo, promoção e write-back antes de publicar.
           </p>
-          <textarea id="policy-json" class="json-editor" spellcheck="false"></textarea>
+          <div class="policy-grid">
+            <label>Modo
+              <select id="policy-mode">
+                <option value="strict">Strict — somente o candidato principal</option>
+                <option value="fallback">Fallback — candidatos exatos em ordem</option>
+                <option value="adaptive">Adaptive — permite heurística controlada</option>
+              </select>
+            </label>
+            <label>Write-back de aprendizado
+              <select id="policy-learning-write-back">
+                <option value="disabled">Desabilitado</option>
+                <option value="memory">Memória da execução</option>
+                <option value="source">Origem do pacote</option>
+                <option value="overlay">Overlay</option>
+              </select>
+            </label>
+            <label>Promoção
+              <select id="policy-promotion">
+                <option value="disabled">Desabilitada</option>
+                <option value="afterSuccessfulExecution">Após execução bem-sucedida</option>
+              </select>
+            </label>
+            <label>Principal que falhou
+              <select id="policy-failed-primary">
+                <option value="keep">Manter posição</option>
+                <option value="moveToLast">Mover para o final após confirmação</option>
+              </select>
+            </label>
+            <label>Confiança mínima
+              <input id="policy-minimum-confidence" type="number" min="0" max="1" step="0.01">
+            </label>
+            <label>Diferença mínima para o segundo colocado
+              <input id="policy-minimum-runner-up-gap" type="number" min="0" max="1" step="0.01">
+            </label>
+            <label>Máximo de candidatos por locator
+              <input id="policy-maximum-candidates" type="number" min="1" max="100" step="1">
+            </label>
+            <label>Máximo de nós heurísticos
+              <input id="policy-maximum-heuristic-nodes" type="number" min="1" max="1000000" step="1">
+            </label>
+            <label>Tempo máximo de resolução (ms)
+              <input id="policy-maximum-resolution-ms" type="number" min="100" max="600000" step="1">
+            </label>
+          </div>
+          <details>
+            <summary>Visualização JSON gerada</summary>
+            <textarea id="policy-json" class="json-editor compact" readonly></textarea>
+          </details>
           <button id="save-policy-draft" type="button">Aplicar política ao rascunho</button>
         </article>
       </section>
@@ -110,7 +157,11 @@
           </div>
           <button type="submit" class="secondary">Fechar</button>
         </header>
-        <textarea id="configuration-json" class="json-editor tall" spellcheck="false"></textarea>
+        <p class="dialog-description">
+          Somente os campos autorizados pelo perfil são exibidos. As demais seções da
+          configuração são preservadas sem expor ou reescrever valores ocultos.
+        </p>
+        <div id="configuration-fields" class="configuration-grid"></div>
         <footer class="dialog-actions">
           <button id="save-configuration" type="button">Salvar configuração</button>
         </footer>

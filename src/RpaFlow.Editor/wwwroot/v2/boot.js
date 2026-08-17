@@ -8,8 +8,10 @@ import {
   savePackage
 } from "./api.js";
 import { actionCatalog } from "./action-catalog.js";
+import { initializeConfigurationUi } from "./configuration-ui.js";
 import { setLocatorProvider } from "./field-locator-reference.js";
 import { initializeLocatorUi } from "./locator-ui.js";
+import { initializePolicyUi, renderPolicyUi } from "./policy-ui.js";
 import { initializeRecorderImport } from "./recorder-import.js";
 import {
   actionFromBlock,
@@ -49,8 +51,6 @@ const propertiesTitle = document.getElementById("action-properties-title");
 const conflictPanel = document.getElementById("revision-conflict");
 const compareDialog = document.getElementById("compare-dialog");
 const compareContent = document.getElementById("compare-content");
-const configurationDialog = document.getElementById("configuration-dialog");
-const configurationJson = document.getElementById("configuration-json");
 let changeTimer = null;
 let conflictDraft = null;
 
@@ -104,9 +104,8 @@ document.getElementById("save-action-properties").addEventListener("click", () =
     showMessage(error.message, true);
   }
 });
-document.getElementById("save-policy-draft").addEventListener("click", () => {
+initializePolicyUi(value => {
   try {
-    const value = JSON.parse(document.getElementById("policy-json").value);
     const packageValue = structuredClone(editorState.package);
     packageValue.policy = value;
     const validation = validatePackageLocally(
@@ -115,25 +114,21 @@ document.getElementById("save-policy-draft").addEventListener("click", () => {
       packageValue.policy);
     if (validation.errors.length) throw new Error(validation.errors.join("\n"));
     updateState({ package: packageValue });
+    renderPolicy();
     refresh();
     showMessage("Política aplicada ao rascunho. Salve o pacote para persistir.");
   } catch (error) {
     showMessage(error.message, true);
   }
-});
+}, error => showMessage(error.message, true));
 document.getElementById("compare-revision").addEventListener("click", compareRevision);
 document.getElementById("save-new-revision").addEventListener("click", saveAfterExplicitCompare);
 document.getElementById("export-package").addEventListener("click", exportPackage);
-document.getElementById("open-configuration").addEventListener("click", openConfiguration);
-document.getElementById("save-configuration").addEventListener("click", async () => {
-  try {
-    const value = JSON.parse(configurationJson.value);
-    await saveConfiguration(value);
-    showMessage("Configuração salva.");
-    configurationDialog.close();
-  } catch (error) {
-    showMessage(error.message, true);
-  }
+initializeConfigurationUi({
+  fields: () => editorState.session?.profile?.configurationFields ?? [],
+  load: readConfiguration,
+  save: saveConfiguration,
+  onMessage: showMessage
 });
 
 try {
@@ -337,15 +332,6 @@ function selectBlock(block) {
   }
 }
 
-async function openConfiguration() {
-  try {
-    configurationJson.value = JSON.stringify(await readConfiguration(), null, 2);
-    configurationDialog.showModal();
-  } catch (error) {
-    showMessage(error.message, true);
-  }
-}
-
 function exportPackage() {
   const blob = new Blob([JSON.stringify(currentDocuments(), null, 2) + "\n"], {
     type: "application/json"
@@ -365,9 +351,8 @@ function renderIdentity() {
 }
 
 function renderPolicy() {
-  const editor = document.getElementById("policy-json");
   if (editorState.package?.policy) {
-    editor.value = JSON.stringify(editorState.package.policy, null, 2);
+    renderPolicyUi(editorState.package.policy);
   }
 }
 
