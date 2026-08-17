@@ -6,6 +6,7 @@
 - `assets/manual.css`: aparência responsiva e modo de impressão.
 - `assets/manual.js`: renderização, pesquisa, filtros, tema e cópia de exemplos.
 - `referencia-markdown/`: documentação técnica complementar do runtime e editor.
+- `referencia-markdown/integracao-worker-banco.md`: contrato genérico entre fila SQL, worker e runtime.
 
 Abra o manual diretamente ou execute `..\abrir-manual.cmd`. Nenhum arquivo depende de internet.
 

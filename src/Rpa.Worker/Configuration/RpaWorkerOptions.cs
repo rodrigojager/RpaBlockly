@@ -110,6 +110,8 @@ public sealed class RpaDefinitionOptions
 
     public RpaRuntimeOptions Runtime { get; set; } = new();
 
+    public string? SafeValidationBoundaryActionId { get; set; }
+
     public List<string> IrreversibleActionIds { get; set; } = [];
 
     public List<OutputMappingOptions> Outputs { get; set; } = [];

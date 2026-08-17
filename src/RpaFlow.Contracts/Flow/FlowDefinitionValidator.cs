@@ -1188,9 +1188,10 @@ public static class FlowDefinitionValidator
             var requirement = requirements[index];
             var prefix = $"inputs[{index}]";
             if (string.IsNullOrWhiteSpace(requirement.Path) ||
-                !requirement.Path.StartsWith("input.", StringComparison.OrdinalIgnoreCase))
+                !IsDeclaredInputPath(requirement.Path))
             {
-                errors.Add($"{prefix}.path deve usar input.<caminho>.");
+                errors.Add(
+                    $"{prefix}.path deve usar input.<caminho> ou attachments.<caminho>.");
             }
             else if (!paths.Add(requirement.Path))
             {
@@ -1203,6 +1204,11 @@ public static class FlowDefinitionValidator
             }
         }
     }
+
+    private static bool IsDeclaredInputPath(string path) =>
+        (path.StartsWith("input.", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("attachments.", StringComparison.OrdinalIgnoreCase)) &&
+        IsDataPath(path);
 
     private static void ValidateRuntimeTarget(
         string? target,

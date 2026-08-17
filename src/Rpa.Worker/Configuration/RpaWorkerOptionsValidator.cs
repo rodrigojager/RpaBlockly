@@ -126,7 +126,8 @@ public static class RpaWorkerOptionsValidator
 
             var flow = await loader.LoadAsync(flowPath, cancellationToken);
             ValidateOneTimeCodeProviders(options, code, definition, flow);
-            var knownIds = EnumerateActions(flow)
+            var actions = EnumerateActions(flow).ToArray();
+            var knownIds = actions
                 .Select(action => action.Id)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var actionId in definition.IrreversibleActionIds)
@@ -137,6 +138,8 @@ public static class RpaWorkerOptionsValidator
                         $"Definitions.{code}.IrreversibleActionIds referencia a ação inexistente '{actionId}'.");
                 }
             }
+
+            ValidateSafeValidationBoundary(code, definition, actions);
 
             if (!string.IsNullOrWhiteSpace(definition.ConfigurationFile))
             {
@@ -155,6 +158,48 @@ public static class RpaWorkerOptionsValidator
 
     public static string ResolvePath(string baseDirectory, string path) =>
         Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path));
+
+    internal static void ValidateSafeValidationBoundary(
+        string code,
+        RpaDefinitionOptions definition,
+        IReadOnlyList<FlowActionDefinition> actions)
+    {
+        var safeBoundaryActionId = definition.SafeValidationBoundaryActionId?.Trim();
+        if (string.IsNullOrWhiteSpace(safeBoundaryActionId))
+        {
+            return;
+        }
+
+        var boundaryAction = actions.FirstOrDefault(action => action.Id.Equals(
+            safeBoundaryActionId,
+            StringComparison.OrdinalIgnoreCase));
+        if (boundaryAction is null)
+        {
+            throw new InvalidOperationException(
+                $"Definitions.{code}.SafeValidationBoundaryActionId referencia " +
+                $"a ação inexistente '{safeBoundaryActionId}'.");
+        }
+
+        if (boundaryAction.Type.Equals("if", StringComparison.OrdinalIgnoreCase) ||
+            boundaryAction.Type.Equals("repeat", StringComparison.OrdinalIgnoreCase) ||
+            boundaryAction.Type.Equals("forEach", StringComparison.OrdinalIgnoreCase) ||
+            boundaryAction.Type.Equals("runSubflow", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Definitions.{code}.SafeValidationBoundaryActionId deve referenciar " +
+                $"uma ação-folha, mas '{safeBoundaryActionId}' usa " +
+                $"'{boundaryAction.Type}'.");
+        }
+
+        if (definition.IrreversibleActionIds.Contains(
+                safeBoundaryActionId,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Definitions.{code}.SafeValidationBoundaryActionId não pode " +
+                "ser também uma ação irreversível.");
+        }
+    }
 
     private static IEnumerable<FlowActionDefinition> EnumerateActions(FlowDefinition flow)
     {

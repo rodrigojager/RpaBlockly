@@ -47,6 +47,16 @@ public sealed class JsonFlowActionStep : IRpaStep
                     context.ExecutionBudget.ExecutedActions),
                 cancellationToken);
             await _handlers.ExecuteAsync(_action, execution, cancellationToken);
+            var directive = await context.GuardAfterActionAsync(
+                _action,
+                cancellationToken);
+            if (directive is not FlowActionExecutionDirective.Continue and
+                not FlowActionExecutionDirective.CompleteExecution)
+            {
+                throw new InvalidOperationException(
+                    $"O guard retornou uma diretiva desconhecida para a ação '{_action.Id}'.");
+            }
+
             await context.ObserveAsync(
                 CreateEvent(
                     "actionCompleted",
@@ -54,6 +64,14 @@ public sealed class JsonFlowActionStep : IRpaStep
                     context.ExecutionBudget.ExecutedActions,
                     stopwatch.ElapsedMilliseconds),
                 cancellationToken);
+            if (directive == FlowActionExecutionDirective.CompleteExecution)
+            {
+                throw new FlowExecutionCompletedSignalException(_action.Id);
+            }
+        }
+        catch (FlowExecutionCompletedSignalException)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {

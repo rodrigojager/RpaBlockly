@@ -4,6 +4,7 @@ using Rpa.Worker.Authentication;
 using Rpa.Worker.Configuration;
 using Rpa.Worker.Execution;
 using RpaFlow.Contracts;
+using RpaFlow.Playwright;
 using RpaFlow.Runtime;
 
 CheckDisabledProviderDoesNotRequireCredentials();
@@ -12,7 +13,164 @@ CheckParsingAndNewestMessage();
 await CheckPollingTimeoutAndAliasLockAsync();
 CheckFlowProviderFences();
 CheckOneTimeCodeOutputSanitization();
-Console.WriteLine("Provider de OTP por e-mail validado com sucesso.");
+CheckConfiguredExecutionGuard();
+await CheckSafeValidationBoundaryConfigurationAsync();
+Console.WriteLine("Worker e provider de OTP por e-mail validados com sucesso.");
+
+static void CheckConfiguredExecutionGuard()
+{
+    var request = new FlowExecutionRequest("guard-worker", [], [], []);
+    var ordinaryAction = new FlowActionDefinition
+    {
+        Id = "preparar-evidencia",
+        Type = "setVariable",
+        Name = "Preparar evidência"
+    };
+    var boundaryAction = new FlowActionDefinition
+    {
+        Id = "registrar-limite-seguro",
+        Type = "screenshot",
+        Name = "Registrar limite seguro"
+    };
+    var irreversibleAction = new FlowActionDefinition
+    {
+        Id = "confirmar-operacao",
+        Type = "click",
+        Name = "Confirmar operação"
+    };
+    var definition = new RpaDefinitionOptions
+    {
+        SafeValidationBoundaryActionId = boundaryAction.Id,
+        IrreversibleActionIds = [irreversibleAction.Id]
+    };
+    var safeGuard = new ConfiguredExecutionGuard(
+        WorkerExecutionMode.SafeValidation,
+        definition);
+
+    safeGuard.BeforeActionAsync(
+            ordinaryAction,
+            request,
+            CancellationToken.None)
+        .GetAwaiter()
+        .GetResult();
+    Check(
+        safeGuard.AfterActionAsync(
+                ordinaryAction,
+                request,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult() == FlowActionExecutionDirective.Continue,
+        "o guard continua depois de uma ação anterior ao limite seguro");
+    safeGuard.BeforeActionAsync(
+            boundaryAction,
+            request,
+            CancellationToken.None)
+        .GetAwaiter()
+        .GetResult();
+    Check(
+        safeGuard.AfterActionAsync(
+                boundaryAction,
+                request,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult() == FlowActionExecutionDirective.CompleteExecution &&
+        safeGuard.SafeValidationBoundaryReached,
+        "o guard encerra com sucesso depois da ação de limite seguro");
+
+    var productionGuard = new ConfiguredExecutionGuard(
+        WorkerExecutionMode.Production,
+        definition);
+    Check(
+        productionGuard.AfterActionAsync(
+                boundaryAction,
+                request,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult() == FlowActionExecutionDirective.Continue &&
+        !productionGuard.SafeValidationBoundaryReached,
+        "o limite seguro não interrompe uma execução de produção");
+
+    var unsafeOrderGuard = new ConfiguredExecutionGuard(
+        WorkerExecutionMode.SafeValidation,
+        definition);
+    AssertInvalid(
+        () => unsafeOrderGuard.BeforeActionAsync(
+                irreversibleAction,
+                request,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult(),
+        "antes do limite seguro configurado");
+
+    var legacyDefinition = new RpaDefinitionOptions
+    {
+        IrreversibleActionIds = [irreversibleAction.Id]
+    };
+    var legacyGuard = new ConfiguredExecutionGuard(
+        WorkerExecutionMode.SafeValidation,
+        legacyDefinition);
+    AssertInvalid(
+        () => legacyGuard.BeforeActionAsync(
+                irreversibleAction,
+                request,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult(),
+        "parou antes da ação irreversível");
+}
+
+static async Task CheckSafeValidationBoundaryConfigurationAsync()
+{
+    var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+    var options = CreateWorkerOptions();
+    var definition = options.Definitions["exemplo"];
+    definition.FlowFile = "examples/RpaExemplo/flow.production.json";
+    definition.SafeValidationBoundaryActionId = "iniciar-fluxo";
+    var paths = new WorkerPaths(
+        repositoryRoot,
+        repositoryRoot,
+        Path.Combine(repositoryRoot, "artifacts"),
+        Path.Combine(repositoryRoot, "storage", "sessions"));
+    await RpaWorkerOptionsValidator.ValidateFlowsAsync(
+        options,
+        paths,
+        CancellationToken.None);
+    Pass("o worker aceita um limite seguro que referencia uma ação existente");
+
+    definition.SafeValidationBoundaryActionId = "acao-inexistente";
+    await AssertInvalidAsync(
+        () => RpaWorkerOptionsValidator.ValidateFlowsAsync(
+            options,
+            paths,
+            CancellationToken.None),
+        "SafeValidationBoundaryActionId referencia a ação inexistente");
+
+    definition.SafeValidationBoundaryActionId = "iniciar-fluxo";
+    definition.IrreversibleActionIds = ["iniciar-fluxo"];
+    await AssertInvalidAsync(
+        () => RpaWorkerOptionsValidator.ValidateFlowsAsync(
+            options,
+            paths,
+            CancellationToken.None),
+        "não pode ser também uma ação irreversível");
+
+    definition.IrreversibleActionIds = [];
+    definition.SafeValidationBoundaryActionId = "executar-subfluxo";
+    AssertInvalid(
+        () => RpaWorkerOptionsValidator.ValidateSafeValidationBoundary(
+            "exemplo",
+            definition,
+            [
+                new FlowActionDefinition
+                {
+                    Id = "executar-subfluxo",
+                    Type = "runSubflow",
+                    Name = "Executar subfluxo",
+                    Subflow = "validacao"
+                }
+            ]),
+        "deve referenciar uma ação-folha");
+}
 
 static void CheckDisabledProviderDoesNotRequireCredentials()
 {
@@ -378,6 +536,44 @@ static void AssertInvalid(Action action, string expectedMessage)
 
     throw new InvalidOperationException(
         $"Era esperada uma falha contendo '{expectedMessage}'.");
+}
+
+static async Task AssertInvalidAsync(
+    Func<Task> action,
+    string expectedMessage)
+{
+    try
+    {
+        await action();
+    }
+    catch (InvalidOperationException exception)
+        when (exception.Message.Contains(
+            expectedMessage,
+            StringComparison.OrdinalIgnoreCase))
+    {
+        Pass($"falha esperada contém '{expectedMessage}'");
+        return;
+    }
+
+    throw new InvalidOperationException(
+        $"Era esperada uma falha contendo '{expectedMessage}'.");
+}
+
+static string FindRepositoryRoot(string start)
+{
+    var directory = new DirectoryInfo(Path.GetFullPath(start));
+    while (directory is not null)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, "RpaBlockly.slnx")))
+        {
+            return directory.FullName;
+        }
+
+        directory = directory.Parent;
+    }
+
+    throw new DirectoryNotFoundException(
+        "Não foi possível localizar a raiz do repositório.");
 }
 
 static void Check(bool condition, string description)

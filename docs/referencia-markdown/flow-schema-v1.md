@@ -43,7 +43,7 @@ Blockly ⇄ JSON schema 1 → runtime .NET
 | --- | --- | --- |
 | `schemaVersion` | número | Obrigatório e igual a `1`. |
 | `name` | texto | Obrigatório e não vazio. |
-| `inputs` | lista | Requisitos verificados antes de abrir o navegador. Pode ser vazia. |
+| `inputs` | lista | Requisitos de dados e anexos verificados antes de abrir o navegador. Pode ser vazia. |
 | `actions` | lista | Sequência principal, com pelo menos uma ação. |
 | `subflows` | objeto | Nome do subfluxo → lista não vazia de ações. Pode ser vazio. |
 
@@ -65,21 +65,28 @@ Toda ação possui:
 
 O modelo compartilhado agrega propriedades de todos os tipos de ação. Informe apenas as propriedades documentadas para o `type` escolhido; uma propriedade conhecida, porém irrelevante, não ganha semântica por estar presente.
 
-## Declaração de inputs
+## Declaração de requisitos de entrada e anexos
 
-Inputs permitem falhar antes de criar o navegador:
+A lista `inputs` permite falhar antes de criar o navegador. Apesar do nome mantido por compatibilidade, cada requisito pode apontar para um dado do caso ou para um anexo já resolvido:
 
 ```json
-{
-  "path": "input.documentos",
-  "type": "array",
-  "required": true
-}
+[
+  {
+    "path": "input.documentos",
+    "type": "array",
+    "required": true
+  },
+  {
+    "path": "attachments.notaFiscal",
+    "type": "string",
+    "required": true
+  }
+]
 ```
 
 | Propriedade | Regra |
 | --- | --- |
-| `path` | Obrigatoriamente `input.<caminho>` e único na lista. |
+| `path` | Obrigatoriamente `input.<caminho>` ou `attachments.<caminho>`, e único na lista. |
 | `type` | `any`, `string`, `number`, `boolean`, `object`, `array` ou `null`. |
 | `required` | Padrão `true`; quando `false`, a ausência é aceita, mas um valor presente ainda precisa ter o tipo declarado. |
 

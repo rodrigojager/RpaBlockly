@@ -158,6 +158,11 @@ public sealed class RpaRunner(
                     await steps[index].ExecuteAsync(context, cancellationToken);
                 }
             }
+            catch (FlowExecutionCompletedSignalException signal)
+            {
+                Console.WriteLine(
+                    $"Execução concluída pelo guard após a ação '{signal.ActionId}'.");
+            }
             catch
             {
                 try

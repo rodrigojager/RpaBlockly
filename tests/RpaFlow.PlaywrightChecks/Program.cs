@@ -445,7 +445,7 @@ var storageStatePath = Path.Combine(
     $"storage-state-{Guid.NewGuid():N}.json");
 var options = new PlaywrightRuntimeOptions(
     Headless: true,
-    Browser: Environment.GetEnvironmentVariable("MARCUS_CHECKS_BROWSER") ?? "chromium",
+    Browser: Environment.GetEnvironmentVariable("RPABLOCKLY_CHECKS_BROWSER") ?? "chromium",
     ActionTimeoutSeconds: 15,
     UploadTimeoutSeconds: 15,
     OutputDirectory: "tmp/playwright-runtime-checks",
@@ -506,10 +506,12 @@ if (oneTimeCodeRequest is null ||
 }
 
 await CheckExecutionGuardAsync(options);
+await CheckAfterActionCompletionAsync(options);
 await CheckTypeAcrossInputsCardinalityAsync(options, originUrl);
 
 Console.WriteLine(
-    $"OK: blocos web, guard autoritativo, if, repeat, forEach aninhado, subfluxo e cadeia de " +
+    $"OK: blocos web, guards antes/depois da ação, if, repeat, forEach aninhado, " +
+    $"subfluxo e cadeia de " +
     $"iframes estável entre frames auxiliares funcionaram em HTML local com " +
     $"o navegador '{options.Browser}'.");
 
@@ -632,6 +634,87 @@ static async Task CheckExecutionGuardAsync(PlaywrightRuntimeOptions options)
     }
 }
 
+static async Task CheckAfterActionCompletionAsync(PlaywrightRuntimeOptions options)
+{
+    var boundaryAction = new FlowActionDefinition
+    {
+        Id = "limite-seguro",
+        Type = "setVariable",
+        Name = "Registrar limite seguro",
+        Target = "runtime.limiteAtingido",
+        Value = JsonSerializer.SerializeToElement(true)
+    };
+    var flow = new FlowDefinition
+    {
+        SchemaVersion = 1,
+        Name = "Teste do encerramento depois da ação",
+        Actions =
+        [
+            new FlowActionDefinition
+            {
+                Id = "executar-validacao-segura",
+                Type = "runSubflow",
+                Name = "Executar subfluxo seguro",
+                Subflow = "validacaoSegura"
+            },
+            new FlowActionDefinition
+            {
+                Id = "depois-do-subfluxo",
+                Type = "setVariable",
+                Name = "Não executar depois do subfluxo",
+                Target = "runtime.depoisDoSubfluxo",
+                Value = JsonSerializer.SerializeToElement(true)
+            }
+        ],
+        Subflows = new Dictionary<string, List<FlowActionDefinition>>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ["validacaoSegura"] =
+            [
+                new FlowActionDefinition
+                {
+                    Id = "repetir-validacao-segura",
+                    Type = "repeat",
+                    Name = "Repetir validação segura",
+                    Times = 2,
+                    Actions =
+                    [
+                        boundaryAction,
+                        new FlowActionDefinition
+                        {
+                            Id = "depois-do-limite",
+                            Type = "setVariable",
+                            Name = "Não executar depois do limite",
+                            Target = "runtime.depoisDoLimite",
+                            Value = JsonSerializer.SerializeToElement(true)
+                        }
+                    ]
+                }
+            ]
+        }
+    };
+    var guard = new CompletingExecutionGuard(boundaryAction.Id);
+    var result = await new PlaywrightFlowExecutor(
+            flow,
+            options,
+            executionGuard: guard)
+        .ExecuteAsync(
+            new FlowExecutionRequest("limite-seguro-local", [], [], []),
+            CancellationToken.None);
+
+    if (result.Output["limiteAtingido"]?.GetValue<bool>() != true ||
+        result.Output["depoisDoLimite"] is not null ||
+        result.Output["depoisDoSubfluxo"] is not null ||
+        result.ExecutedActions != 3 ||
+        !guard.AfterCalls.SequenceEqual(
+            [boundaryAction.Id],
+            StringComparer.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException(
+            "O guard posterior não encerrou a execução imediatamente depois do limite seguro.");
+    }
+}
+
 static async Task CheckTypeAcrossInputsCardinalityAsync(
     PlaywrightRuntimeOptions options,
     string originUrl)
@@ -728,6 +811,36 @@ file sealed class BlockingExecutionGuard(string blockedActionId) : IFlowActionEx
         }
 
         return ValueTask.CompletedTask;
+    }
+}
+
+file sealed class CompletingExecutionGuard(string boundaryActionId)
+    : IFlowActionExecutionGuard
+{
+    public List<string> AfterCalls { get; } = [];
+
+    public ValueTask BeforeActionAsync(
+        FlowActionDefinition action,
+        FlowExecutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<FlowActionExecutionDirective> AfterActionAsync(
+        FlowActionDefinition action,
+        FlowExecutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!action.Id.Equals(boundaryActionId, StringComparison.OrdinalIgnoreCase))
+        {
+            return ValueTask.FromResult(FlowActionExecutionDirective.Continue);
+        }
+
+        AfterCalls.Add(action.Id);
+        return ValueTask.FromResult(FlowActionExecutionDirective.CompleteExecution);
     }
 }
 

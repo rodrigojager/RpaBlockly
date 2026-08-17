@@ -57,7 +57,12 @@ Para um item ser reservado, todos precisam estar verdadeiros:
 2. `Definitions.<código>.Enabled`;
 3. `Definitions.<código>.ClaimEnabled`.
 
-Em `SafeValidation`, qualquer ID de `IrreversibleActionIds` é bloqueado antes da execução e o item termina como `Validated`. Em `Production`, o guard permite a ação; essa mudança deve seguir autorização e procedimento operacional.
+Em `SafeValidation`, há duas formas genéricas de encerrar uma homologação:
+
+- com `SafeValidationBoundaryActionId`, o worker executa a ação indicada, encerra imediatamente depois dela e grava o item como `Validated`, preservando os resultados e artefatos produzidos até o limite;
+- sem esse limite explícito, permanece o comportamento compatível: o primeiro ID de `IrreversibleActionIds` é bloqueado antes da execução e o item termina como `Validated`.
+
+O ID do limite precisa existir no fluxo, apontar para uma ação-folha e não pode também ser irreversível. Se o fluxo terminar sem alcançá-lo, ou alcançar antes uma ação irreversível, a execução falha porque o roteiro não corresponde à configuração homologada. Em `Production`, o limite de validação não interrompe o fluxo e o guard permite os IDs irreversíveis; essa mudança deve seguir autorização e procedimento operacional.
 
 ## Inputs e resultados
 

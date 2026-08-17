@@ -58,7 +58,7 @@ JsonFlowLoader
 `FlowDefinitionValidator` verifica, antes do navegador:
 
 - `schemaVersion` e estrutura principal;
-- inputs declarados;
+- requisitos declarados em `input.*` e `attachments.*`;
 - IDs globais;
 - tipos de ação suportados;
 - propriedades obrigatórias, mutuamente exclusivas, ranges e enumerações;
@@ -73,7 +73,7 @@ O modelo de ação atual concentra propriedades de todos os tipos em `FlowAction
 
 ### 4. Preparação do runner
 
-`RpaRunner` valida o `FlowExecutionRequest`, os inputs e as opções do Playwright. Depois, cria navegador, contexto, página, monitor de atividade, readiness, artefatos, orçamento de execução e contexto de dados isolado.
+`RpaRunner` valida o `FlowExecutionRequest`, os requisitos de entrada e anexos e as opções do Playwright. Depois, cria navegador, contexto, página, monitor de atividade, readiness, artefatos, orçamento de execução e contexto de dados isolado.
 
 O navegador é criado pelo `BrowserLauncher` a partir de `Runtime.Browser`: os motores e canais clássicos são gerenciados pelo Playwright, enquanto `cloakbrowser` inicia o binário stealth gratuito fixado do CloakBrowser (Chromium 146, sem licença). Nos dois casos, todo o restante do runtime usa somente as interfaces `Microsoft.Playwright`; handlers, fluxos, readiness e políticas não mudam de comportamento por causa do motor escolhido.
 
@@ -81,13 +81,17 @@ Cada chamada recebe seu próprio request e sua própria árvore `runtime`. Nenhu
 
 ### 5. Dispatch e handlers
 
-Antes de executar uma ação, `JsonFlowActionStep`:
+Ao executar uma ação, `JsonFlowActionStep`:
 
 1. respeita cancelamento;
 2. consome uma unidade do orçamento;
-3. publica `actionStarted` ao observer;
-4. pede ao registro o handler associado ao `type`;
-5. publica conclusão ou falha estruturada.
+3. consulta o guard antes da ação;
+4. publica `actionStarted` ao observer;
+5. pede ao registro o handler associado ao `type`;
+6. consulta o guard depois que o handler termina;
+7. publica conclusão ou falha estruturada.
+
+O checkpoint posterior pode solicitar um encerramento normal da execução. A ação-limite é contabilizada e publicada como concluída, as ações seguintes não são iniciadas e o resultado parcial de `runtime.*` é devolvido normalmente. Essa capacidade pertence ao host; não cria um novo tipo de bloco nem altera o JSON do fluxo.
 
 O registro padrão agrupa os 32 tipos em quatro handlers:
 

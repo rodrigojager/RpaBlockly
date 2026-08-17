@@ -93,7 +93,7 @@ Ao conectar, o editor:
 5. exibe o perfil e os campos específicos do RPA;
 6. guarda uma fotografia inicial do fluxo para o botão de restauração.
 
-O nome do fluxo e a lista `inputs` não possuem formulário próprio. Eles são preservados do JSON carregado ou importado.
+O nome do fluxo e a lista `inputs` não possuem formulário próprio. Essa lista pode declarar requisitos em `input.*` e `attachments.*`; ela é preservada do JSON carregado ou importado.
 
 ## Criar e editar um roteiro
 
@@ -270,10 +270,10 @@ Não acrescente manualmente uma propriedade que a interface não represente. Ela
 Execute depois de qualquer mudança em bloco, propriedade, conversão ou schema:
 
 ```powershell
-.\tests\run-editor-roundtrip.ps1
+.\tools\Validar-Base.ps1
 ```
 
-O teste cobre os três fluxos de produção e uma fixture com propriedades generalizadas.
+O script valida o fluxo de exemplo, as fixtures generalizadas, o contrato, o runtime e o round-trip do editor.
 
 ## Compatibilidade de defaults
 

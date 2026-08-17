@@ -9,5 +9,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\RpaFlow.Runtime\RpaFlow.Runtime.csproj" />
   </ItemGroup>
 </Project>

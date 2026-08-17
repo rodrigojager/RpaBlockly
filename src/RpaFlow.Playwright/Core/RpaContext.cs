@@ -83,6 +83,14 @@ public sealed class RpaContext : IDisposable
             ExecutionRequest,
             cancellationToken);
 
+    public ValueTask<FlowActionExecutionDirective> GuardAfterActionAsync(
+        FlowActionDefinition action,
+        CancellationToken cancellationToken) =>
+        _executionGuard.AfterActionAsync(
+            action,
+            ExecutionRequest,
+            cancellationToken);
+
     public void SwitchToPage(IPage newPage)
     {
         ArgumentNullException.ThrowIfNull(newPage);

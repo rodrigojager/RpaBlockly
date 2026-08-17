@@ -2,7 +2,7 @@
 
 Este guia registra problemas encontrados durante a evolução do runner .NET, do fluxo JSON schema 1 e do editor Blockly compartilhado. As soluções são genéricas e devem ser tentadas antes de criar código específico para um RPA.
 
-Para funcionamento normal e referência de contrato, consulte primeiro o [índice da documentação](README.md), o [guia do editor](guia-editor-blockly.md), o [schema versão 1](flow-schema-v1.md) e o [catálogo de blocos](catalogo-de-blocos.md). Este arquivo é voltado a diagnóstico.
+Para funcionamento normal e referência de contrato, consulte primeiro o [índice da documentação](../README.md), o [guia do editor](guia-editor-blockly.md), o [schema versão 1](flow-schema-v1.md) e o [catálogo de blocos](catalogo-de-blocos.md). Este arquivo é voltado a diagnóstico.
 
 ## Ordem recomendada de diagnóstico
 
@@ -17,8 +17,8 @@ Para funcionamento normal e referência de contrato, consulte primeiro o [índic
 Comandos básicos, executados em sequência:
 
 ```powershell
-dotnet build Rpas.slnx
-dotnet run --project rpaNome/RpaNome.csproj --no-build -- --validate-only
+dotnet build RpaBlockly.slnx
+dotnet run --project rpas/RpaNome/RpaNome.csproj --no-build -- --validate-only
 node --check src/RpaFlow.Editor/wwwroot/app.js
 ```
 
@@ -39,8 +39,8 @@ Build e execução de validação foram iniciados em paralelo. Os dois processos
 Execute as operações .NET sequencialmente:
 
 ```powershell
-dotnet build Rpas.slnx
-dotnet run --project rpaNome/RpaNome.csproj --no-build -- --validate-only
+dotnet build RpaBlockly.slnx
+dotnet run --project rpas/RpaNome/RpaNome.csproj --no-build -- --validate-only
 ```
 
 Verificações que não compartilham `bin` ou `obj`, como `node --check`, podem continuar em paralelo.
@@ -60,7 +60,7 @@ Uma página `file://` não possui um backend autorizado a persistir os arquivos 
 Use o microservidor ASP.NET Core compartilhado:
 
 ```powershell
-.\abrir-editor-nome-do-rpa.cmd
+.\abrir-editor.cmd rpas\RpaNome
 ```
 
 Ou execute diretamente:
@@ -92,7 +92,7 @@ Cada atalho deve apenas encaminhar a pasta correta ao inicializador compartilhad
 
 ```cmd
 @echo off
-call "%~dp0abrir-editor-blockly.cmd" rpaNome
+call "%~dp0abrir-editor.cmd" rpas\RpaNome
 ```
 
 Não copie o frontend para dentro de cada RPA.
@@ -331,7 +331,25 @@ Evite um seletor amplo como `iframe` quando o documento também cria frames auxi
 
 Não transforme nomes ou IDs específicos de um portal em código C#. A fábrica genérica de localizadores deve encadear `FrameLocator` conforme o JSON, e a interface precisa preservar a lista no round-trip.
 
-## 17. UTF-8 e mojibake
+## 17. Um erro conhecido aparece durante uma espera longa
+
+### Sintoma
+
+Depois de uma ação remota, o portal substitui o conteúdo por uma página de erro conhecida, mas o RPA continua aguardando por vários minutos o seletor de sucesso até expirar.
+
+### Solução
+
+Use blocos existentes para modelar uma corrida declarativa:
+
+1. No primeiro `wait` depois da ação, use uma união CSS com o seletor de sucesso e o seletor estável da página de erro.
+2. Não limite essa espera ao `scope` da linha quando a página de erro substitui o documento inteiro.
+3. Logo depois, use `if` com condição `element` para identificar especificamente o erro.
+4. No ramo verdadeiro, use `fail` com uma mensagem operacional que explique o estado, a necessidade de conferência manual e a política de reenvio.
+5. No caminho normal, mantenha uma confirmação escopada ao caso antes de registrar sucesso.
+
+Não use apenas um `if` imediatamente após o clique: a resposta pode chegar de forma assíncrona depois da avaliação. Também não use identificadores dinâmicos, como números de referência gerados pela infraestrutura. Para efeitos irreversíveis, preserve o checkpoint antes do clique; assim, uma falha detectada depois dele continua sem reenvio automático.
+
+## 18. UTF-8 e mojibake
 
 ### Sintoma
 

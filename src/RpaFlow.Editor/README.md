@@ -4,10 +4,10 @@ Aplicação ASP.NET Core local que serve o Blockly, carrega o perfil do RPA e pe
 
 Documentação relacionada:
 
-- [guia operacional do editor](../docs/guia-editor-blockly.md);
-- [schema JSON versão 1](../docs/flow-schema-v1.md);
-- [catálogo completo de blocos](../docs/catalogo-de-blocos.md);
-- [checklist para adicionar ou alterar um bloco](../docs/como-adicionar-bloco.md).
+- [guia operacional do editor](../../docs/referencia-markdown/guia-editor-blockly.md);
+- [schema JSON versão 1](../../docs/referencia-markdown/flow-schema-v1.md);
+- [catálogo completo de blocos](../../docs/referencia-markdown/catalogo-de-blocos.md);
+- [checklist para adicionar ou alterar um bloco](../../docs/referencia-markdown/como-adicionar-bloco.md).
 
 Cada RPA deve possuir um `rpa.editor.json` com:
 
@@ -20,7 +20,7 @@ O editor não contém campos ou fluxos predefinidos de um sistema específico. A
 
 Localizadores podem receber `frameSelectors`, editado como lista JSON do iframe externo para o interno. `hasTextSource` torna o texto do alvo dinâmico; `scopeHasText` e `scopeHasTextSource` filtram um escopo antes de localizar o elemento interno. Texto literal e origem são exclusivos. O bloco `transformar caminho` obtém nome, nome sem extensão, extensão ou pasta de caminhos locais e UNC. Todas essas propriedades participam do round-trip e não exigem código específico por portal.
 
-O tipo de campo de configuração `stringList` edita uma lista JSON de textos. Ele é usado por `Runtime.BusySelectors`, permitindo adaptar os indicadores de loading de cada portal sem recompilar. Esperas e condições expõem cardinalidade `single`/`first`; as propriedades representadas pelos blocos e cobertas pela fixture generalizada são verificadas no round-trip. Uma propriedade aceita pelo schema, mas ainda não exposta pelo bloco correspondente — por exemplo, `navigate.timeoutMs` — pode ser perdida ao importar e reserializar. Confira o JSON ao vivo e o [guia operacional](../docs/guia-editor-blockly.md) antes de salvar.
+O tipo de campo de configuração `stringList` edita uma lista JSON de textos. Ele é usado por `Runtime.BusySelectors`, permitindo adaptar os indicadores de loading de cada portal sem recompilar. Esperas e condições expõem cardinalidade `single`/`first`; as propriedades representadas pelos blocos e cobertas pela fixture generalizada são verificadas no round-trip. Uma propriedade aceita pelo schema, mas ainda não exposta pelo bloco correspondente — por exemplo, `navigate.timeoutMs` — pode ser perdida ao importar e reserializar. Confira o JSON ao vivo e o [guia operacional](../../docs/referencia-markdown/guia-editor-blockly.md) antes de salvar.
 
 Condições por valor aceitam caminho, texto literal ou JSON literal, preservando número, booleano, nulo, array e objeto. `repeat` permite nomear o índice em `loop.*`; `forEach` mantém escopos aninhados; chamadas de subfluxo são validadas contra referências ausentes, ciclos e profundidade excessiva.
 
@@ -45,4 +45,4 @@ O servidor aceita apenas conexões de loopback, não habilita CORS e exige um to
 
 **Salvar tudo** grava primeiro a configuração e depois o fluxo; não é uma transação única. **Importar fluxo de produção** e **Importar workspace** limpam o workspace antes de terminar e não possuem rollback. Exporte o workspace e preserve o baseline antes de uma importação incerta.
 
-Consulte também o [tutorial de solução de problemas](../docs/tutorial-solucao-problemas-rpa-blockly.md), consolidado a partir das falhas já observadas durante a criação e a validação dos RPAs.
+Consulte também o [tutorial de solução de problemas](../../docs/referencia-markdown/tutorial-solucao-problemas-rpa-blockly.md), consolidado a partir das falhas já observadas durante a criação e a validação dos RPAs.

@@ -53,7 +53,7 @@ Antes de implementar:
 
 ### 1. Contrato
 
-Em `shared/RpaFlow.Contracts/Flow/`:
+Em `src/RpaFlow.Contracts/Flow/`:
 
 1. adicione propriedades necessárias a `FlowActionDefinition`, reutilizando campos comuns quando a semântica for a mesma;
 2. inclua o tipo em `FlowActionCatalog` com suas capabilities;
@@ -64,7 +64,7 @@ Se uma propriedade desconhecida precisar ser recusada, lembre que a desserializa
 
 ### 2. Interpretação
 
-Em `shared/RpaFlow.Playwright/Flow/`:
+Em `src/RpaFlow.Playwright/Flow/`:
 
 1. escolha o handler da categoria correta ou crie um handler pequeno;
 2. declare o tipo em `SupportedTypes`;
@@ -113,15 +113,12 @@ Adicione ou amplie fixtures para:
 - round-trip JSON → Blockly → JSON;
 - execução do handler em ambiente local ou simulado;
 - falha, cancelamento, orçamento e saída `runtime.*`;
-- compatibilidade com os três fluxos existentes.
+- compatibilidade com o template, o exemplo e os fluxos atingidos.
 
 Execute:
 
 ```powershell
-dotnet build Rpas.slnx
-dotnet run --project tests/RpaFlow.ContractChecks/RpaFlow.ContractChecks.csproj
-.\tests\run-editor-roundtrip.ps1
-dotnet run --project tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj
+.\tools\Validar-Base.ps1
 ```
 
 Se o bloco alterar um fluxo específico, execute também `--validate-only` naquele RPA.

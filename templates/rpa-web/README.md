@@ -21,7 +21,7 @@ dotnet run --project RpaTemplate.csproj --no-build -- --validate-only
 
 ## Regras essenciais
 
-1. Declare inputs obrigatórios para falhar antes do navegador.
+1. Declare dados e anexos obrigatórios em `inputs` para falhar antes do navegador.
 2. Coloque dados do caso em `input.*`, parâmetros em `config.*` e anexos em `attachments.*`.
 3. Grave resultados somente em `runtime.*`.
 4. Mantenha seletores e ordem no fluxo, não em código específico.

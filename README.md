@@ -69,12 +69,15 @@ Configure a string de conexão somente no arquivo local. Antes de ligar o worker
 1. aplique `database/sqlserver/001_create_worker_schema.sql`;
 2. confira os nomes em `RpaWorker.Tables`;
 3. configure cada entrada de `Definitions`;
-4. liste todas as ações irreversíveis em `IrreversibleActionIds`;
-5. habilite `ClaimEnabled` somente no RPA em teste;
-6. mantenha `ExecutionMode=SafeValidation`;
-7. defina `Enabled=true` por último.
+4. se a homologação deve executar uma última ação segura, informe seu ID em `SafeValidationBoundaryActionId`;
+5. liste todas as ações irreversíveis em `IrreversibleActionIds`;
+6. habilite `ClaimEnabled` somente no RPA em teste;
+7. mantenha `ExecutionMode=SafeValidation`;
+8. defina `Enabled=true` por último.
 
 Se o fluxo usa `waitForOneTimeCode`, configure `RpaWorker.EmailReader`, mantenha as credenciais apenas no arquivo local, em variáveis de ambiente ou em um cofre, e use `MaxParallelism=1` enquanto uma definição com OTP estiver fazendo claim. O manual detalha isso em `docs/manual.html#otp-email`.
+
+A referência [Integração do worker com o banco](docs/referencia-markdown/integracao-worker-banco.md) descreve claim, lease, retry, isolamento do request, outputs, artefatos e a separação entre worker e fluxo.
 
 ## Dados por execução
 
@@ -112,4 +115,5 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj --no-build -- --validate-o
 - Não use pausas fixas como sincronização.
 - Não use seletor ambíguo, `First`, `Nth` ou clique forçado para fazer um teste passar.
 - Não ultrapasse uma ação irreversível sem autorização explícita.
+- No bloco de confirmação final, publicar feedback descreve a evidência esperada; somente o host e a política específica podem autorizar o efeito.
 - Mantenha Blockly, JSON, validadores, handlers, documentação e testes sincronizados.

@@ -13,6 +13,14 @@ public sealed class ConfiguredExecutionGuard(
     private readonly HashSet<string> _irreversibleActionIds = new(
         definition.IrreversibleActionIds,
         StringComparer.OrdinalIgnoreCase);
+    private readonly string? _safeValidationBoundaryActionId =
+        string.IsNullOrWhiteSpace(definition.SafeValidationBoundaryActionId)
+            ? null
+            : definition.SafeValidationBoundaryActionId.Trim();
+    private int _safeValidationBoundaryReached;
+
+    public bool SafeValidationBoundaryReached =>
+        Volatile.Read(ref _safeValidationBoundaryReached) == 1;
 
     public ValueTask BeforeActionAsync(
         FlowActionDefinition action,
@@ -23,9 +31,36 @@ public sealed class ConfiguredExecutionGuard(
         if (executionMode == WorkerExecutionMode.SafeValidation &&
             _irreversibleActionIds.Contains(action.Id))
         {
+            if (_safeValidationBoundaryActionId is not null)
+            {
+                throw new InvalidOperationException(
+                    $"A ação irreversível '{action.Name}' ({action.Id}) foi alcançada " +
+                    $"antes do limite seguro configurado " +
+                    $"'{_safeValidationBoundaryActionId}'.");
+            }
+
             throw new SafeValidationBoundaryException(action.Id, action.Name);
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<FlowActionExecutionDirective> AfterActionAsync(
+        FlowActionDefinition action,
+        FlowExecutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (executionMode != WorkerExecutionMode.SafeValidation ||
+            _safeValidationBoundaryActionId is null ||
+            !action.Id.Equals(
+                _safeValidationBoundaryActionId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ValueTask.FromResult(FlowActionExecutionDirective.Continue);
+        }
+
+        Volatile.Write(ref _safeValidationBoundaryReached, 1);
+        return ValueTask.FromResult(FlowActionExecutionDirective.CompleteExecution);
     }
 }

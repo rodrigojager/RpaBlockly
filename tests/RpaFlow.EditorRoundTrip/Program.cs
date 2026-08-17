@@ -166,18 +166,15 @@ static async Task CheckSafeFinalConfirmationRoundTripAsync(
 
     var invalidFixtures = new[]
     {
-        fixture.Replace(
-            "\"successText\": \"Operação concluída\",\n",
-            string.Empty,
-            StringComparison.Ordinal),
-        fixture.Replace(
-            "#(?<protocol>\\\\d+)",
-            "#(\\\\d+)",
-            StringComparison.Ordinal),
-        fixture.Replace(
-            "\"protocolTarget\": \"runtime.business.protocol\"",
-            "\"protocolTarget\": \"runtime.business.completed\"",
-            StringComparison.Ordinal)
+        MutateSafeFinalConfirmationFixture(
+            fixture,
+            action => action.Remove("successText")),
+        MutateSafeFinalConfirmationFixture(
+            fixture,
+            action => action["protocolPattern"] = @"#(\d+)"),
+        MutateSafeFinalConfirmationFixture(
+            fixture,
+            action => action["protocolTarget"] = "runtime.business.completed")
     };
 
     foreach (var invalidFixture in invalidFixtures)
@@ -217,6 +214,21 @@ static async Task CheckSafeFinalConfirmationRoundTripAsync(
 
     Console.WriteLine(
         "OK: round-trip e validações preservaram a confirmação final configurável.");
+}
+
+static string MutateSafeFinalConfirmationFixture(
+    string fixture,
+    Action<JsonObject> mutate)
+{
+    var root = JsonNode.Parse(fixture)?.AsObject()
+        ?? throw new InvalidOperationException(
+            "Não foi possível preparar a confirmação final inválida.");
+    var action = root["actions"]?.AsArray()[0]?.AsObject()
+        ?? throw new InvalidOperationException(
+            "A fixture da confirmação final não possui a ação esperada.");
+
+    mutate(action);
+    return root.ToJsonString();
 }
 
 static async Task CheckTypeAcrossInputsRoundTripAsync(

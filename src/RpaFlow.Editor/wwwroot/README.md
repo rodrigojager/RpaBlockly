@@ -4,7 +4,7 @@ Esta pasta contém a interface visual e a cópia local do Blockly 13.1.1. O fron
 
 O painel direito mostra o JSON schema 1 interpretado pelo .NET. O workspace exportado preserva a disposição visual dos blocos, mas não é lido em produção.
 
-O JSON de produção preserva `name`, `inputs`, ações e subfluxos. O workspace é a serialização interna do Blockly: preserva blocos, campos, conexões, posições e `block.data`, mas não transporta o `name` nem os `inputs` externos do fluxo. Ao levá-lo para outra sessão, transporte também o JSON correspondente. Consulte o [guia operacional](../../docs/guia-editor-blockly.md) para importação, salvamento, backups e modo sem backend.
+O JSON de produção preserva `name`, requisitos `inputs` para `input.*` ou `attachments.*`, ações e subfluxos. O workspace é a serialização interna do Blockly: preserva blocos, campos, conexões, posições e `block.data`, mas não transporta o `name` nem os requisitos externos do fluxo. Ao levá-lo para outra sessão, transporte também o JSON correspondente. Consulte o [guia operacional](../../../docs/referencia-markdown/guia-editor-blockly.md) para importação, salvamento, backups e modo sem backend.
 
 O editor permite configurar ações web, cadeias de iframe, condições, interrupção controlada, repetições, arrays e objetos aninhados, subfluxos, screenshots, downloads locais ou UNC e espera de código de uso único por um provider do host. Variáveis administradas pela interface ficam em `Blockly.Variables`; valores capturados durante uma execução ficam em `runtime.*`.
 
@@ -12,4 +12,4 @@ Um download por requisição com POST pode alterar o sistema remoto e deve ser r
 
 Licença e avisos da biblioteca local estão em `THIRD_PARTY_NOTICES.md` e `vendor/blockly/LICENSE`.
 
-O catálogo atual possui 35 blocos visuais que representam 32 tipos de ação. A referência de campos, defaults e efeitos está em [catálogo de blocos](../../docs/catalogo-de-blocos.md).
+O catálogo atual possui 35 blocos visuais que representam 32 tipos de ação. A referência de campos, defaults e efeitos está em [catálogo de blocos](../../../docs/referencia-markdown/catalogo-de-blocos.md).

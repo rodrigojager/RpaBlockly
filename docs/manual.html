@@ -406,7 +406,7 @@ VALUES (
             <tr><td>Valor do primeiro documento</td><td><code>input.documentos[0].valor</code></td><td><code>150.75</code></td></tr>
           </tbody>
         </table>
-        <div class="callout"><strong>O fluxo declara; a execução fornece.</strong> A lista <code>inputs</code> do <code>flow.production.json</code> serve para dizer quais dados são obrigatórios e quais tipos são aceitos. Ela não cria nem preenche o caso. Os valores reais vêm do <code>appsettings.local.json</code> ou do <code>InputJson</code> reservado pelo worker.</div>
+        <div class="callout"><strong>O fluxo declara; a execução fornece.</strong> A lista <code>inputs</code> do <code>flow.production.json</code> serve para dizer quais dados e anexos são obrigatórios e quais tipos são aceitos. Ela não cria nem preenche o caso. Os valores reais vêm do <code>appsettings.local.json</code>, do <code>InputJson</code> ou do <code>AttachmentsJson</code> reservado pelo worker.</div>
 
         <h3>Valor direto ou origem?</h3>
         <div class="grid">
@@ -415,18 +415,19 @@ VALUES (
         </div>
         <div class="callout warning"><strong>Não preencha os dois ao mesmo tempo.</strong> Se um bloco oferece <code>value</code> e <code>valueSource</code>, escolha apenas um. O primeiro grava o valor no próprio fluxo; o segundo diz de onde ler durante a execução.</div>
 
-        <h3>Declarar input obrigatório</h3>
+        <h3>Declarar dados e anexos obrigatórios</h3>
         <pre><code>{
   "schemaVersion": 1,
   "name": "Contas a pagar",
   "inputs": [
     { "path": "input.url", "type": "string", "required": true },
-    { "path": "input.documentos", "type": "array", "required": true }
+    { "path": "input.documentos", "type": "array", "required": true },
+    { "path": "attachments.notaFiscal", "type": "string", "required": true }
   ],
   "actions": [],
   "subflows": {}
 }</code></pre>
-        <p>Essa lista é uma conferência feita antes de abrir o navegador. Se <code>input.documentos</code> estiver ausente ou não for uma lista, o erro aparece imediatamente.</p>
+        <p>Essa lista é uma conferência feita antes de abrir o navegador. Cada caminho deve começar por <code>input.</code> ou <code>attachments.</code>. Se <code>input.documentos</code> estiver ausente, não for uma lista ou o caminho do anexo não tiver sido fornecido, o erro aparece imediatamente.</p>
         <p><strong>Tipos aceitos:</strong> <code>string</code> é texto; <code>number</code> é número; <code>boolean</code> é verdadeiro ou falso; <code>object</code> é um objeto JSON; <code>array</code> é uma lista; <code>null</code> representa ausência; <code>any</code> aceita qualquer tipo.</p>
       </section>
 
@@ -495,7 +496,7 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj</code></pre>
           <thead><tr><th>Propriedade</th><th>Valor inicial</th><th>O que significa na prática</th></tr></thead>
           <tbody>
             <tr><td><code>Enabled</code></td><td><code>false</code></td><td>Liga a busca contínua por novos itens. Deve ser a última chave alterada.</td></tr>
-            <tr><td><code>ExecutionMode</code></td><td><code>SafeValidation</code></td><td><code>SafeValidation</code> para antes dos IDs perigosos cadastrados. <code>Production</code> permite executá-los e só deve ser usado depois da aprovação operacional.</td></tr>
+            <tr><td><code>ExecutionMode</code></td><td><code>SafeValidation</code></td><td><code>SafeValidation</code> encerra no limite seguro explícito ou, quando ele não foi configurado, para antes dos IDs perigosos cadastrados. <code>Production</code> permite continuar e só deve ser usado depois da aprovação operacional.</td></tr>
             <tr><td><code>WorkerId</code></td><td>Nome da máquina</td><td>Nome gravado no banco para mostrar qual processo reservou e executou o item. Use um valor diferente por serviço.</td></tr>
             <tr><td><code>WorkspaceRoot</code></td><td><code>.</code></td><td>Pasta usada como ponto de partida para localizar fluxos, configurações e caminhos relativos.</td></tr>
             <tr><td><code>PollIntervalSeconds</code></td><td><code>5</code></td><td>Quando não encontra item, quantos segundos espera antes de consultar de novo. Não é uma pausa dentro do RPA.</td></tr>
@@ -517,7 +518,8 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj</code></pre>
             <tr><td><code>ClaimEnabled</code></td><td><code>true</code> autoriza o worker a reservar itens com esse código. Deixe <code>false</code> até terminar a configuração.</td></tr>
             <tr><td><code>FlowFile</code></td><td>Caminho do <code>flow.production.json</code>, relativo a <code>WorkspaceRoot</code>.</td></tr>
             <tr><td><code>ConfigurationFile</code></td><td>Arquivo base com variáveis e anexos opcionais. Pode ficar vazio quando todos os dados chegam pelo item.</td></tr>
-            <tr><td><code>IrreversibleActionIds</code></td><td>Lista dos IDs de ações que podem enviar, confirmar, cadastrar, excluir, pagar ou provocar outro efeito real. Em modo seguro, o worker para antes delas.</td></tr>
+            <tr><td><code>SafeValidationBoundaryActionId</code></td><td>ID opcional da última ação que a homologação pode executar. Em <code>SafeValidation</code>, o worker conclui essa ação, encerra o restante do roteiro e grava <code>Validated</code>. O ID precisa existir, apontar para uma ação-folha e não pode também estar em <code>IrreversibleActionIds</code>.</td></tr>
+            <tr><td><code>IrreversibleActionIds</code></td><td>Lista dos IDs de ações que podem enviar, confirmar, cadastrar, excluir, pagar ou provocar outro efeito real. Sem limite explícito, o modo seguro para antes delas. Com limite explícito, alcançar uma delas antes do limite é falha de configuração ou roteiro.</td></tr>
             <tr><td><code>Outputs</code></td><td>Lista dos valores de <code>runtime.*</code> que devem ganhar nome e linha própria na tabela de resultados.</td></tr>
             <tr><td><code>Artifacts</code></td><td>Lista dos caminhos de arquivos em <code>runtime.*</code> que devem ser verificados e registrados.</td></tr>
           </tbody>
@@ -698,7 +700,7 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj -- --validate-only</code><
         <p class="section-intro">Segurança aqui não significa apenas proteger senhas. Também significa impedir clique no registro errado, evitar duplicidade e saber exatamente até onde um teste está autorizado a ir.</p>
         <div class="grid">
           <article class="card"><h3>Senhas e tokens</h3><p>Nunca coloque em <code>flow.production.json</code>, <code>appsettings.example.json</code>, logs ou screenshots. Use configuração local, variável de ambiente ou cofre de segredos.</p></article>
-          <article class="card"><h3>Botões que causam efeito real</h3><p>Liste seus IDs em <code>IrreversibleActionIds</code> e mantenha <code>SafeValidation</code> durante a homologação. Um botão visível não significa que o clique está autorizado.</p></article>
+          <article class="card"><h3>Botões que causam efeito real</h3><p>Liste seus IDs em <code>IrreversibleActionIds</code>, configure <code>SafeValidationBoundaryActionId</code> quando houver uma última etapa segura a executar e mantenha <code>SafeValidation</code> durante a homologação. Um botão visível não significa que o clique está autorizado.</p></article>
           <article class="card"><h3>Elemento errado</h3><p>Um seletor deve encontrar exatamente um alvo quando a ação é única. Não escolha o primeiro resultado apenas para fazer o teste passar.</p></article>
           <article class="card"><h3>Casos simultâneos</h3><p>Dados, página e variáveis de um caso não podem ficar em variáveis globais. Cada execução recebe seu próprio contexto.</p></article>
           <article class="card"><h3>Página lenta</h3><p>Espere um sinal real: campo visível, loader ausente, rede quieta ou arquivo iniciado. Uma pausa fixa pode funcionar hoje e falhar amanhã.</p></article>
@@ -775,7 +777,7 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj --no-build -- --validate-o
         <h3>Checklist do RPA específico</h3>
         <ul>
           <li>Feche e reabra o fluxo no Blockly; nenhum campo ou bloco pode desaparecer.</li>
-          <li>Teste um input obrigatório ausente e confirme que falha antes de abrir o navegador.</li>
+          <li>Teste um dado e um anexo obrigatórios ausentes e confirme que ambos falham antes de abrir o navegador.</li>
           <li>Com navegador visível, confirme que cada seletor encontra exatamente o elemento esperado.</li>
           <li>Teste condições pelos dois ramos e loops com lista vazia, um item e vários itens.</li>
           <li>Confirme o conteúdo e o local de screenshots e downloads.</li>

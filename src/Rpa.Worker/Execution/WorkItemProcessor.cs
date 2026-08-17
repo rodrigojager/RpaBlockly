@@ -94,15 +94,27 @@ public sealed class WorkItemProcessor(
                 BusySelectors: runtime.BusySelectors);
             PlaywrightRuntimeOptionsValidator.Validate(runtimeOptions);
 
+            var executionGuard = new ConfiguredExecutionGuard(
+                options.ExecutionMode,
+                definition);
             IFlowExecutor executor = new PlaywrightFlowExecutor(
                 flow,
                 runtimeOptions,
                 observer: new DatabaseFlowExecutionObserver(repository),
-                executionGuard: new ConfiguredExecutionGuard(
-                    options.ExecutionMode,
-                    definition),
+                executionGuard: executionGuard,
                 oneTimeCodeProvider: oneTimeCodeProvider);
             var result = await executor.ExecuteAsync(request, caseTimeout.Token);
+            var safeValidationBoundaryConfigured =
+                options.ExecutionMode == WorkerExecutionMode.SafeValidation &&
+                !string.IsNullOrWhiteSpace(definition.SafeValidationBoundaryActionId);
+            if (safeValidationBoundaryConfigured &&
+                !executionGuard.SafeValidationBoundaryReached)
+            {
+                throw new InvalidOperationException(
+                    $"O fluxo '{workItem.RpaCode}' terminou sem alcançar o limite " +
+                    $"seguro '{definition.SafeValidationBoundaryActionId}'.");
+            }
+
             var outputs = MaterializeOutputs(result.Output, definition.Outputs);
             var artifacts = await WorkerArtifactMaterializer.MaterializeAsync(
                 result.Output,
@@ -125,14 +137,28 @@ public sealed class WorkItemProcessor(
             await repository.CompleteAsync(
                 executionId,
                 workItem,
-                "Succeeded",
+                executionGuard.SafeValidationBoundaryReached
+                    ? "Validated"
+                    : "Succeeded",
                 persistedOutput.ToJsonString(),
                 result.ExecutedActions,
                 caseTimeout.Token);
-            logger.LogInformation(
-                "Item {WorkItemId} concluído pela definição {RpaCode}.",
-                workItem.WorkItemId,
-                workItem.RpaCode);
+            if (executionGuard.SafeValidationBoundaryReached)
+            {
+                logger.LogInformation(
+                    "Item {WorkItemId} validado depois do limite seguro {ActionId} " +
+                    "da definição {RpaCode}.",
+                    workItem.WorkItemId,
+                    definition.SafeValidationBoundaryActionId,
+                    workItem.RpaCode);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Item {WorkItemId} concluído pela definição {RpaCode}.",
+                    workItem.WorkItemId,
+                    workItem.RpaCode);
+            }
         }
         catch (Exception exception)
             when (exception.GetBaseException() is SafeValidationBoundaryException)
