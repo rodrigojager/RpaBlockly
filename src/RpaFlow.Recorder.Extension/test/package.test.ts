@@ -50,6 +50,15 @@ test("gerador produz pacote V2 nativo com referências e policy conservadora", (
   assert.equal(generated.policy.locatorResilience.promotion, "disabled");
 });
 
+test("validação standalone preserva a rejeição de documentos inválidos", () => {
+  const generated = generatePackage("Cadastro", [rawEvent(1, "click")]);
+  generated.flow.name = "";
+  assert.throws(
+    () => validateGeneratedPackage(generated),
+    /flow\.production\.json inválido:/u
+  );
+});
+
 test("segredo é representado somente por secret.recorded", () => {
   const generated = generatePackage("Login", [rawEvent(1, "input", {
     secretReference: "secret.recorded.value_0001"

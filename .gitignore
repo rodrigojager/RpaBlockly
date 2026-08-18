@@ -6,6 +6,7 @@ artifacts/
 node_modules/
 src/RpaFlow.Recorder.Extension/build/
 src/RpaFlow.Recorder.Extension/.test-build/
+src/RpaFlow.Recorder.Extension/src/package/generated/
 __pycache__/
 *.py[cod]
 .package.lock

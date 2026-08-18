@@ -1,13 +1,16 @@
 {
   "name": "@rpablockly/recorder-extension",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "generate:validators": "node scripts/generate-schema-validators.mjs",
     "licenses": "node scripts/licenses.mjs",
     "lint": "node scripts/lint.mjs",
+    "pretest": "npm run generate:validators",
+    "pretypecheck": "npm run generate:validators",
     "release": "node scripts/release.mjs",
     "test": "node scripts/test.mjs",
     "typecheck": "tsc --noEmit"

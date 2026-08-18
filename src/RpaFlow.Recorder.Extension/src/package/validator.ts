@@ -1,16 +1,20 @@
-import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
-import flowSchema from "../../../../schemas/flow-v2.schema.json" with { type: "json" };
-import locatorSchema from "../../../../schemas/locators-v1.schema.json" with { type: "json" };
-import policySchema from "../../../../schemas/rpa-policy-v1.schema.json" with { type: "json" };
+import type { ErrorObject } from "ajv";
 import type { GeneratedPackage } from "./generator.js";
+import {
+  validateFlow,
+  validateLocators,
+  validatePolicy
+} from "./generated/schema-validators.js";
 
-const ajv = new Ajv2020({ allErrors: true, strict: true });
-addFormats(ajv);
-const validators = {
-  flow: ajv.compile(flowSchema),
-  locators: ajv.compile(locatorSchema),
-  policy: ajv.compile(policySchema)
+interface StandaloneValidateFunction {
+  (value: unknown): boolean;
+  errors?: ErrorObject[] | null;
+}
+
+const validators: Record<"flow" | "locators" | "policy", StandaloneValidateFunction> = {
+  flow: validateFlow,
+  locators: validateLocators,
+  policy: validatePolicy
 };
 
 export function validateGeneratedPackage(result: GeneratedPackage): void {
@@ -20,7 +24,7 @@ export function validateGeneratedPackage(result: GeneratedPackage): void {
   validateSemantics(result);
 }
 
-function validate(name: string, validator: ValidateFunction, value: unknown): void {
+function validate(name: string, validator: StandaloneValidateFunction, value: unknown): void {
   if (!validator(value)) {
     throw new Error(`${name} inválido: ${formatErrors(validator.errors)}`);
   }

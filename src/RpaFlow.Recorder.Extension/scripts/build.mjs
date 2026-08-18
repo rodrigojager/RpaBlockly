@@ -2,6 +2,8 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { assertNoDynamicCode } from "./csp.mjs";
+import "./generate-schema-validators.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const output = join(root, "build");
@@ -37,4 +39,5 @@ await writeFile(
   `${JSON.stringify({ name: manifest.name, version: manifest.version }, null, 2)}\n`,
   "utf8"
 );
+await assertNoDynamicCode(output);
 console.log(`Extensão gerada em ${output}`);

@@ -22,6 +22,11 @@ npm run check
 O build unpacked fica em `build/`. Ele é recriado do zero, não contém sourcemaps,
 CDN ou código remoto e não deve ser versionado.
 
+Antes de validar ou compilar, os schemas JSON são transformados em validadores
+standalone e incluídos estaticamente no bundle. A extensão não executa
+`ajv.compile`, `eval` ou `Function` dinâmica dentro do Chrome; o build falha se
+qualquer avaliação incompatível com a CSP do Manifest V3 reaparecer.
+
 Para produzir o ZIP reproduzível e conferir o inventário de licenças:
 
 ```powershell

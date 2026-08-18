@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
+import { assertNoDynamicCode } from "../scripts/csp.mjs";
 import { buildBundle } from "../src/bundle/bundle.js";
 import { generatePackage } from "../src/package/generator.js";
 import { checkpoint, rawEvent } from "./fixtures.js";
@@ -21,6 +24,31 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   }
   assert.match(css, /button:focus-visible/u);
   assert.match(css, /prefers-reduced-motion/u);
+});
+
+test("bundles MV3 não contêm eval nem Function dinâmica", async () => {
+  const output = await mkdtemp(join(tmpdir(), "rpablockly-recorder-csp-"));
+  try {
+    await build({
+      absWorkingDir: root,
+      bundle: true,
+      entryPoints: {
+        "background/service-worker": "src/background/service-worker.ts",
+        "sidepanel/sidepanel": "src/sidepanel/sidepanel.ts"
+      },
+      format: "esm",
+      legalComments: "none",
+      minify: false,
+      outdir: output,
+      platform: "browser",
+      sourcemap: false,
+      target: "chrome116",
+      treeShaking: true
+    });
+    await assertNoDynamicCode(output);
+  } finally {
+    await rm(output, { recursive: true, force: true });
+  }
 });
 
 test("gravação extensa respeita orçamento de tempo e memória", async () => {
