@@ -17,9 +17,13 @@ senha não entram em eventos, amostras, logs ou checkpoints.
 ## Segredos
 
 A captura de segredo é opt-in por sessão. O valor é cifrado imediatamente com
-AES-256-GCM; a chave é encapsulada com uma chave pública RSA-OAEP-SHA-256. Apenas
-o backend destinatário pode possuir a chave privada. Sem opt-in ou chave válida,
-o passo vira uma pendência bloqueante em vez de receber um valor inventado.
+AES-256-GCM; a chave é encapsulada com uma chave pública RSA-OAEP-SHA-256. No
+modo simples, o par RSA é gerado localmente e a chave privada é imediatamente
+cifrada com uma chave derivada da senha antes de ser exibida como chave de
+recuperação. Senha, chave de recuperação e chave privada não são salvas pela
+extensão nem entram no bundle. No modo avançado, somente a chave pública
+fornecida entra na extensão. Sem opt-in ou material válido, o passo vira uma
+pendência bloqueante em vez de receber um valor inventado.
 
 ## Retenção e compartilhamento
 
@@ -39,4 +43,4 @@ As permissões permanentes são limitadas a `activeTab`, `scripting`, `storage`,
 gesto do usuário. Não existe `<all_urls>` permanente.
 
 Incidentes ou suspeitas devem incluir versão da extensão, horário, origem afetada
-e hash do bundle, nunca senhas ou chaves privadas.
+e hash do bundle, nunca senhas, chaves de recuperação ou chaves privadas.

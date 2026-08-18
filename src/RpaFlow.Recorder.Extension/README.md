@@ -46,8 +46,16 @@ O release compila duas vezes e exige igualdade byte a byte. O ZIP vai para
 5. Fixe a extensão e clique no ícone para abrir o side panel.
 
 Ao iniciar uma sessão, o Chrome solicita acesso apenas à origem da aba ativa. A
-extensão não declara `<all_urls>` permanente. Senhas ficam desligadas por padrão;
-o opt-in exige um key ID e uma chave pública RSA/SPKI de pelo menos 2048 bits.
+extensão não declara `<all_urls>` permanente. Senhas ficam desligadas por padrão.
+No modo recomendado, a pessoa escolhe uma senha e recebe uma chave de recuperação
+cifrada; no modo avançado, o opt-in aceita um key ID e uma chave pública RSA/SPKI
+de pelo menos 2048 bits. Nenhuma senha ou chave privada é persistida.
+
+Para recuperar localmente o PEM gerado pelo modo recomendado:
+
+```powershell
+npm run recover:key -- --package .\chave-recorder.txt --output .\chave-privada.pem
+```
 
 ## Diagnóstico local
 

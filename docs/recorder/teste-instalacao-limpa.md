@@ -8,9 +8,9 @@ registrado em [relatorio-instalacao-limpa.md](relatorio-instalacao-limpa.md).
 ## Identificação do candidato
 
 - RpaBlockly: `2.0.0-rc.1`;
-- Recorder: `1.0.0-rc.1`;
+- Recorder: `1.0.0-rc.4`;
 - checksum esperado: consultar
-  `src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.1.zip.sha256`;
+  `src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.4.zip.sha256`;
 - estado obrigatório antes do teste: `release candidate`, REC-140 pendente.
 
 ## Pré-requisitos da pessoa avaliadora
@@ -49,7 +49,7 @@ execução anterior.
 1. compare o hash do ZIP com o `.sha256`:
 
    ```powershell
-   (Get-FileHash .\rpablockly-recorder-1.0.0-rc.1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+   (Get-FileHash .\rpablockly-recorder-1.0.0-rc.4.zip -Algorithm SHA256).Hash.ToLowerInvariant()
    ```
 
 2. descompacte o ZIP em uma pasta vazia;

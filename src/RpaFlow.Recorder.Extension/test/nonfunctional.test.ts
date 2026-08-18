@@ -19,9 +19,14 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   assert.match(html, /<html lang="pt-BR">/u);
   assert.match(html, /role="status" aria-live="polite"/u);
   assert.match(html, /<progress[^>]+aria-label="Progresso da exportação"/u);
-  for (const id of ["session-name", "recipient-key-id", "recipient-public-key"]) {
+  for (const id of [
+    "session-name", "secret-sharing-password", "recovery-key",
+    "recipient-key-id", "recipient-public-key"
+  ]) {
     assert.match(html, new RegExp(`<label for="${id}">`, "u"));
   }
+  assert.match(html, /Anote e repasse ao desenvolvedor a senha e esta chave/u);
+  assert.match(html, /Senha e chave de recuperação \(recomendado\)/u);
   assert.match(css, /button:focus-visible/u);
   assert.match(css, /prefers-reduced-motion/u);
 });

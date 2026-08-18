@@ -4,6 +4,11 @@ import type { RecorderCheckpoint, RecorderOptions } from "../core/types.js";
 import { EvidenceStore, slideshowItems, type EvidenceAsset } from "../evidence/evidence.js";
 import { assertFinalizable, generatePackage } from "../package/generator.js";
 import { validateGeneratedPackage } from "../package/validator.js";
+import {
+  generateRecipientAccess,
+  generateSharingPassword,
+  type GeneratedRecipientAccess
+} from "../security/recovery.js";
 import { EncryptedSecretStore } from "../security/secret-store.js";
 import type { RecorderRequest, RecorderResponse } from "../shared/messages.js";
 import { hydrateUploads, UploadStore } from "../uploads/upload-store.js";
@@ -17,6 +22,7 @@ let evidenceIndex = 0;
 let exportCancelled = false;
 let activeDownloadId: number | undefined;
 let comments: BundleComment[] = [];
+let generatedRecipientAccess: GeneratedRecipientAccess | undefined;
 
 const status = element<HTMLParagraphElement>("status");
 const issueList = element<HTMLOListElement>("issues");
@@ -25,11 +31,16 @@ const issueCount = element<HTMLSpanElement>("issue-count");
 const stepCount = element<HTMLSpanElement>("step-count");
 const secretToggle = element<HTMLInputElement>("capture-secrets");
 const secretOptions = element<HTMLDivElement>("secret-options");
+const simpleSecretOptions = element<HTMLDivElement>("simple-secret-options");
+const advancedSecretOptions = element<HTMLDivElement>("advanced-secret-options");
+const sharingPassword = element<HTMLInputElement>("secret-sharing-password");
+const recoveryOutput = element<HTMLDivElement>("recovery-output");
+const recoveryKey = element<HTMLTextAreaElement>("recovery-key");
 const exportSection = element<HTMLElement>("export-section");
 const exportProgress = element<HTMLProgressElement>("export-progress");
 const exportMessage = element<HTMLParagraphElement>("export-message");
 
-element<HTMLButtonElement>("start").addEventListener("click", () => void start());
+element<HTMLButtonElement>("start").addEventListener("click", () => void start().catch(showError));
 element<HTMLButtonElement>("pause").addEventListener("click", () => void invokeAndRender({ type: "RECORDER_PAUSE" }));
 element<HTMLButtonElement>("resume").addEventListener("click", () => void invokeAndRender({ type: "RECORDER_RESUME" }));
 element<HTMLButtonElement>("cancel").addEventListener("click", () => void cancel());
@@ -41,7 +52,16 @@ element<HTMLButtonElement>("cancel-export").addEventListener("click", () => {
 element<HTMLButtonElement>("previous-evidence").addEventListener("click", () => showEvidence(evidenceIndex - 1));
 element<HTMLButtonElement>("next-evidence").addEventListener("click", () => showEvidence(evidenceIndex + 1));
 element<HTMLButtonElement>("remove-evidence").addEventListener("click", () => void removeCurrentEvidence());
-secretToggle.addEventListener("change", () => { secretOptions.hidden = !secretToggle.checked; });
+element<HTMLInputElement>("secret-mode-simple").addEventListener("change", syncSecretMode);
+element<HTMLInputElement>("secret-mode-advanced").addEventListener("change", syncSecretMode);
+element<HTMLButtonElement>("generate-password").addEventListener("click", generatePassword);
+element<HTMLButtonElement>("toggle-password").addEventListener("click", togglePasswordVisibility);
+element<HTMLButtonElement>("copy-password").addEventListener("click", () => void copyPassword());
+element<HTMLButtonElement>("generate-recovery-key").addEventListener("click", () =>
+  void prepareSimpleRecipientAccess().catch(showError));
+element<HTMLButtonElement>("copy-recovery-key").addEventListener("click", () => void copyRecoveryKey());
+sharingPassword.addEventListener("input", invalidateGeneratedRecipientAccess);
+secretToggle.addEventListener("change", syncSecretOptions);
 issueList.addEventListener("click", (event) => void resolveIssue(event));
 timeline.addEventListener("change", (event) => void updateComment(event));
 addEventListener("unload", revokeObjectUrls);
@@ -49,6 +69,7 @@ addEventListener("unload", revokeObjectUrls);
 void initialize();
 
 async function initialize(): Promise<void> {
+  syncSecretOptions();
   comments = await loadComments();
   const response = await send({ type: "RECORDER_GET_STATE" });
   await render(response.checkpoint);
@@ -75,14 +96,32 @@ async function start(): Promise<void> {
     return;
   }
   const captureSecrets = secretToggle.checked;
+  let recipientOptions: Pick<RecorderOptions, "recipientKeyId" | "recipientPublicKeyPem"> = {};
+  if (captureSecrets && element<HTMLInputElement>("secret-mode-simple").checked) {
+    if (generatedRecipientAccess === undefined) {
+      await prepareSimpleRecipientAccess();
+      setStatus("Chave gerada. Copie a senha e a chave de recuperação e confirme antes de iniciar.", true);
+      return;
+    }
+    if (!element<HTMLInputElement>("recovery-copied").checked) {
+      setStatus("Confirme que copiou a senha e a chave de recuperação antes de iniciar.", true);
+      return;
+    }
+    recipientOptions = {
+      recipientKeyId: generatedRecipientAccess.keyId,
+      recipientPublicKeyPem: generatedRecipientAccess.publicKeyPem
+    };
+  } else if (captureSecrets) {
+    recipientOptions = {
+      recipientKeyId: element<HTMLInputElement>("recipient-key-id").value.trim(),
+      recipientPublicKeyPem: element<HTMLTextAreaElement>("recipient-public-key").value.trim()
+    };
+  }
   const options: RecorderOptions = {
     captureScreenshots: element<HTMLInputElement>("capture-screenshots").checked,
     captureSecrets,
     includeUploads: element<HTMLInputElement>("include-uploads").checked,
-    ...(captureSecrets ? {
-      recipientKeyId: element<HTMLInputElement>("recipient-key-id").value.trim(),
-      recipientPublicKeyPem: element<HTMLTextAreaElement>("recipient-public-key").value.trim()
-    } : {})
+    ...recipientOptions
   };
   await invokeAndRender({
     type: "RECORDER_START",
@@ -141,6 +180,7 @@ async function finalizeAndDownload(): Promise<void> {
     setProgress(100, "Download confirmado. A sessão local foi limpa.");
     await send({ type: "RECORDER_COMPLETE" });
     await clearComments();
+    clearSensitiveAccess();
     await render(undefined);
     setStatus("Bundle V2 baixado com sucesso.");
   } catch (error) {
@@ -154,6 +194,7 @@ async function finalizeAndDownload(): Promise<void> {
 async function cancel(): Promise<void> {
   await send({ type: "RECORDER_CANCEL" });
   await clearComments();
+  clearSensitiveAccess();
   evidence = [];
   await render(undefined);
   setStatus("Sessão excluída.");
@@ -359,10 +400,105 @@ function setEnabled(id: string, enabled: boolean): void {
 function setConfigurationEnabled(enabled: boolean): void {
   for (const id of [
     "session-name", "capture-screenshots", "include-uploads", "capture-secrets",
+    "secret-mode-simple", "secret-mode-advanced", "secret-sharing-password",
+    "generate-password", "generate-recovery-key", "recovery-copied",
     "recipient-key-id", "recipient-public-key", "privacy-accepted"
   ]) {
-    element<HTMLInputElement | HTMLTextAreaElement>(id).disabled = !enabled;
+    element<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement>(id).disabled = !enabled;
   }
+}
+
+function syncSecretOptions(): void {
+  secretOptions.hidden = !secretToggle.checked;
+  if (!secretToggle.checked) clearSensitiveAccess();
+  syncSecretMode();
+}
+
+function syncSecretMode(): void {
+  const simple = element<HTMLInputElement>("secret-mode-simple").checked;
+  simpleSecretOptions.hidden = !simple;
+  advancedSecretOptions.hidden = simple;
+  if (!simple) invalidateGeneratedRecipientAccess();
+}
+
+function generatePassword(): void {
+  sharingPassword.value = generateSharingPassword();
+  sharingPassword.type = "text";
+  const toggle = element<HTMLButtonElement>("toggle-password");
+  toggle.textContent = "Ocultar";
+  toggle.setAttribute("aria-pressed", "true");
+  invalidateGeneratedRecipientAccess();
+  setStatus("Senha segura gerada. Agora gere a chave de recuperação.");
+}
+
+function togglePasswordVisibility(): void {
+  const visible = sharingPassword.type === "text";
+  sharingPassword.type = visible ? "password" : "text";
+  const button = element<HTMLButtonElement>("toggle-password");
+  button.textContent = visible ? "Mostrar" : "Ocultar";
+  button.setAttribute("aria-pressed", String(!visible));
+}
+
+async function prepareSimpleRecipientAccess(): Promise<void> {
+  const button = element<HTMLButtonElement>("generate-recovery-key");
+  button.disabled = true;
+  setStatus("Gerando a proteção criptográfica local…");
+  try {
+    generatedRecipientAccess = await generateRecipientAccess(sharingPassword.value);
+    recoveryKey.value = generatedRecipientAccess.recoveryKey;
+    recoveryOutput.hidden = false;
+    element<HTMLInputElement>("recovery-copied").checked = false;
+    setStatus("Chave gerada. Copie a senha e a chave de recuperação antes de iniciar.");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function invalidateGeneratedRecipientAccess(): void {
+  generatedRecipientAccess = undefined;
+  recoveryKey.value = "";
+  recoveryOutput.hidden = true;
+  element<HTMLInputElement>("recovery-copied").checked = false;
+}
+
+function clearSensitiveAccess(): void {
+  sharingPassword.value = "";
+  sharingPassword.type = "password";
+  const toggle = element<HTMLButtonElement>("toggle-password");
+  toggle.textContent = "Mostrar";
+  toggle.setAttribute("aria-pressed", "false");
+  invalidateGeneratedRecipientAccess();
+  element<HTMLInputElement>("recipient-key-id").value = "";
+  element<HTMLTextAreaElement>("recipient-public-key").value = "";
+}
+
+async function copyPassword(): Promise<void> {
+  if (sharingPassword.value.length === 0) {
+    setStatus("Informe ou gere uma senha antes de copiar.", true);
+    return;
+  }
+  await copySensitiveText(sharingPassword.value, "Senha copiada. Evite mantê-la no histórico da área de transferência.");
+}
+
+async function copyRecoveryKey(): Promise<void> {
+  if (recoveryKey.value.length === 0) {
+    setStatus("Gere a chave de recuperação antes de copiar.", true);
+    return;
+  }
+  await copySensitiveText(recoveryKey.value, "Chave de recuperação copiada.");
+}
+
+async function copySensitiveText(value: string, message: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus(message);
+  } catch {
+    setStatus("O Chrome não permitiu copiar. Selecione o conteúdo do campo manualmente.", true);
+  }
+}
+
+function showError(error: unknown): void {
+  setStatus(error instanceof Error ? error.message : "Operação indisponível.", true);
 }
 
 function stateLabel(state: RecorderCheckpoint["state"]): string {

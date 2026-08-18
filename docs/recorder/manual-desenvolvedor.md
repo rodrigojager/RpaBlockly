@@ -61,6 +61,27 @@ entre `strict`, `fallback` e `adaptive`.
 As amostras ajudam na revisão, mas não são publicadas como dados operacionais.
 O bundle original e os mappings ficam como evidência lateral da revisão.
 
+## Recuperar a chave do modo simples
+
+Salve a chave de recuperação copiada pelo usuário em um arquivo de texto. No
+repositório, execute:
+
+```powershell
+npm run recover:key --prefix src/RpaFlow.Recorder.Extension -- `
+  --package .\chave-recorder.txt `
+  --output .\chave-privada-recorder.pem
+```
+
+O comando pede a senha sem exibi-la, valida o pacote e grava a chave privada
+PKCS#8 em um arquivo novo, sem sobrescrever um caminho existente. Ele funciona
+inteiramente de forma local. Proteja o PEM com os controles da organização e
+exclua-o assim que não for mais necessário. O `keyId` informado pelo comando deve
+coincidir com `recipientKeyId` do manifest do bundle.
+
+Não envie senha ou chave de recuperação como argumento de linha de comando, não
+as versione e não registre esses dados em logs. O modo avançado permanece
+preferível quando a organização já possui cofre ou gestão própria de chaves RSA.
+
 ## Evoluir a extensão
 
 Uma mudança de ação gravável deve manter juntos:
@@ -73,8 +94,9 @@ Uma mudança de ação gravável deve manter juntos:
 - importador, Blockly e handler do runtime;
 - fixtures unitárias, contrato cruzado e E2E.
 
-Não adicione código remoto, permissão permanente ampla, `eval`, segredo em
-checkpoint, HTML de página no slideshow ou seletor de negócio no fluxo.
+Não adicione código remoto, permissão permanente ampla, `eval`, senha, chave de
+recuperação ou chave privada em checkpoint, HTML de página no slideshow ou
+seletor de negócio no fluxo.
 
 ## Produzir a release
 

@@ -4,9 +4,9 @@
   "flowSchemaVersion": 2,
   "locatorSchemaVersion": 1,
   "policySchemaVersion": 1,
-  "recorderVersion": "1.0.0-rc.1",
-  "recorderArtifact": "rpablockly-recorder-1.0.0-rc.1.zip",
-  "recorderChecksum": "a17745ec5fc086261ba5290ed6443fa0122d3ad08d52e2c81e6a382cf5f164b3",
+  "recorderVersion": "1.0.0-rc.4",
+  "recorderArtifact": "rpablockly-recorder-1.0.0-rc.4.zip",
+  "recorderChecksum": "35c5a7a363780cfc99ba782c3e3fbdba16a8c3a404720e8b3e7e4e6832c5d55b",
   "releaseStatus": "release-candidate",
   "humanAcceptance": {
     "requirement": "REC-140",

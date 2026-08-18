@@ -5,7 +5,7 @@
 - pacote V2 e sua revisão;
 - valores digitados, segredos e uploads;
 - screenshots e comentários;
-- chave privada do destinatário;
+- senha, chave de recuperação e chave privada do destinatário;
 - permissões temporárias de host;
 - staging do importador.
 
@@ -24,6 +24,8 @@
 |---|---|
 | Página envia evento falso | `isTrusted`, schema de mensagem, IDs idempotentes e catálogo fechado. |
 | Segredo aparece em texto claro | captura opt-in, criptografia imediata, máscara e busca automatizada. |
+| Senha fraca protege a recuperação | mínimo de 12 caracteres com letras e números, PBKDF2-HMAC-SHA-256 com salt e 600.000 iterações e sugestão aleatória. |
+| Material de recuperação fica no estado | senha e chave de recuperação permanecem somente no painel; cópia confirmada antes da gravação; nenhuma delas entra em checkpoint ou bundle. |
 | Permissão excessiva | hosts opcionais por origem e gesto; sem `<all_urls>`. |
 | Suspensão duplica passos | checkpoint em `storage.session` e IDs determinísticos. |
 | ZIP adulterado | integridade por entrada antes do JSON. |
@@ -31,7 +33,7 @@
 | Preview altera produção | staging read-only; apply separado por CAS. |
 | Conflito sobrescreve revisão | revisão esperada obrigatória. |
 | Slideshow executa conteúdo | renderização apenas de imagem local; sem HTML/site/replay. |
-| Chave privada chega ao frontend | resolvedor exclusivamente backend. |
+| Chave privada fornecida pelo desenvolvedor chega ao frontend | modo avançado recebe somente a chave pública; no modo simples, a chave privada recém-gerada é cifrada em memória e descartada antes da gravação. |
 
 ## Dados deliberadamente não capturados
 
@@ -47,8 +49,8 @@ falha em segredo, integridade, path, limite ou CAS bloqueia o release.
 
 - texto pessoal visível fora de campos sensíveis pode aparecer em screenshot;
 - uma origem autorizada pode mudar de comportamento depois da gravação;
-- a segurança da chave privada e do canal de compartilhamento é responsabilidade
-  do ambiente destinatário;
+- a segurança da senha, da chave de recuperação, da chave privada recuperada e
+  dos canais de compartilhamento é responsabilidade dos participantes;
 - permissões opcionais concedidas pelo usuário permanecem administráveis no
   Chrome até serem revogadas.
 

@@ -7,7 +7,7 @@ script autônomo de replay.
 
 ## Instalar
 
-1. obtenha `rpablockly-recorder-1.0.0-rc.1.zip` e o arquivo `.sha256` da mesma release;
+1. obtenha `rpablockly-recorder-1.0.0-rc.4.zip` e o arquivo `.sha256` da mesma release;
 2. confira o SHA-256 antes de descompactar;
 3. abra `chrome://extensions`, ative o modo do desenvolvedor e escolha
    **Carregar sem compactação**;
@@ -17,7 +17,7 @@ script autônomo de replay.
 No PowerShell, a verificação do arquivo é:
 
 ```powershell
-(Get-FileHash .\rpablockly-recorder-1.0.0-rc.1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+(Get-FileHash .\rpablockly-recorder-1.0.0-rc.4.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
 O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
@@ -39,10 +39,24 @@ Cancelar remove explicitamente a sessão local.
 
 ## Senhas, uploads e evidências
 
-Senhas ficam desligadas por padrão. A ativação exige uma chave pública RSA e um
-ID de destinatário; cada valor é cifrado imediatamente com AES-256-GCM, e a chave
-simétrica é encapsulada com RSA-OAEP-SHA-256. A chave privada nunca entra na
-extensão.
+Senhas ficam desligadas por padrão. Ao ativar a opção, mantenha o modo
+**Senha e chave de recuperação** e:
+
+1. digite uma senha de ao menos 12 caracteres, com letras e números, ou clique
+   em **Gerar senha**;
+2. clique em **Gerar chave de recuperação**;
+3. copie a senha e a chave de recuperação para um local seguro;
+4. confirme a cópia e somente então inicie a gravação.
+
+A extensão não salva esses dois dados e não consegue recriá-los depois que o
+painel é fechado. Repasse ambos ao desenvolvedor, preferencialmente por canais
+separados. A chave de recuperação contém uma chave privada RSA cifrada; sozinha,
+sem a senha, ela não abre os segredos.
+
+O modo avançado, que solicita ID e chave pública RSA em PEM, só é necessário
+quando o desenvolvedor já forneceu esses dados. Nos dois modos, cada valor é
+cifrado imediatamente com AES-256-GCM, e a chave simétrica é encapsulada com
+RSA-OAEP-SHA-256.
 
 Uploads registram nome, tipo, tamanho e hash. Os bytes só entram no ZIP quando a
 opção correspondente foi marcada. Extensões perigosas e arquivos acima dos
@@ -53,7 +67,9 @@ cada imagem: informações visíveis fora dos campos podem ser pessoais.
 
 ## O que entregar ao desenvolvedor
 
-Entregue somente o `.rpablockly.zip` final. Informe separadamente quais entradas,
+Entregue o `.rpablockly.zip` final. Se a captura de senhas estava ligada no modo
+simples, entregue também a senha e a chave de recuperação pelos canais aprovados,
+preferencialmente separados entre si e do bundle. Informe quais entradas,
 segredos e anexos devem alimentar as referências exibidas pelo importador. Não
 edite o ZIP manualmente: qualquer alteração invalida a integridade.
 
