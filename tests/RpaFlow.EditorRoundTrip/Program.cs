@@ -607,7 +607,8 @@ static async Task CheckProductionRecorderPipelineAsync(
         new UTF8Encoding(false, true));
     await RecorderExtensionLifecycle.VerifyLoadedAsync(
         Path.Combine(extensionRoot, "build"),
-        testRoot);
+        testRoot,
+        fixture.BaseUrl);
     Check(true,
         "o Chromium carrega manifesto, service worker e side panel MV3 empacotados");
     var messages = await CaptureRecorderMessagesAsync(

@@ -149,11 +149,9 @@ async function start(request: Extract<RecorderRequest, { type: "RECORDER_START" 
     });
   }
   const requestedOrigins = { origins: [`${origin}/*`] };
-  const alreadyGranted = await chrome.permissions.contains(requestedOrigins);
-  const granted = alreadyGranted
-    ? true
-    : await chrome.permissions.request(requestedOrigins);
-  if (!granted) throw new Error("A permissão para a origem ativa não foi concedida.");
+  if (!await chrome.permissions.contains(requestedOrigins)) {
+    throw new Error("A permissão para a origem ativa deve ser concedida pelo painel.");
+  }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined || tab.url === undefined || new URL(tab.url).origin !== origin) {
     throw new Error("A aba ativa não corresponde à origem autorizada.");

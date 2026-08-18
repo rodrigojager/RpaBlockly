@@ -52,8 +52,8 @@ jobs:
           name: release-gates-${{ matrix.os }}
           path: |
             artifacts/sbom.spdx.json
-            artifacts/rpablockly-recorder-1.0.0-rc.1.zip
-            src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.1.zip.sha256
+            artifacts/rpablockly-recorder-1.0.0-rc.3.zip
+            src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.3.zip.sha256
           if-no-files-found: error
 
   sql-server:

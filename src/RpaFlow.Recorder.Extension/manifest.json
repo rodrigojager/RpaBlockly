@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "RpaBlockly Recorder V2",
-  "version": "1.0.0.2",
-  "version_name": "1.0.0-rc.2",
+  "version": "1.0.0.3",
+  "version_name": "1.0.0-rc.3",
   "description": "Grava interações consentidas e exporta um pacote RpaBlockly V2 revisável.",
   "minimum_chrome_version": "116",
   "permissions": [

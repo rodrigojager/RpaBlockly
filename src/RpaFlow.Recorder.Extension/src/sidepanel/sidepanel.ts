@@ -64,6 +64,16 @@ async function start(): Promise<void> {
     setStatus("Abra uma página HTTP(S) antes de iniciar.", true);
     return;
   }
+  const origin = new URL(tab.url).origin;
+  const requestedOrigins = { origins: [`${origin}/*`] };
+  const alreadyGranted = await chrome.permissions.contains(requestedOrigins);
+  const granted = alreadyGranted
+    ? true
+    : await chrome.permissions.request(requestedOrigins);
+  if (!granted) {
+    setStatus("A permissão para a origem ativa não foi concedida.", true);
+    return;
+  }
   const captureSecrets = secretToggle.checked;
   const options: RecorderOptions = {
     captureScreenshots: element<HTMLInputElement>("capture-screenshots").checked,
@@ -77,7 +87,7 @@ async function start(): Promise<void> {
   await invokeAndRender({
     type: "RECORDER_START",
     name: element<HTMLInputElement>("session-name").value.trim() || "Nova gravação",
-    origin: new URL(tab.url).origin,
+    origin,
     options
   });
 }

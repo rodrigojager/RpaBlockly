@@ -26,6 +26,13 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   assert.match(css, /prefers-reduced-motion/u);
 });
 
+test("permissão opcional é solicitada no gesto do painel, não no service worker", async () => {
+  const sidepanel = await readFile(join(root, "src", "sidepanel", "sidepanel.ts"), "utf8");
+  const serviceWorker = await readFile(join(root, "src", "background", "service-worker.ts"), "utf8");
+  assert.match(sidepanel, /chrome\.permissions\.request\(requestedOrigins\)/u);
+  assert.doesNotMatch(serviceWorker, /chrome\.permissions\.request/u);
+});
+
 test("bundles MV3 não contêm eval nem Function dinâmica", async () => {
   const output = await mkdtemp(join(tmpdir(), "rpablockly-recorder-csp-"));
   try {
