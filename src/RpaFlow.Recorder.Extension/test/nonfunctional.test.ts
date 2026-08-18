@@ -25,8 +25,11 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   ]) {
     assert.match(html, new RegExp(`<label for="${id}">`, "u"));
   }
-  assert.match(html, /Anote e repasse ao desenvolvedor a senha e esta chave/u);
-  assert.match(html, /Senha e chave de recuperação \(recomendado\)/u);
+  assert.match(html, /É o texto curto que você escolhe e repassa ao desenvolvedor/u);
+  assert.match(html, /É um código longo gerado pelo Recorder\. Não é a sua senha/u);
+  assert.doesNotMatch(html, /sem pedir conhecimentos técnicos/u);
+  assert.match(css, /input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)/u);
+  assert.match(css, /grid-template-columns: 17px minmax\(0, 1fr\) auto/u);
   assert.match(css, /button:focus-visible/u);
   assert.match(css, /prefers-reduced-motion/u);
 });

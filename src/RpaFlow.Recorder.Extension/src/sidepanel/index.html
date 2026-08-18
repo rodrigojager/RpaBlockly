@@ -25,41 +25,58 @@
 
       <div id="secret-options" class="sensitive-options" hidden>
         <fieldset class="mode-selector">
-          <legend>Como proteger as senhas capturadas?</legend>
-          <label class="check">
+          <legend>Modo de proteção</legend>
+          <label class="radio-card">
             <input id="secret-mode-simple" name="secret-mode" type="radio" value="simple" checked>
-            Senha e chave de recuperação (recomendado)
+            <strong>Senha</strong>
+            <span class="mode-badge">Recomendado</span>
           </label>
-          <label class="check">
+          <label class="radio-card">
             <input id="secret-mode-advanced" name="secret-mode" type="radio" value="advanced">
-            Chave RSA fornecida pelo desenvolvedor (avançado)
+            <strong>Chave RSA</strong>
+            <span class="mode-badge neutral">Avançado</span>
           </label>
         </fieldset>
 
         <div id="simple-secret-options">
-          <p class="helper">Escolha uma senha fácil de repassar. O Recorder gerará a criptografia e uma chave de recuperação sem pedir conhecimentos técnicos.</p>
-
-          <label for="secret-sharing-password">Senha de compartilhamento</label>
-          <input id="secret-sharing-password" type="password" minlength="12" maxlength="128"
-            autocomplete="new-password" aria-describedby="password-help" placeholder="12 ou mais caracteres, com letras e números">
-          <p id="password-help" class="helper">Você pode criar a senha ou pedir uma sugestão aleatória. Ela não será salva pela extensão.</p>
-          <div class="field-actions">
-            <button id="generate-password" type="button">Gerar senha</button>
-            <button id="toggle-password" type="button" aria-pressed="false">Mostrar</button>
-            <button id="copy-password" type="button">Copiar senha</button>
+          <div class="secret-step">
+            <div class="secret-step-title">
+              <span aria-hidden="true">1</span>
+              <div>
+                <h3>Senha de compartilhamento</h3>
+                <p id="password-help">É o texto curto que você escolhe e repassa ao desenvolvedor.</p>
+              </div>
+            </div>
+            <label for="secret-sharing-password">Digite ou gere a senha</label>
+            <input id="secret-sharing-password" type="password" minlength="12" maxlength="128"
+              autocomplete="new-password" aria-describedby="password-help" placeholder="12 ou mais caracteres, com letras e números">
+            <div class="field-actions">
+              <button id="generate-password" type="button">Gerar senha</button>
+              <button id="toggle-password" type="button" aria-pressed="false">Mostrar</button>
+              <button id="copy-password" type="button">Copiar senha</button>
+            </div>
           </div>
 
-          <button id="generate-recovery-key" class="primary full-width" type="button">Gerar chave de recuperação</button>
+          <div class="secret-step">
+            <div class="secret-step-title">
+              <span aria-hidden="true">2</span>
+              <div>
+                <h3>Chave de recuperação</h3>
+                <p>É um código longo gerado pelo Recorder. Não é a sua senha.</p>
+              </div>
+            </div>
+            <button id="generate-recovery-key" class="primary full-width" type="button">Gerar chave de recuperação</button>
 
-          <div id="recovery-output" hidden>
-            <label for="recovery-key">Chave de recuperação cifrada</label>
-            <textarea id="recovery-key" rows="7" readonly spellcheck="false" aria-describedby="recovery-help"></textarea>
-            <button id="copy-recovery-key" type="button">Copiar chave de recuperação</button>
-            <p id="recovery-help" class="warning">Anote e repasse ao desenvolvedor a senha e esta chave, preferencialmente por canais separados. O Recorder não salva esses dois dados e não poderá recuperá-los depois que este painel for fechado.</p>
-            <label class="check acknowledgement">
-              <input id="recovery-copied" type="checkbox">
-              Já copiei a senha e a chave de recuperação para um local seguro.
-            </label>
+            <div id="recovery-output" hidden>
+              <label for="recovery-key">Código da chave de recuperação</label>
+              <textarea id="recovery-key" rows="7" readonly spellcheck="false" aria-describedby="recovery-help"></textarea>
+              <button id="copy-recovery-key" type="button">Copiar chave de recuperação</button>
+              <p id="recovery-help" class="warning">Guarde e repasse ao desenvolvedor os dois itens: a senha do passo 1 e a chave do passo 2. O Recorder não salva esses dados.</p>
+              <label class="check acknowledgement">
+                <input id="recovery-copied" type="checkbox">
+                Já copiei a senha e a chave de recuperação para um local seguro.
+              </label>
+            </div>
           </div>
         </div>
 

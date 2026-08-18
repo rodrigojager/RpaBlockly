@@ -7,7 +7,7 @@ script autônomo de replay.
 
 ## Instalar
 
-1. obtenha `rpablockly-recorder-1.0.0-rc.4.zip` e o arquivo `.sha256` da mesma release;
+1. obtenha `rpablockly-recorder-1.0.0-rc.5.zip` e o arquivo `.sha256` da mesma release;
 2. confira o SHA-256 antes de descompactar;
 3. abra `chrome://extensions`, ative o modo do desenvolvedor e escolha
    **Carregar sem compactação**;
@@ -17,7 +17,7 @@ script autônomo de replay.
 No PowerShell, a verificação do arquivo é:
 
 ```powershell
-(Get-FileHash .\rpablockly-recorder-1.0.0-rc.4.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+(Get-FileHash .\rpablockly-recorder-1.0.0-rc.5.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
 O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
