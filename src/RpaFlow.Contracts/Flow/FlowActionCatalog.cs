@@ -47,6 +47,7 @@ public static class FlowActionCatalog
             ["screenshot"] = [FlowCapabilities.Web, FlowCapabilities.FileSystem],
             ["safeFinalConfirmation"] =
                 [FlowCapabilities.Web, FlowCapabilities.SafeFinalConfirmation],
+            ["completeAuthenticationAttempt"] = [],
             ["if"] = [],
             ["repeat"] = [],
             ["forEach"] = [],

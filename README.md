@@ -12,7 +12,7 @@ Abra [docs/manual.html](docs/manual.html) no navegador ou execute:
 .\abrir-manual.cmd
 ```
 
-O manual funciona localmente, sem CDN, possui busca, filtro, tema e uma seção independente para cada um dos 35 blocos, com todas as propriedades e opções.
+O manual funciona localmente, sem CDN, possui busca, filtro, tema e uma seção independente para cada um dos 36 blocos, com todas as propriedades e opções.
 
 ## Criar um RPA
 
@@ -66,7 +66,7 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj -- --validate-only
 
 Configure a string de conexão somente no arquivo local. Antes de ligar o worker:
 
-1. aplique `database/sqlserver/001_create_worker_schema.sql`;
+1. aplique `database/sqlserver/001_create_worker_schema.sql` e `003_worker_resilience.sql`;
 2. confira os nomes em `RpaWorker.Tables`;
 3. configure cada entrada de `Definitions`;
 4. se a homologação deve executar uma última ação segura, informe seu ID em `SafeValidationBoundaryActionId`;

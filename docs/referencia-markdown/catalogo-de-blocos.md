@@ -1,6 +1,6 @@
 # Catálogo de blocos e ações
 
-Este catálogo descreve o estado atual da toolbox compartilhada: **35 blocos visuais** e **32 valores distintos de `action.type`**.
+Este catálogo descreve o estado atual da toolbox compartilhada: **36 blocos visuais** e **33 valores distintos de `action.type`**.
 
 A diferença existe porque:
 
@@ -71,6 +71,7 @@ Os pares literal/source são exclusivos. Ações singulares exigem um alvo únic
 | `rpa_screenshot` | `screenshot` | Dados e artefatos | `web`, `filesystem` |
 | `rpa_download_click` ou `rpa_download_request` | `download` | Dados e artefatos | `web`, `filesystem`; `http` no modo request |
 | `rpa_safe_final` | `safeFinalConfirmation` | Dados e artefatos | `web`, `safeFinalConfirmation` |
+| `rpa_complete_authentication_attempt` | `completeAuthenticationAttempt` | Controle | nenhuma |
 | `rpa_if_value` ou `rpa_if_element` | `if` | Controle | nenhuma |
 | `rpa_repeat` | `repeat` | Controle | nenhuma |
 | `rpa_for_each` | `forEach` | Controle | nenhuma |
@@ -310,6 +311,14 @@ A presença desses campos no JSON não concede autorização para enviar. A pol�
 
 ## Controle de fluxo
 
+### Concluir tentativa de autenticação — `completeAuthenticationAttempt`
+
+- **Obrigatório:** somente ID, tipo e nome.
+- **Efeito externo:** nenhum; é um marcador idempotente.
+- **Efeito no worker:** libera somente a cerca de login depois que uma ação configurada em `AuthenticationAttemptActionIds` iniciou a autenticação.
+- **Uso:** coloque no ramo que já descartou rejeição explícita e comprovou que a autenticação foi aceita.
+- **MFA:** o marcador não libera a cerca independente de MFA.
+
 ### Se valor e Se elemento — `if`
 
 Os blocos `rpa_if_value` e `rpa_if_element` geram o mesmo tipo. `condition.type` escolhe o avaliador.
@@ -369,7 +378,7 @@ Pelo menos um entre `actions` e `elseActions` precisa ser não vazio.
 
 ## Atualizações recentes
 
-Os nove tipos adicionados à biblioteca original são:
+Os dez tipos adicionados à biblioteca original são:
 
 - `selectOption`;
 - `setChecked`;
@@ -379,7 +388,8 @@ Os nove tipos adicionados à biblioteca original são:
 - `closePage`;
 - `captureTimestamp`;
 - `waitForOneTimeCode`;
-- `typeAcrossInputs`.
+- `typeAcrossInputs`;
+- `completeAuthenticationAttempt`.
 
 Também foram generalizados, sem criar novos tipos:
 

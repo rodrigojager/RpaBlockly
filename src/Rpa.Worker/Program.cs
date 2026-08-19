@@ -4,6 +4,7 @@ using Rpa.Worker.Authentication;
 using Rpa.Worker.Configuration;
 using Rpa.Worker.Data;
 using Rpa.Worker.Execution;
+using Rpa.Worker.Hosting;
 using RpaFlow.Runtime;
 
 var cancellationSource = new CancellationTokenSource();
@@ -22,7 +23,7 @@ if (!File.Exists(configurationPath))
 
 var configurationDirectory =
     Path.GetDirectoryName(configurationPath) ?? Directory.GetCurrentDirectory();
-var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
     ContentRootPath = configurationDirectory
@@ -51,27 +52,37 @@ if (args.Contains("--validate-only", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
-if (!options.Enabled)
+if (options.Enabled)
 {
-    Console.WriteLine(
-        "O worker está validado, mas desabilitado. Defina RpaWorker.Enabled=true " +
-        "somente depois de configurar banco, claims e limites de segurança.");
-    return;
+    Directory.CreateDirectory(paths.ArtifactRoot);
+    Directory.CreateDirectory(paths.SessionStateRoot);
 }
-
-Directory.CreateDirectory(paths.ArtifactRoot);
-Directory.CreateDirectory(paths.SessionStateRoot);
 
 builder.Services.AddWindowsService(settings =>
     settings.ServiceName = "RPA Blockly Worker");
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton(new WorkerEnvironment(connectionString, paths));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<WorkerRuntimeState>();
+builder.Services.AddSingleton<WorkerStartupValidationState>();
+builder.Services.AddSingleton<WorkerExecutionLeaseState>();
 builder.Services.AddSingleton<IOneTimeCodeProvider, MicrosoftGraphEmailOneTimeCodeProvider>();
 builder.Services.AddSingleton<SqlWorkItemRepository>();
 builder.Services.AddSingleton<WorkItemProcessor>();
+builder.Services.Configure<HostOptions>(hostOptions =>
+    hostOptions.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+builder.Services.AddHostedService<WorkerStartupValidationHostedService>();
+builder.Services.AddSingleton<SqlWorkerExecutionLease>();
+builder.Services.AddSingleton<IWorkerExecutionLease>(services =>
+    services.GetRequiredService<SqlWorkerExecutionLease>());
+builder.Services.AddHostedService(services =>
+    services.GetRequiredService<SqlWorkerExecutionLease>());
+builder.Services.AddHostedService<WorkerOperationalHeartbeatService>();
 builder.Services.AddHostedService<RpaBackgroundService>();
 
-await builder.Build().RunAsync(cancellationSource.Token);
+var app = builder.Build();
+app.MapWorkerHostingEndpoints();
+await app.RunAsync(cancellationSource.Token);
 
 static string ResolveDefaultConfigurationPath()
 {
@@ -125,3 +136,5 @@ static string ResolveArgument(string[] arguments, string name, string defaultVal
 
     return arguments[index + 1];
 }
+
+public partial class Program;

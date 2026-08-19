@@ -3,6 +3,9 @@ using Microsoft.Graph.Models;
 using Rpa.Worker.Authentication;
 using Rpa.Worker.Configuration;
 using Rpa.Worker.Execution;
+using Rpa.Worker.Domain;
+using Rpa.Worker.Hosting;
+using Rpa.Worker.Data;
 using RpaFlow.Contracts;
 using RpaFlow.Playwright;
 using RpaFlow.Runtime;
@@ -14,6 +17,8 @@ await CheckPollingTimeoutAndAliasLockAsync();
 CheckFlowProviderFences();
 CheckOneTimeCodeOutputSanitization();
 CheckConfiguredExecutionGuard();
+CheckWorkerFailurePolicy();
+CheckWorkerReadiness();
 await CheckSafeValidationBoundaryConfigurationAsync();
 Console.WriteLine("Worker e provider de OTP por e-mail validados com sucesso.");
 
@@ -117,6 +122,70 @@ static void CheckConfiguredExecutionGuard()
             .GetAwaiter()
             .GetResult(),
         "parou antes da ação irreversível");
+}
+
+static void CheckWorkerFailurePolicy()
+{
+    var item = new RpaWorkItem(
+        Guid.NewGuid(), "exemplo", null, null, 1, 3, "{}", "{}", "{}");
+    var definition = new RpaDefinitionOptions();
+    var transient = new FlowExecutionException(
+        new FlowExecutionFailure(
+            "execucao", item.WorkItemId.ToString(), null,
+            FlowFailureCategory.Timeout, true, "Timeout transitório."),
+        new TimeoutException("Timeout transitório."));
+    var retry = WorkerFailurePolicy.Decide(
+        transient, item, definition, null, false, false);
+    Check(retry.Retry && !retry.PreserveAttempt,
+        "falha transitória agenda nova tentativa e consome a atual");
+
+    var leadership = WorkerFailurePolicy.Decide(
+        new OperationCanceledException("Trava perdida."),
+        item, definition, null, false, true);
+    Check(leadership.Retry && leadership.PreserveAttempt &&
+          leadership.ErrorCode == "TRAVA_GLOBAL_PERDIDA",
+        "perda da trava agenda retomada sem consumir tentativa do caso");
+
+    var paths = new WorkerPaths(".", ".", ".", ".");
+    var repository = new SqlWorkItemRepository(
+        CreateWorkerOptions(), new WorkerEnvironment(string.Empty, paths));
+    var observer = new WorkerFlowExecutionObserver(repository, ["enviar-login"], []);
+    observer.Track(new FlowExecutionEvent(
+        "actionStarted", "execucao", item.WorkItemId.ToString(), null,
+        DateTimeOffset.UtcNow, "enviar-login", "Enviar login", "click"));
+    var blocked = WorkerFailurePolicy.Decide(
+        transient, item, definition, observer, false, false);
+    Check(!blocked.Retry && blocked.ErrorCode == "REPETICAO_DE_LOGIN_BLOQUEADA",
+        "login iniciado sem marcador bloqueia repetição automática");
+    observer.Track(new FlowExecutionEvent(
+        "actionCompleted", "execucao", item.WorkItemId.ToString(), null,
+        DateTimeOffset.UtcNow, "concluir-login", "Concluir login",
+        "completeAuthenticationAttempt"));
+    var released = WorkerFailurePolicy.Decide(
+        transient, item, definition, observer, false, false);
+    Check(released.Retry,
+        "marcador concluído libera retry técnico posterior sem liberar MFA");
+    Check(FlowActionHandlerRegistry.Default.SupportedTypes.Contains(
+            "completeAuthenticationAttempt"),
+        "runtime possui handler para o marcador de autenticação");
+}
+
+static void CheckWorkerReadiness()
+{
+    var state = new WorkerRuntimeState();
+    state.MarkValidationPassed(true, 1, 1);
+    state.MarkLeadershipAcquired();
+    state.MarkPollingStarted();
+    state.MarkPollingSucceeded(DateTimeOffset.UtcNow.AddSeconds(5));
+    var ready = WorkerReadinessEvaluator.Evaluate(
+        state.GetSnapshot(), DateTimeOffset.UtcNow, 5);
+    Check(ready.Ready && ready.AcceptingClaims,
+        "readiness confirma liderança, polling recente e vaga disponível");
+    state.MarkExecutionStarted();
+    var busy = WorkerReadinessEvaluator.Evaluate(
+        state.GetSnapshot(), DateTimeOffset.UtcNow, 5);
+    Check(busy.Ready && !busy.AcceptingClaims,
+        "worker ocupado permanece saudável, mas não anuncia vaga imediata");
 }
 
 static async Task CheckSafeValidationBoundaryConfigurationAsync()
@@ -400,6 +469,7 @@ static void CheckFlowProviderFences()
         "MaxParallelism igual a 1");
 
     options.MaxParallelism = 1;
+    definition.MfaAttemptActionIds = ["aguardar-otp"];
     RpaWorkerOptionsValidator.ValidateOneTimeCodeProviders(
         options,
         "exemplo",

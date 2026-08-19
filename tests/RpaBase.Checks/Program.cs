@@ -25,7 +25,7 @@ var appJs = ReadStrict(Path.Combine(
 var implementedBlocks = Regex.Matches(appJs, @"rpa_[a-z0-9_]+")
     .Select(match => match.Value)
     .ToHashSet(StringComparer.Ordinal);
-Check(implementedBlocks.Count == 35, "o editor expõe 35 blocos distintos");
+Check(implementedBlocks.Count == 36, "o editor expõe 36 blocos distintos");
 
 var catalog = ReadStrict(Path.Combine(
     repositoryRoot,
@@ -44,7 +44,7 @@ Check(
     "todos os blocos do editor possuem seção no manual",
     missingDocumentation);
 Check(
-    unknownDocumentation.Length == 0 && documentedBlocks.Count == 35,
+    unknownDocumentation.Length == 0 && documentedBlocks.Count == 36,
     "o manual não documenta blocos inexistentes",
     unknownDocumentation);
 

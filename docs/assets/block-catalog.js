@@ -601,6 +601,19 @@
       failures: ["Política ausente.", "Configuração de feedback incompleta.", "Mensagem ou protocolo não comprovados.", "Destinos runtime inválidos ou repetidos.", "Posição inválida.", "Tentativa de efeito sem intertravamento."]
     }),
     block({
+      blockType: "rpa_complete_authentication_attempt",
+      actionType: "completeAuthenticationAttempt",
+      title: "Concluir tentativa de autenticação",
+      category: "Controle",
+      summary: "Marca que o roteiro comprovou a autenticação aceita e pode liberar um retry técnico posterior.",
+      useWhen: ["O ramo atual já descartou rejeição explícita e comprovou o estado autenticado."],
+      avoidWhen: ["A ação de login ainda não terminou.", "O fluxo está tratando MFA; essa cerca é independente."],
+      properties: [...actionFields],
+      example: { id: "concluir-autenticacao", type: "completeAuthenticationAttempt", name: "Concluir tentativa de autenticação" },
+      safety: ["Não executa login, clique ou chamada externa.", "Somente libera a cerca quando a ação é concluída."],
+      failures: ["Marcador colocado antes da comprovação do login."]
+    }),
+    block({
       blockType: "rpa_if_value",
       actionType: "if",
       title: "Se valor",

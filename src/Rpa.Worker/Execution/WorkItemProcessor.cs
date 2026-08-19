@@ -24,15 +24,20 @@ public sealed class WorkItemProcessor(
 
     public async Task ProcessAsync(
         RpaWorkItem workItem,
-        CancellationToken stoppingToken)
+        CancellationToken stoppingToken,
+        CancellationToken leadershipLostToken = default)
     {
         var executionId = Guid.NewGuid().ToString("N");
         await repository.StartExecutionAsync(executionId, workItem, stoppingToken);
-        using var caseTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        using var caseTimeout = CancellationTokenSource.CreateLinkedTokenSource(
+            stoppingToken,
+            leadershipLostToken);
         caseTimeout.CancelAfter(TimeSpan.FromMinutes(options.CaseTimeoutMinutes));
         using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             caseTimeout.Token);
         var heartbeatTask = RunHeartbeatAsync(workItem, heartbeatCancellation.Token);
+        RpaDefinitionOptions? activeDefinition = null;
+        WorkerFlowExecutionObserver? observer = null;
         _ = heartbeatTask.ContinueWith(
             _ => caseTimeout.Cancel(),
             CancellationToken.None,
@@ -48,6 +53,7 @@ public sealed class WorkItemProcessor(
                 throw new InvalidOperationException(
                     $"A definição de RPA '{workItem.RpaCode}' não está habilitada.");
             }
+            activeDefinition = definition;
 
             var flowPath = RpaWorkerOptionsValidator.ResolvePath(
                 environment.Paths.WorkspaceRoot,
@@ -97,10 +103,14 @@ public sealed class WorkItemProcessor(
             var executionGuard = new ConfiguredExecutionGuard(
                 options.ExecutionMode,
                 definition);
+            observer = new WorkerFlowExecutionObserver(
+                repository,
+                definition.AuthenticationAttemptActionIds,
+                definition.MfaAttemptActionIds);
             IFlowExecutor executor = new PlaywrightFlowExecutor(
                 flow,
                 runtimeOptions,
-                observer: new DatabaseFlowExecutionObserver(repository),
+                observer: observer,
                 executionGuard: executionGuard,
                 oneTimeCodeProvider: oneTimeCodeProvider);
             var result = await executor.ExecuteAsync(request, caseTimeout.Token);
@@ -192,10 +202,17 @@ public sealed class WorkItemProcessor(
                 "Falha ao processar o item {WorkItemId} da definição {RpaCode}.",
                 workItem.WorkItemId,
                 workItem.RpaCode);
+            var decision = WorkerFailurePolicy.Decide(
+                exception,
+                workItem,
+                activeDefinition ?? new RpaDefinitionOptions(),
+                observer,
+                stoppingToken.IsCancellationRequested,
+                leadershipLostToken.IsCancellationRequested);
             await repository.FailAsync(
                 executionId,
                 workItem,
-                exception,
+                decision,
                 CancellationToken.None);
         }
         finally

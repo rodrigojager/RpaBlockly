@@ -455,6 +455,18 @@ Esses campos descrevem evidência, não autorização. Somente uma configuraçã
 
 Status de negócio, retry e finalização do item continuam sob responsabilidade do worker.
 
+`completeAuthenticationAttempt` é um marcador sem efeito externo. Quando o host configurou uma ação anterior em `AuthenticationAttemptActionIds`, alcançar este bloco informa que o roteiro comprovou a autenticação aceita e permite retry técnico posterior:
+
+```json
+{
+  "id": "concluir-autenticacao",
+  "type": "completeAuthenticationAttempt",
+  "name": "Concluir tentativa de autenticação"
+}
+```
+
+Se a tentativa começou e o marcador não foi alcançado, o worker bloqueia uma nova tentativa automática. O marcador não libera MFA.
+
 ## Limites e invariantes
 
 | Regra | Limite atual |

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Round-trip da conclusão da tentativa de autenticação",
+  "actions": [
+    {
+      "id": "concluir-tentativa-autenticacao",
+      "type": "completeAuthenticationAttempt",
+      "name": "Concluir tentativa de autenticação"
+    }
+  ],
+  "subflows": {}
+}

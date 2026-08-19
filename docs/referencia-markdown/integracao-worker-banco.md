@@ -64,6 +64,12 @@ O claim usa uma transação curta com `UPDLOCK`, `READPAST` e `ROWLOCK`. Somente
 
 Durante a navegação, o heartbeat renova o lease. Se o item deixar de pertencer ao worker, a renovação ou a finalização falha em vez de gravar sobre o estado de outra instância. Uma falha comum volta para `Retry` enquanto ainda houver tentativa; depois passa para `Failed`.
 
+Uma trava global por sessão SQL impede duas instâncias de consumir a mesma implantação. Se a conexão ou a trava cair, os claims são suspensos, as execuções da sessão são canceladas de forma controlada e o host tenta readquirir a liderança com backoff. Falhas de banco no polling degradam a prontidão, mas não encerram o processo. Leases vencidos são recuperados automaticamente no ciclo seguinte.
+
+`/health/live` confirma que o processo HTTP responde. `/health/ready` também exige validação, liderança e polling recentes; `acceptingClaims` informa separadamente se existe vaga imediata. A tabela configurada em `Tables.Workers` recebe o heartbeat operacional persistente.
+
+Quando uma ação declarada em `AuthenticationAttemptActionIds` começa, uma falha anterior ao marcador `completeAuthenticationAttempt` não repete o login automaticamente. Depois do marcador, uma instabilidade transitória pode consumir a próxima tentativa. MFA permanece cercado separadamente por `MfaAttemptActionIds`.
+
 Nenhuma transação de banco permanece aberta durante a automação do sistema externo.
 
 ## Validação segura e produção
@@ -95,7 +101,7 @@ Uma definição que faz claim e usa esse provider exige `MaxParallelism=1`. O wo
 
 ## Implantação mínima
 
-1. Aplique `database/sqlserver/001_create_worker_schema.sql`.
+1. Aplique `database/sqlserver/001_create_worker_schema.sql` e `003_worker_resilience.sql`.
 2. Copie `src/Rpa.Worker/appsettings.example.json` para `appsettings.local.json`.
 3. Configure a string de conexão somente no arquivo local, em variável de ambiente ou em cofre.
 4. Cadastre cada definição, fluxo, configuração, limite seguro opcional e IDs irreversíveis.

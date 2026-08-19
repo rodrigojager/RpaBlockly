@@ -916,6 +916,19 @@
       tooltip: "Interrompe imediatamente a execução com uma mensagem clara, sem efeito externo."
     },
     {
+      type: "rpa_complete_authentication_attempt",
+      message0: "concluir tentativa de autenticação: %1",
+      args0: [{
+        type: "field_input",
+        name: "NAME",
+        text: "Concluir tentativa de autenticação"
+      }],
+      previousStatement: null,
+      nextStatement: null,
+      colour: 315,
+      tooltip: "Libera a cerca de retry somente quando o fluxo comprova que a tentativa de autenticação foi concluída."
+    },
+    {
       type: "rpa_if_value",
       message0: "se valor: %1",
       args0: [{ type: "field_input", name: "NAME", text: "Verificar valor" }],
@@ -1210,6 +1223,7 @@
           { kind: "block", type: "rpa_if_value" },
           { kind: "block", type: "rpa_if_element" },
           { kind: "block", type: "rpa_fail" },
+          { kind: "block", type: "rpa_complete_authentication_attempt" },
           { kind: "block", type: "rpa_repeat" },
           { kind: "block", type: "rpa_for_each" }
         ]
@@ -1283,6 +1297,7 @@
     select2: "rpa_select2",
     fillMaskedCurrency: "rpa_currency",
     fail: "rpa_fail",
+    completeAuthenticationAttempt: "rpa_complete_authentication_attempt",
     transformPath: "rpa_transform_path",
     setVariable: "rpa_set_variable",
     captureTimestamp: "rpa_capture_timestamp",
@@ -2036,6 +2051,9 @@
       case "rpa_fail":
         action.type = "fail";
         addValue(action, block);
+        break;
+      case "rpa_complete_authentication_attempt":
+        action.type = "completeAuthenticationAttempt";
         break;
       case "rpa_transform_path":
         action.type = "transformPath";

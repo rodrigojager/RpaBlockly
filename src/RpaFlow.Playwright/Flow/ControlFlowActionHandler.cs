@@ -8,7 +8,8 @@ internal sealed class ControlFlowActionHandler : IFlowActionHandler
             "if",
             "repeat",
             "forEach",
-            "runSubflow"
+            "runSubflow",
+            "completeAuthenticationAttempt"
         };
 
     public async Task ExecuteAsync(
@@ -29,6 +30,10 @@ internal sealed class ControlFlowActionHandler : IFlowActionHandler
                 break;
             case "runsubflow":
                 await ExecuteSubflowAsync(action, execution, cancellationToken);
+                break;
+            case "completeauthenticationattempt":
+                cancellationToken.ThrowIfCancellationRequested();
+                Console.WriteLine("  Tentativa de autenticação marcada como concluída.");
                 break;
             default:
                 throw new InvalidOperationException(

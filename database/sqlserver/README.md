@@ -11,6 +11,7 @@ O script `001_create_worker_schema.sql` cria uma fila e o histórico de execuç�
 | `rpa.ExecutionOutput` | Outputs nomeados extraídos de `runtime.*` pela configuração da definição. |
 | `rpa.Artifact` | Arquivos efetivamente existentes, com caminho, tamanho e SHA-256. |
 | `rpa.ExecutionEvent` | Telemetria de início, ações, conclusão, cancelamento e falha. |
+| `rpa.WorkerState` | Heartbeat operacional, liderança, polling, capacidade e encerramento de cada instância. |
 
 Os nomes podem mudar administrativamente, mas nunca vêm do fluxo Blockly. O worker aceita somente identificadores SQL simples, os coloca entre colchetes e usa parâmetros para todos os valores.
 
@@ -25,7 +26,7 @@ Credenciais não devem entrar nesses JSONs. Use identidade do serviço, cofre de
 
 ## Primeira execução
 
-1. Ajuste os `:setvar` do script e execute `001_create_worker_schema.sql`.
+1. Ajuste os `:setvar` e execute `001_create_worker_schema.sql` e `003_worker_resilience.sql`.
 2. Copie `src/Rpa.Worker/appsettings.example.json` para `appsettings.local.json`.
 3. Informe `ConnectionStrings.RpaDatabase` apenas no arquivo local.
 4. Mantenha `ExecutionMode` como `SafeValidation`.

@@ -88,8 +88,43 @@ static async Task RunRoundTripChecksAsync(string editorUrl, string repositoryRoo
 
     await CheckGeneralizedPropertiesRoundTripAsync(page);
     await CheckOneTimeCodeActionsRoundTripAsync(page, repositoryRoot);
+    await CheckCompleteAuthenticationAttemptRoundTripAsync(page, repositoryRoot);
     await CheckTypeAcrossInputsRoundTripAsync(page, repositoryRoot);
     await CheckSafeFinalConfirmationRoundTripAsync(page, repositoryRoot);
+}
+
+static async Task CheckCompleteAuthenticationAttemptRoundTripAsync(
+    IPage page,
+    string repositoryRoot)
+{
+    var fixturePath = Path.Combine(
+        repositoryRoot,
+        "tests",
+        "RpaFlow.EditorRoundTrip",
+        "Fixtures",
+        "complete-authentication-attempt.valid.json");
+    var fixture = await File.ReadAllTextAsync(fixturePath);
+
+    using (var fixtureDocument = JsonDocument.Parse(fixture))
+    {
+        FlowDocumentValidator.Validate(fixtureDocument.RootElement);
+    }
+
+    var exportedJson = await page.EvaluateAsync<string>(
+        "flowJson => JSON.stringify(window.RpaFlowEditorTesting.roundTrip(JSON.parse(flowJson)))",
+        fixture);
+    var original = SerializeCanonical(
+        DeserializeAndNormalize(fixture, "fixture-conclusao-autenticacao"));
+    var exported = SerializeCanonical(
+        DeserializeAndNormalize(exportedJson, "fixture-conclusao-autenticacao"));
+    if (!string.Equals(original, exported, StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException(
+            "O round-trip Blockly alterou a conclusão da tentativa de autenticação.");
+    }
+
+    Console.WriteLine(
+        "OK: round-trip Blockly preservou a conclusão da tentativa de autenticação.");
 }
 
 static async Task CheckSafeFinalConfirmationRoundTripAsync(
@@ -641,6 +676,7 @@ static async Task CheckSharedToolboxAsync(IPage page)
         "rpa_download_request",
         "rpa_safe_final",
         "rpa_fail",
+        "rpa_complete_authentication_attempt",
         "rpa_transform_path",
         "rpa_if_value",
         "rpa_if_element",

@@ -25,6 +25,36 @@ public sealed record MaterializedArtifact(
     long SizeBytes,
     string Sha256);
 
+public sealed record WorkerFailureDecision(
+    string WorkItemStatus,
+    string ErrorCode,
+    string Message,
+    bool Retry,
+    bool PreserveAttempt = false);
+
+public sealed record WorkerOperationalHeartbeat(
+    Guid InstanceId,
+    string WorkerId,
+    string HostName,
+    int ProcessId,
+    string Status,
+    bool Ready,
+    bool AcceptingClaims,
+    bool ExecutionEnabled,
+    bool LeadershipAcquired,
+    bool PollingHealthy,
+    int ActiveExecutions,
+    int MaximumParallelism,
+    int AvailableExecutionSlots,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? LeadershipHeartbeatAtUtc,
+    DateTimeOffset? PollingHeartbeatAtUtc,
+    DateTimeOffset? LastPollingSuccessAtUtc,
+    DateTimeOffset? NextPollingAtUtc,
+    DateTimeOffset? LastFailureAtUtc,
+    string? LastFailureType,
+    bool Finalized);
+
 public sealed class SafeValidationBoundaryException(string actionId, string actionName)
     : InvalidOperationException(
         $"A validação segura parou antes da ação irreversível '{actionName}' ({actionId}).")
