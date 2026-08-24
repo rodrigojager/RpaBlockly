@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpablockly.dev/schemas/recorder-issues-v1.schema.json",
+  "title": "RpaBlocklyRecorderIssuesV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "issues"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "issues": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/recorderIssue" }
+    }
+  },
+  "$defs": {
+    "recorderIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "severity",
+        "title",
+        "technicalDetail",
+        "evidenceIds",
+        "resolutionOptions",
+        "omittedFromFlow",
+        "resolved"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "code": {
+          "enum": [
+            "UNSUPPORTED_CLOSED_SHADOW_ROOT",
+            "AMBIGUOUS_TARGET",
+            "CROSS_ORIGIN_FRAME_NOT_CAPTURED",
+            "POPUP_RELATION_UNCERTAIN",
+            "FILE_NOT_INCLUDED",
+            "SECRET_NOT_CAPTURED",
+            "NAVIGATION_WITH_UNSAFE_QUERY",
+            "CUSTOM_WIDGET_REQUIRES_REVIEW",
+            "UNSUPPORTED_INTERACTION"
+          ]
+        },
+        "severity": { "enum": ["blocking", "warning", "info"] },
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "technicalDetail": { "type": "string", "maxLength": 2000 },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "resolutionOptions": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": { "enum": ["map", "omit", "confirm", "provide-permission", "attach", "discard"] }
+        },
+        "omittedFromFlow": { "type": "boolean" },
+        "resolved": { "type": "boolean" }
+      }
+    }
+  }
+}

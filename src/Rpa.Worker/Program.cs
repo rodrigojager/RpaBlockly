@@ -39,10 +39,13 @@ var paths = RpaWorkerOptionsValidator.Validate(
     options,
     configurationDirectory,
     connectionString);
+var workerEnvironment = new WorkerEnvironment(connectionString, paths);
+var packageRegistry = RpaPackageRegistryFactory.Create(options, workerEnvironment);
 await RpaWorkerOptionsValidator.ValidateFlowsAsync(
     options,
     paths,
-    cancellationSource.Token);
+    cancellationSource.Token,
+    packageRegistry);
 
 if (args.Contains("--validate-only", StringComparer.OrdinalIgnoreCase))
 {
@@ -61,13 +64,16 @@ if (options.Enabled)
 builder.Services.AddWindowsService(settings =>
     settings.ServiceName = "RPA Blockly Worker");
 builder.Services.AddSingleton(options);
-builder.Services.AddSingleton(new WorkerEnvironment(connectionString, paths));
+builder.Services.AddSingleton(workerEnvironment);
+builder.Services.AddSingleton(packageRegistry);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WorkerRuntimeState>();
 builder.Services.AddSingleton<WorkerStartupValidationState>();
 builder.Services.AddSingleton<WorkerExecutionLeaseState>();
 builder.Services.AddSingleton<IOneTimeCodeProvider, MicrosoftGraphEmailOneTimeCodeProvider>();
 builder.Services.AddSingleton<SqlWorkItemRepository>();
+builder.Services.AddSingleton<IWorkItemExecutionRepository>(services =>
+    services.GetRequiredService<SqlWorkItemRepository>());
 builder.Services.AddSingleton<WorkItemProcessor>();
 builder.Services.Configure<HostOptions>(hostOptions =>
     hostOptions.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);

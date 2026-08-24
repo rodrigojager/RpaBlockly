@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpablockly.local/schemas/locators-v1.schema.json",
+  "title": "RpaBlockly Locator Catalog V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "locators"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "locators": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/locator" }
+    }
+  },
+  "$defs": {
+    "textConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "literal": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        {
+          "required": ["literal"],
+          "properties": { "literal": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "required": ["source"],
+          "properties": { "source": { "type": "string", "minLength": 1 } }
+        }
+      ]
+    },
+    "expression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "enum": [
+            "css", "xpath", "role", "label", "placeholder", "text",
+            "testId", "rawPlaywright", "fingerprint"
+          ]
+        },
+        "selector": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "fingerprintId": { "type": "string", "minLength": 1 },
+        "exact": { "type": "boolean" },
+        "hasText": { "$ref": "#/$defs/textConstraint" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "strategy": { "enum": ["css", "xpath", "rawPlaywright"] }
+            }
+          },
+          "then": {
+            "required": ["selector"],
+            "properties": {
+              "selector": { "type": "string", "minLength": 1 },
+              "role": false,
+              "name": false,
+              "text": false,
+              "fingerprintId": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "strategy": { "const": "role" } } },
+          "then": {
+            "required": ["role"],
+            "properties": {
+              "selector": false,
+              "role": { "type": "string", "minLength": 1 },
+              "text": false,
+              "fingerprintId": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "strategy": { "enum": ["label", "placeholder", "text", "testId"] }
+            }
+          },
+          "then": {
+            "required": ["text"],
+            "properties": {
+              "selector": false,
+              "role": false,
+              "name": false,
+              "text": { "type": "string", "minLength": 1 },
+              "fingerprintId": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "strategy": { "const": "fingerprint" } } },
+          "then": {
+            "required": ["fingerprintId"],
+            "properties": {
+              "selector": false,
+              "role": false,
+              "name": false,
+              "text": false,
+              "fingerprintId": { "type": "string", "minLength": 1 },
+              "exact": false,
+              "hasText": false
+            }
+          }
+        }
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "frames": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/expression" }
+        },
+        "scope": { "$ref": "#/$defs/expression" },
+        "target": { "$ref": "#/$defs/expression" }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "origin", "recipe"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "origin": { "enum": ["developer", "recorder", "heuristic"] },
+        "developerRole": { "enum": ["original", "alternative"] },
+        "recorderRole": { "enum": ["capturedPrimary", "capturedAlternative"] },
+        "originalOrder": { "type": "integer", "minimum": 0 },
+        "learnedAtUtc": { "type": "string", "format": "date-time" },
+        "promotedAtUtc": { "type": "string", "format": "date-time" },
+        "recipe": { "$ref": "#/$defs/recipe" }
+      }
+    },
+    "fingerprintNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tagName"],
+      "properties": {
+        "tagName": { "type": "string", "minLength": 1 },
+        "role": { "type": "string" },
+        "text": { "type": "string", "maxLength": 2000 },
+        "attributes": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tagName"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tagName": { "type": "string", "minLength": 1 },
+        "role": { "type": "string" },
+        "accessibleName": { "type": "string" },
+        "text": { "type": "string", "maxLength": 2000 },
+        "attributes": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": { "type": "string" }
+        },
+        "ancestors": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/fingerprintNode" }
+        },
+        "previousSiblings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/fingerprintNode" }
+        },
+        "nextSiblings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/fingerprintNode" }
+        }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "candidates", "fingerprints"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/candidate" }
+        },
+        "fingerprints": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/fingerprint" }
+        }
+      }
+    }
+  }
+}

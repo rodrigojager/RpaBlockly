@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Round-trip da conclusão da tentativa de autenticação",
+  "inputs": [],
   "actions": [
     {
       "id": "concluir-tentativa-autenticacao",

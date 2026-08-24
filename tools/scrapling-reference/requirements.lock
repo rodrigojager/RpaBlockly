@@ -1,0 +1,2 @@
+# Referência auditada do plano V2. Não é dependência do runtime.
+scrapling @ git+https://github.com/D4Vinci/Scrapling.git@5d213a2d4764002bfc4fed33c32fe09fa8b0bf7f

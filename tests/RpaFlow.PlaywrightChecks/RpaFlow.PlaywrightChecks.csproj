@@ -7,6 +7,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\RpaFlow.Legacy.Playwright\RpaFlow.Legacy.Playwright.csproj" />
     <ProjectReference Include="..\..\src\RpaFlow.Playwright\RpaFlow.Playwright.csproj" />
+    <ProjectReference Include="..\..\tools\RpaFlow.Migrator\RpaFlow.Migrator.csproj" />
   </ItemGroup>
 </Project>

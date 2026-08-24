@@ -1,6 +1,5 @@
 using Rpa.Worker.Configuration;
 using Rpa.Worker.Domain;
-using RpaFlow.Contracts;
 using RpaFlow.Playwright;
 using RpaFlow.Runtime;
 
@@ -18,12 +17,16 @@ public sealed class ConfiguredExecutionGuard(
             ? null
             : definition.SafeValidationBoundaryActionId.Trim();
     private int _safeValidationBoundaryReached;
+    private int _irreversibleEffectCompleted;
 
     public bool SafeValidationBoundaryReached =>
         Volatile.Read(ref _safeValidationBoundaryReached) == 1;
 
+    public bool IrreversibleEffectCompleted =>
+        Volatile.Read(ref _irreversibleEffectCompleted) == 1;
+
     public ValueTask BeforeActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken)
     {
@@ -46,11 +49,17 @@ public sealed class ConfiguredExecutionGuard(
     }
 
     public ValueTask<FlowActionExecutionDirective> AfterActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         FlowExecutionRequest request,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (executionMode == WorkerExecutionMode.Production &&
+            _irreversibleActionIds.Contains(action.Id))
+        {
+            Volatile.Write(ref _irreversibleEffectCompleted, 1);
+        }
+
         if (executionMode != WorkerExecutionMode.SafeValidation ||
             _safeValidationBoundaryActionId is null ||
             !action.Id.Equals(

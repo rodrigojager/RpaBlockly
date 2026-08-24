@@ -3,52 +3,151 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor visual de RPA</title>
+    <title>Editor RpaBlockly V2</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="page-header">
       <div>
-        <p class="eyebrow">Ferramenta opcional de desenvolvimento</p>
-        <h1 id="editor-title">Fluxo de RPA em blocos</h1>
+        <p class="eyebrow">RpaBlockly V2</p>
+        <h1 id="editor-title">Pacote de RPA em blocos</h1>
         <p class="subtitle">
-          Organize e personalize as ações Playwright, depois salve o JSON que o
-          executável .NET interpreta em produção. O Blockly não participa do runtime.
+          Edite o fluxo, o catálogo de localizadores e a política como uma única revisão.
+          Os blocos guardam referências; as receitas Playwright ficam no catálogo.
         </p>
       </div>
-      <span class="runtime-badge">Runtime .NET independente</span>
+      <span class="runtime-badge">Snapshot versionado</span>
     </header>
 
     <main>
       <section class="toolbar" aria-label="Ações do editor">
-        <span id="server-status" class="server-status">Conectando ao microservidor...</span>
-        <button id="reset-flow" type="button">Restaurar fluxo salvo</button>
-        <button id="open-configuration" type="button">Configuração e variáveis</button>
-        <button id="save-all" type="button">Salvar tudo</button>
-        <button id="save-flow" type="button">Salvar fluxo de produção</button>
-        <button id="import-flow" type="button">Importar fluxo de produção</button>
-        <button id="export-workspace" type="button" class="secondary">Exportar workspace</button>
-        <button id="import-workspace" type="button" class="secondary">Importar workspace</button>
-        <input id="flow-file" type="file" accept="application/json,.json" hidden>
-        <input id="workspace-file" type="file" accept="application/json,.json" hidden>
+        <span id="server-status" class="server-status">Conectando ao pacote V2...</span>
+        <span id="package-identity" class="package-identity"></span>
+        <button id="save-package" type="button">Salvar pacote</button>
+        <button id="open-assisted-validation" type="button" class="validation-launch">
+          Validar roteiro
+        </button>
+        <button id="reload-package" type="button" class="secondary">Recarregar revisão</button>
+        <button id="reset-flow" type="button" class="secondary">Restaurar fluxo aberto</button>
+        <button id="open-configuration" type="button" class="secondary">Configuração local</button>
+        <button id="open-recorder-import" type="button" class="secondary">Importar Recorder</button>
+        <button id="export-package" type="button" class="secondary">Exportar documentos</button>
       </section>
 
-      <section class="workspace-layout">
+      <section id="revision-conflict" class="conflict-panel" hidden>
+        <strong>Conflito de revisão:</strong> o pacote mudou desde que foi aberto.
+        <button id="compare-revision" type="button" class="secondary">Comparar</button>
+        <button id="save-new-revision" type="button">Publicar após revisão explícita</button>
+      </section>
+
+      <section class="workspace-layout v2-layout">
         <div class="editor-panel">
-          <div id="blockly-editor" aria-label="Editor Blockly do fluxo"></div>
+          <div id="blockly-editor" aria-label="Editor Blockly do fluxo V2"></div>
         </div>
 
         <aside class="code-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Interpretado pelo .NET</p>
-              <h2>JSON de produção</h2>
+              <p class="eyebrow">flow.production.json</p>
+              <h2>Fluxo V2</h2>
             </div>
-            <button id="copy-json" type="button" class="secondary">Copiar JSON</button>
           </div>
           <p id="validation-message" class="validation-message" role="status"></p>
+          <ul id="package-warnings" class="warning-list" hidden></ul>
           <pre><code id="generated-json"></code></pre>
         </aside>
+      </section>
+
+      <section class="v2-drawers" aria-label="Edição detalhada">
+        <article class="drawer-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Catálogo separado</p>
+              <h2>Localizadores</h2>
+            </div>
+            <button id="new-locator" type="button" class="secondary">Novo locator</button>
+          </div>
+          <label class="full-field">
+            Pesquisar por ID ou nome
+            <input id="locator-search" type="search" placeholder="botão enviar">
+          </label>
+          <div id="locator-list" class="locator-list"></div>
+          <h3 id="locator-editor-title">Selecione um locator</h3>
+          <p class="dialog-description">
+            Edite candidatos, frames, scope, target, fingerprints, origem, papéis e ordem.
+          </p>
+          <textarea id="locator-json" class="json-editor" spellcheck="false"></textarea>
+          <button id="save-locator-draft" type="button">Aplicar ao rascunho</button>
+        </article>
+
+        <article class="drawer-panel">
+          <p class="eyebrow">Sem seletor embutido</p>
+          <h2 id="action-properties-title">Propriedades avançadas da ação</h2>
+          <p class="dialog-description">
+            ID, nome, encadeamento e referências de locator são editados no bloco.
+            Este JSON contém somente as demais propriedades oficiais da ação V2.
+          </p>
+          <textarea id="action-properties-json" class="json-editor" spellcheck="false"></textarea>
+          <button id="save-action-properties" type="button">Aplicar propriedades</button>
+        </article>
+
+        <article class="drawer-panel">
+          <p class="eyebrow">rpa.policy.json</p>
+          <h2>Política de resiliência</h2>
+          <p class="dialog-description">
+            A política pertence à mesma revisão do fluxo e do catálogo. O backend valida
+            combinações de modo, promoção e write-back antes de publicar.
+          </p>
+          <div class="policy-grid">
+            <label>Modo
+              <select id="policy-mode">
+                <option value="strict">Strict — somente o candidato principal</option>
+                <option value="fallback">Fallback — candidatos exatos em ordem</option>
+                <option value="adaptive">Adaptive — permite heurística controlada</option>
+              </select>
+            </label>
+            <label>Write-back de aprendizado
+              <select id="policy-learning-write-back">
+                <option value="disabled">Desabilitado</option>
+                <option value="memory">Memória da execução</option>
+                <option value="source">Origem do pacote</option>
+                <option value="overlay">Overlay</option>
+              </select>
+            </label>
+            <label>Promoção
+              <select id="policy-promotion">
+                <option value="disabled">Desabilitada</option>
+                <option value="afterSuccessfulExecution">Após execução bem-sucedida</option>
+              </select>
+            </label>
+            <label>Principal que falhou
+              <select id="policy-failed-primary">
+                <option value="keep">Manter posição</option>
+                <option value="moveToLast">Mover para o final após confirmação</option>
+              </select>
+            </label>
+            <label>Confiança mínima
+              <input id="policy-minimum-confidence" type="number" min="0" max="1" step="0.01">
+            </label>
+            <label>Diferença mínima para o segundo colocado
+              <input id="policy-minimum-runner-up-gap" type="number" min="0" max="1" step="0.01">
+            </label>
+            <label>Máximo de candidatos por locator
+              <input id="policy-maximum-candidates" type="number" min="1" max="100" step="1">
+            </label>
+            <label>Máximo de nós heurísticos
+              <input id="policy-maximum-heuristic-nodes" type="number" min="1" max="1000000" step="1">
+            </label>
+            <label>Tempo máximo de resolução (ms)
+              <input id="policy-maximum-resolution-ms" type="number" min="100" max="600000" step="1">
+            </label>
+          </div>
+          <details>
+            <summary>Visualização JSON gerada</summary>
+            <textarea id="policy-json" class="json-editor compact" readonly></textarea>
+          </details>
+          <button id="save-policy-draft" type="button">Aplicar política ao rascunho</button>
+        </article>
       </section>
     </main>
 
@@ -56,64 +155,214 @@
       <form method="dialog" class="configuration-form">
         <header class="dialog-heading">
           <div>
-            <p class="eyebrow">Appsettings local</p>
-            <h2>Configuração e variáveis</h2>
-            <p id="configuration-file-label" class="dialog-description"></p>
+            <p class="eyebrow">Somente ambiente local</p>
+            <h2>Configuração</h2>
           </div>
           <button type="submit" class="secondary">Fechar</button>
         </header>
-
-        <section aria-labelledby="known-fields-heading">
-          <h3 id="known-fields-heading">Configuração do trabalho</h3>
-          <div id="configuration-fields" class="configuration-grid"></div>
-        </section>
-
-        <section aria-labelledby="variables-heading">
-          <h3 id="variables-heading">Variáveis personalizadas</h3>
-          <p class="dialog-description">
-            As chaves e os valores são lidos e salvos em <code>Blockly.Variables</code>.
-            Cada chave fica disponível nos blocos como <code>config.nomeDaChave</code>.
-            Listas e objetos podem conter outros objetos e arrays aninhados.
-          </p>
-          <div id="variables-list" class="variables-list"></div>
-          <div class="new-variable-row">
-            <label>
-              Nova chave
-              <input id="new-variable-key" type="text" pattern="[A-Za-z][A-Za-z0-9_.-]*" placeholder="minhaVariavel">
-            </label>
-            <label>
-              Tipo
-              <select id="new-variable-type">
-                <option value="string">Texto</option>
-                <option value="array">Lista JSON</option>
-                <option value="object">Objeto JSON</option>
-                <option value="number">Número</option>
-                <option value="boolean">Booleano</option>
-                <option value="null">Nulo</option>
-              </select>
-            </label>
-            <label>
-              Valor
-              <input id="new-variable-value" type="text" placeholder="valor">
-            </label>
-            <button id="add-variable" type="button" class="secondary">Adicionar variável</button>
-          </div>
-        </section>
-
-        <p id="configuration-message" class="validation-message" role="status"></p>
+        <p class="dialog-description">
+          Somente os campos autorizados pelo perfil são exibidos. As demais seções da
+          configuração são preservadas sem expor ou reescrever valores ocultos.
+        </p>
+        <div id="configuration-fields" class="configuration-grid"></div>
         <footer class="dialog-actions">
           <button id="save-configuration" type="button">Salvar configuração</button>
-          <button type="submit" class="secondary">Cancelar</button>
         </footer>
       </form>
     </dialog>
 
+    <dialog id="compare-dialog">
+      <form method="dialog" class="configuration-form">
+        <header class="dialog-heading">
+          <h2>Comparação explícita de revisões</h2>
+          <button type="submit" class="secondary">Fechar</button>
+        </header>
+        <pre><code id="compare-content"></code></pre>
+      </form>
+    </dialog>
+
+    <dialog id="assisted-validation-dialog" aria-labelledby="assisted-validation-title">
+      <div class="configuration-form assisted-validation-shell">
+        <header class="dialog-heading">
+          <div>
+            <p class="eyebrow">Homologação assistida</p>
+            <h2 id="assisted-validation-title">Validar o roteiro em um navegador visível</h2>
+            <p class="dialog-description">
+              A execução usa um snapshot do rascunho atual, dados da configuração local e
+              para imediatamente depois da última etapa segura escolhida.
+            </p>
+          </div>
+          <button id="close-assisted-validation" type="button" class="secondary">Fechar</button>
+        </header>
+
+        <section id="assisted-runtime-state" class="assisted-runtime-state" data-status="idle">
+          <span class="assisted-recording-dot" aria-hidden="true"></span>
+          <div>
+            <strong id="assisted-status-title">Pronto para configurar</strong>
+            <p id="assisted-status-detail">Nenhuma homologação foi iniciada.</p>
+          </div>
+        </section>
+
+        <section class="assisted-setup-grid" aria-label="Configuração da homologação">
+          <label>
+            Navegador
+            <select id="assisted-browser">
+              <option value="cloakbrowser">CloakBrowser</option>
+              <option value="chromium">Chromium Playwright</option>
+            </select>
+          </label>
+          <label>
+            Última etapa segura permitida
+            <select id="assisted-boundary"></select>
+          </label>
+          <label class="assisted-check">
+            <input id="assisted-capture-screenshots" type="checkbox" checked>
+            Capturar uma evidência visual sanitizada depois de cada etapa
+          </label>
+          <label class="assisted-check assisted-safety-confirmation">
+            <input id="assisted-confirm-boundary" type="checkbox">
+            Confirmo que a etapa escolhida pode ser executada neste ambiente. Nenhuma etapa
+            posterior será executada.
+          </label>
+        </section>
+
+        <div class="dialog-actions assisted-actions">
+          <button id="start-assisted-validation" type="button">Iniciar validação visual</button>
+          <button id="stop-assisted-validation" type="button" class="danger" disabled>
+            Parar agora
+          </button>
+        </div>
+
+        <section class="assisted-results-grid">
+          <article class="assisted-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Progresso ao vivo</p>
+                <h3>Etapas executadas</h3>
+              </div>
+              <span id="assisted-progress-count" class="assisted-count">0 etapas</span>
+            </div>
+            <ol id="assisted-timeline" class="assisted-timeline">
+              <li class="assisted-empty">O progresso aparecerá aqui.</li>
+            </ol>
+          </article>
+
+          <article class="assisted-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Evidências</p>
+                <h3>Capturas da execução</h3>
+              </div>
+              <span id="assisted-evidence-count" class="assisted-count">0 capturas</span>
+            </div>
+            <div id="assisted-evidence-gallery" class="assisted-evidence-gallery">
+              <p class="assisted-empty">As telas sanitizadas aparecerão aqui.</p>
+            </div>
+          </article>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="recorder-import-dialog" aria-labelledby="recorder-import-title">
+      <div class="configuration-form recorder-wizard">
+        <header class="dialog-heading">
+          <div>
+            <p class="eyebrow">Recorder → pacote V2</p>
+            <h2 id="recorder-import-title">Importar gravação</h2>
+            <p class="dialog-description">
+              O ZIP é inspecionado em staging e nada muda no pacote antes da confirmação final.
+            </p>
+          </div>
+          <button id="close-recorder-import" type="button" class="secondary">Fechar</button>
+        </header>
+
+        <ol class="wizard-steps" aria-label="Etapas da importação">
+          <li data-recorder-step="select" class="active">1. Selecionar</li>
+          <li data-recorder-step="review">2. Revisar</li>
+          <li data-recorder-step="map">3. Mapear</li>
+          <li data-recorder-step="confirm">4. Confirmar</li>
+          <li data-recorder-step="apply">5. Aplicar</li>
+        </ol>
+
+        <section class="recorder-card">
+          <label class="full-field">
+            Bundle `.rpablockly.zip`
+            <input id="recorder-file" type="file" accept=".zip,.rpablockly.zip,application/zip">
+          </label>
+          <button id="inspect-recorder" type="button">Inspecionar sem alterar o pacote</button>
+          <p id="recorder-import-status" class="validation-message" role="status"></p>
+        </section>
+
+        <section id="recorder-review" class="recorder-review-grid" hidden>
+          <article class="recorder-card">
+            <h3>Resumo e proveniência</h3>
+            <dl id="recorder-summary" class="summary-grid"></dl>
+          </article>
+          <article class="recorder-card">
+            <h3>Conflitos detectados</h3>
+            <ul id="recorder-conflicts" class="warning-list"></ul>
+          </article>
+          <article class="recorder-card">
+            <h3>Pendências</h3>
+            <ul id="recorder-issues" class="mapping-list"></ul>
+          </article>
+          <article class="recorder-card">
+            <h3>Timeline</h3>
+            <ol id="recorder-timeline" class="mapping-list"></ol>
+          </article>
+          <article class="recorder-card evidence-preview-card">
+            <h3>Evidências estáticas</h3>
+            <div id="recorder-evidence" class="recorder-evidence">
+              <p>Nenhuma evidência.</p>
+            </div>
+            <div class="dialog-actions">
+              <button id="previous-recorder-evidence" type="button" class="secondary">Anterior</button>
+              <button id="next-recorder-evidence" type="button" class="secondary">Próxima</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="recorder-mappings" class="recorder-card" hidden>
+          <h3>Modo, mappings e conflitos</h3>
+          <div class="recorder-options-grid">
+            <label>Modo
+              <select id="recorder-mode">
+                <option value="replace">Substituir pacote</option>
+                <option value="appendMain">Acrescentar ao fluxo principal</option>
+                <option value="subflow">Importar como subflow</option>
+              </select>
+            </label>
+            <label>Nome do subflow
+              <input id="recorder-subflow-name" value="fluxoGravado" disabled>
+            </label>
+            <label class="recorder-check">
+              <input id="recorder-remap-conflicts" type="checkbox">
+              Autorizar remapeamento determinístico dos IDs em conflito
+            </label>
+          </div>
+          <div id="recorder-mapping-fields" class="mapping-fields"></div>
+          <p class="dialog-description">
+            Valores de `samples/` servem apenas como exemplo e nunca são publicados na configuração.
+          </p>
+        </section>
+
+        <section id="recorder-confirmation" class="recorder-card" hidden>
+          <h3>Validação antes do apply</h3>
+          <pre><code id="recorder-validation-preview"></code></pre>
+          <div class="dialog-actions">
+            <button id="validate-recorder-import" type="button">Validar decisão</button>
+            <button id="apply-recorder-import" type="button" disabled>Aplicar por compare-and-swap</button>
+          </div>
+        </section>
+      </div>
+    </dialog>
+
     <footer>
-      Blockly 13.1.1 é local; o microservidor ASP.NET Core salva configuração e fluxo na pasta do RPA.
+      Blockly 13.1.1 é local. O microservidor salva o pacote completo com compare-and-swap.
     </footer>
 
     <script src="vendor/blockly/blockly_compressed.js"></script>
     <script src="vendor/blockly/msg/pt-br.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="v2/boot.js"></script>
   </body>
 </html>

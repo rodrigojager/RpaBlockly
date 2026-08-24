@@ -16,7 +16,9 @@ public sealed partial class EditorProfile
 
     public string ConfigurationFile { get; set; } = "appsettings.local.json";
 
-    public string FlowFile { get; set; } = "flow.production.json";
+    public string RpaId { get; set; } = string.Empty;
+
+    public string PackageStoreRoot { get; set; } = "package-store";
 
     public List<EditorConfigurationField> ConfigurationFields { get; set; } = [];
 
@@ -25,7 +27,8 @@ public sealed partial class EditorProfile
         Require(DisplayName, "displayName");
         Require(ProjectFile, "projectFile");
         Require(ConfigurationFile, "configurationFile");
-        Require(FlowFile, "flowFile");
+        Require(RpaId, "rpaId");
+        Require(PackageStoreRoot, "packageStoreRoot");
 
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < ConfigurationFields.Count; index++)

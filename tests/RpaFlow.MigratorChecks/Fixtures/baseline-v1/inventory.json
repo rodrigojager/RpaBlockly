@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "03b74fe2197ad7651f4ba05ec5819efa9787f194",
+  "actionCount": 33,
+  "actionCoverage": [
+    {
+      "actionType": "captureTimestamp",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "click",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "clickAndSwitchPage",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "clickIfVisible",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "closePage",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "completeAuthenticationAttempt",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "download",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "fail",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "fill",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "fillMaskedCurrency",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "forEach",
+      "family": "control",
+      "fixture": "control.json"
+    },
+    {
+      "actionType": "if",
+      "family": "control",
+      "fixture": "control.json"
+    },
+    {
+      "actionType": "navigate",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "preserveOrFill",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "pressKey",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "readElement",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "readElements",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "repeat",
+      "family": "control",
+      "fixture": "control.json"
+    },
+    {
+      "actionType": "runSubflow",
+      "family": "control",
+      "fixture": "control.json"
+    },
+    {
+      "actionType": "safeFinalConfirmation",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "screenshot",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "select2",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "selectOption",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "setChecked",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "setVariable",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "switchPage",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "transformPath",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "typeAcrossInputs",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "typeSequentially",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "upload",
+      "family": "form",
+      "fixture": "form.json"
+    },
+    {
+      "actionType": "wait",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    },
+    {
+      "actionType": "waitForOneTimeCode",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "waitStable",
+      "family": "navigation",
+      "fixture": "navigation.json"
+    }
+  ],
+  "auxiliaryLocatorFields": [
+    "selector",
+    "scope",
+    "scopeHasText",
+    "scopeHasTextSource",
+    "hasText",
+    "hasTextSource",
+    "frameSelectors",
+    "condition.selector",
+    "triggerSelector",
+    "optionSelector",
+    "readySelector",
+    "successSelector",
+    "protocolSelector",
+    "download.selector"
+  ],
+  "observableChecks": [
+    "RpaFlow.MigratorChecks: validação, migração e determinismo",
+    "RpaFlow.EditorRoundTrip: abrir, serializar, salvar e reabrir",
+    "RpaFlow.PlaywrightChecks: execução diferencial V1/V2 em páginas-fixture"
+  ]
+}

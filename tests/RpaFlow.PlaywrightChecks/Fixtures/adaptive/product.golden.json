@@ -1,0 +1,107 @@
+{
+  "reference": {
+    "package": "scrapling",
+    "version": "0.4.14",
+    "commit": "5d213a2d4764002bfc4fed33c32fe09fa8b0bf7f"
+  },
+  "case": "product-structure-change",
+  "minimumPercentage": 40,
+  "accepted": true,
+  "highestScore": 74.65,
+  "tieCount": 1,
+  "winners": [
+    {
+      "index": 4,
+      "tag": "article",
+      "id": null,
+      "dataId": "p1",
+      "score": 74.65
+    }
+  ],
+  "ranking": [
+    {
+      "index": 4,
+      "tag": "article",
+      "id": null,
+      "dataId": "p1",
+      "score": 74.65
+    },
+    {
+      "index": 8,
+      "tag": "article",
+      "id": null,
+      "dataId": "p2",
+      "score": 71.53
+    },
+    {
+      "index": 3,
+      "tag": "section",
+      "id": null,
+      "dataId": null,
+      "score": 33.96
+    },
+    {
+      "index": 5,
+      "tag": "div",
+      "id": null,
+      "dataId": null,
+      "score": 31.12
+    },
+    {
+      "index": 9,
+      "tag": "div",
+      "id": null,
+      "dataId": null,
+      "score": 31.12
+    },
+    {
+      "index": 7,
+      "tag": "p",
+      "id": null,
+      "dataId": null,
+      "score": 24.28
+    },
+    {
+      "index": 11,
+      "tag": "p",
+      "id": null,
+      "dataId": null,
+      "score": 24.28
+    },
+    {
+      "index": 2,
+      "tag": "div",
+      "id": null,
+      "dataId": null,
+      "score": 21.54
+    },
+    {
+      "index": 6,
+      "tag": "h3",
+      "id": null,
+      "dataId": null,
+      "score": 17.84
+    },
+    {
+      "index": 10,
+      "tag": "h3",
+      "id": null,
+      "dataId": null,
+      "score": 17.84
+    },
+    {
+      "index": 1,
+      "tag": "body",
+      "id": null,
+      "dataId": null,
+      "score": 10.61
+    },
+    {
+      "index": 0,
+      "tag": "html",
+      "id": null,
+      "dataId": null,
+      "score": 6.67
+    }
+  ]
+}

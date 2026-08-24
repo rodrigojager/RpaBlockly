@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>RpaFlow.Contracts</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\RpaFlow.Contracts\Flow\FlowDefinition.cs" Link="Flow\FlowDefinition.cs" />
+    <Compile Include="..\..\src\RpaFlow.Contracts\Flow\FlowDefinitionMetrics.cs" Link="Flow\FlowDefinitionMetrics.cs" />
+    <Compile Include="..\..\src\RpaFlow.Contracts\Flow\FlowDefinitionValidator.cs" Link="Flow\FlowDefinitionValidator.cs" />
+    <Compile Include="..\..\src\RpaFlow.Contracts\Flow\FlowJsonSerializer.cs" Link="Flow\FlowJsonSerializer.cs" />
+    <Compile Include="..\..\src\RpaFlow.Contracts\Flow\JsonFlowLoader.cs" Link="Flow\JsonFlowLoader.cs" />
+  </ItemGroup>
+</Project>

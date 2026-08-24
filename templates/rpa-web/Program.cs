@@ -1,7 +1,8 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using RpaFlow.Contracts;
+using RpaFlow.Packages;
 using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
 using RpaFlow.Runtime;
 
 var cancellationSource = new CancellationTokenSource();
@@ -23,13 +24,22 @@ var configuration = JsonNode.Parse(new UTF8Encoding(false, true).GetString(confi
 
 var runtime = configuration["Runtime"]?.AsObject()
     ?? throw new InvalidOperationException("A seção Runtime é obrigatória.");
-var flowPath = ResolveInsideConfiguration(
+var packageStoreRoot = ResolveInsideConfiguration(
     configurationDirectory,
     ResolveArgument(
         args,
-        "--flow",
-        runtime["FlowFile"]?.GetValue<string>() ?? "flow.production.json"));
-var flow = await new JsonFlowLoader().LoadAsync(flowPath, cancellationSource.Token);
+        "--package-store",
+        runtime["PackageStoreRoot"]?.GetValue<string>() ?? "package-store"));
+var rpaId = ResolveArgument(
+    args,
+    "--rpa-id",
+    runtime["RpaId"]?.GetValue<string>() ?? "rpa-template");
+var revisionValue = ResolveOptionalArgument(args, "--revision");
+var snapshot = await new FileRpaPackageStore(packageStoreRoot).LoadAsync(
+    rpaId,
+    revisionValue is null ? null : new PackageRevision(revisionValue),
+    cancellationSource.Token);
+var flow = snapshot.Flow;
 
 var request = new FlowExecutionRequest(
     Guid.NewGuid().ToString("N"),
@@ -54,21 +64,28 @@ var options = new PlaywrightRuntimeOptions(
         runtime["FormStabilityMs"]?.GetValue<int>() ?? 600,
     BusySelectors: ReadStringList(runtime["BusySelectors"], "Runtime.BusySelectors"),
     HoldBrowserOpenForInspection:
-        runtime["HoldBrowserOpenForInspection"]?.GetValue<bool>() ?? false);
+        runtime["HoldBrowserOpenForInspection"]?.GetValue<bool>() ?? false,
+    MaximumArtifactBytes:
+        runtime["MaximumArtifactBytes"]?.GetValue<long>() ?? 50 * 1024 * 1024,
+    MaximumArtifactFilesPerExecution:
+        runtime["MaximumArtifactFilesPerExecution"]?.GetValue<int>() ?? 100,
+    ArtifactRetentionDays:
+        runtime["ArtifactRetentionDays"]?.GetValue<int>() ?? 30);
 PlaywrightRuntimeOptionsValidator.Validate(options);
 
 if (args.Contains("--validate-only", StringComparer.OrdinalIgnoreCase))
 {
     FlowInputValidator.Validate(flow.Inputs, new FlowDataContext(request));
-    var actionCount = FlowDefinitionMetrics.CountStructuralActions(flow);
+    var actionCount = CountStructuralActions(flow.Actions) +
+        flow.Subflows.Values.Sum(CountStructuralActions);
     Console.WriteLine(
         actionCount == 1
-            ? "Fluxo válido: 1 ação estrutural."
-            : $"Fluxo válido: {actionCount} ações estruturais.");
+            ? $"Pacote V2 {snapshot.Revision} válido: 1 ação estrutural."
+            : $"Pacote V2 {snapshot.Revision} válido: {actionCount} ações estruturais.");
     return;
 }
 
-IFlowExecutor executor = new PlaywrightFlowExecutor(flow, options);
+IFlowExecutor executor = new PlaywrightV2FlowExecutor(snapshot, options);
 var result = await executor.ExecuteAsync(request, cancellationSource.Token);
 Console.WriteLine(
     $"Execução {result.ExecutionId} concluída com {result.ExecutedActions} ações.");
@@ -106,6 +123,24 @@ static string ResolveArgument(string[] arguments, string name, string defaultVal
         : defaultValue;
     return path;
 }
+
+static string? ResolveOptionalArgument(string[] arguments, string name)
+{
+    var index = Array.FindIndex(
+        arguments,
+        value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
+    return index < 0
+        ? null
+        : index + 1 < arguments.Length
+            ? arguments[index + 1]
+            : throw new ArgumentException($"Informe um valor depois de {name}.");
+}
+
+static int CountStructuralActions(
+    IEnumerable<RpaFlow.Contracts.V2.FlowActionDefinition> actions) =>
+    actions.Sum(action => 1 +
+        CountStructuralActions(action.Actions) +
+        CountStructuralActions(action.ElseActions));
 
 static string ResolveDefaultConfigurationPath()
 {

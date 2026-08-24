@@ -4,7 +4,7 @@ using RpaFlow.Runtime;
 namespace Rpa.Worker.Execution;
 
 public sealed class WorkerFlowExecutionObserver(
-    SqlWorkItemRepository repository,
+    IWorkItemExecutionRepository repository,
     IEnumerable<string> authenticationAttemptActionIds,
     IEnumerable<string> mfaAttemptActionIds) : IFlowExecutionObserver
 {

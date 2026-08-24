@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "session-fixture-001",
+  "name": "Gravação mínima",
+  "state": "completed",
+  "startedAtUtc": "2026-08-17T18:00:00Z",
+  "completedAtUtc": "2026-08-17T18:01:00Z",
+  "timezone": "America/Sao_Paulo",
+  "locale": "pt-BR",
+  "options": {
+    "captureScreenshots": false,
+    "captureSecrets": false,
+    "includeUploads": false
+  },
+  "origins": ["https://example.com"],
+  "tabs": [
+    { "id": "tab-main", "initialUrl": "https://example.com/form" }
+  ],
+  "frames": [
+    { "id": "frame-main", "tabId": "tab-main", "url": "https://example.com/form", "accessible": true }
+  ],
+  "eventCount": 1,
+  "associations": [
+    { "eventId": "event-001", "actionId": "preencher-nome", "locatorId": "form.name" }
+  ],
+  "acceptedPrivacyNotices": ["capture-v1"]
+}

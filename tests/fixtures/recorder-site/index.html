@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fixture Recorder V2</title>
+</head>
+<body>
+  <h1>Cadastro de teste</h1>
+  <form id="cadastro">
+    <label for="nome">Nome completo</label>
+    <input id="nome" name="nome" data-testid="customer-name" autocomplete="name">
+
+    <label for="estado">Estado</label>
+    <select id="estado" name="estado" data-testid="state-select">
+      <option value="">Selecione</option>
+      <option value="SP">São Paulo</option>
+      <option value="RJ">Rio de Janeiro</option>
+    </select>
+
+    <label><input id="aceite" type="checkbox" data-testid="terms-check"> Aceito os termos</label>
+    <label for="senha">Senha que não será gravada</label>
+    <input id="senha" type="password" autocomplete="current-password">
+    <label for="arquivo">Arquivo</label>
+    <input id="arquivo" type="file" data-testid="upload-file">
+    <button id="enviar" type="submit">Enviar formulário</button>
+  </form>
+
+  <button id="spa-next" data-testid="spa-next">Avançar na SPA</button>
+  <button id="dynamic-action" data-testid="dynamic-action">Ação dinâmica</button>
+  <section data-testid="scope-primary">
+    <div><div><div><div><div><div>
+      <button type="button">Editar item</button>
+    </div></div></div></div></div></div>
+  </section>
+  <section data-testid="scope-secondary">
+    <div><div><div><div><div><div>
+      <button type="button">Editar item</button>
+    </div></div></div></div></div></div>
+  </section>
+  <div id="shadow-host"></div>
+  <a id="traditional-navigation" href="/traditional.html">Navegação tradicional</a>
+  <button id="open-popup">Abrir popup</button>
+  <iframe id="fixture-frame" title="Etapa incorporada" src="/frame.html"></iframe>
+  <output id="resultado" aria-live="polite"></output>
+  <script src="/app.js"></script>
+</body>
+</html>

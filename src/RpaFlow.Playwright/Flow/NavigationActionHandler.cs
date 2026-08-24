@@ -59,7 +59,7 @@ internal sealed class NavigationActionHandler : IFlowActionHandler
         FlowActionDefinition action,
         RpaContext context)
     {
-        var url = FlowValueResolver.ResolveRequired(action, context.Data);
+        var url = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         await context.Page.GotoAsync(url, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.DOMContentLoaded,
@@ -162,7 +162,7 @@ internal sealed class NavigationActionHandler : IFlowActionHandler
         CancellationToken cancellationToken)
     {
         var context = execution.Context;
-        var expected = FlowValueResolver.ResolveRequired(action, context.Data);
+        var expected = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         var matches = new List<IPage>();
         foreach (var page in context.Page.Context.Pages)
         {

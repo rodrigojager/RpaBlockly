@@ -5,4 +5,12 @@
     <Nullable>enable</Nullable>
     <RootNamespace>RpaFlow.Contracts</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Flow\FlowDefinition.cs" />
+    <Compile Remove="Flow\FlowDefinitionMetrics.cs" />
+    <Compile Remove="Flow\FlowDefinitionValidator.cs" />
+    <Compile Remove="Flow\FlowJsonSerializer.cs" />
+    <Compile Remove="Flow\JsonFlowLoader.cs" />
+  </ItemGroup>
 </Project>

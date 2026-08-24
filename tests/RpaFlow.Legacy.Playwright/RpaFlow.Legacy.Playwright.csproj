@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>RpaFlow.Playwright</RootNamespace>
+    <AssemblyName>RpaFlow.Legacy.Playwright</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RpaFlow.Playwright\RpaFlow.Playwright.csproj" />
+    <ProjectReference Include="..\..\src\RpaFlow.Runtime\RpaFlow.Runtime.csproj" />
+    <ProjectReference Include="..\..\tools\RpaFlow.Legacy.Contracts\RpaFlow.Legacy.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\RpaFlow.Playwright\Core\PlaywrightFlowExecutor.cs" Link="Core\PlaywrightFlowExecutor.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\ControlFlowActionHandler.cs" Link="Flow\ControlFlowActionHandler.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\DataAndArtifactActionHandler.cs" Link="Flow\DataAndArtifactActionHandler.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowActionExecutionScope.cs" Link="Flow\FlowActionExecutionScope.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowActionHandlerRegistry.cs" Link="Flow\FlowActionHandlerRegistry.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowCompiler.cs" Link="Flow\FlowCompiler.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowConditionEvaluator.cs" Link="Flow\FlowConditionEvaluator.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowDownloadExecutor.cs" Link="Flow\FlowDownloadExecutor.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowFrameDiagnostics.cs" Link="Flow\FlowFrameDiagnostics.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FlowLocatorFactory.cs" Link="Flow\FlowLocatorFactory.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\FormActionHandler.cs" Link="Flow\FormActionHandler.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\IFlowActionHandler.cs" Link="Flow\IFlowActionHandler.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\JsonFlowActionStep.cs" Link="Flow\JsonFlowActionStep.cs" />
+    <Compile Include="..\..\src\RpaFlow.Playwright\Flow\NavigationActionHandler.cs" Link="Flow\NavigationActionHandler.cs" />
+  </ItemGroup>
+</Project>

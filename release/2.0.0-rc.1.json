@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0-rc.1",
+  "baselineCommit": "03b74fe2197ad7651f4ba05ec5819efa9787f194",
+  "flowSchemaVersion": 2,
+  "locatorSchemaVersion": 1,
+  "policySchemaVersion": 1,
+  "recorderVersion": "1.0.0-rc.5",
+  "recorderArtifact": "rpablockly-recorder-1.0.0-rc.5.zip",
+  "recorderChecksum": "378d11c67d19d23a8e00cf1a06e8712877a1b7fe1eb3f6ceaaa88d7bf49a59de",
+  "releaseStatus": "release-candidate",
+  "humanAcceptance": {
+    "requirement": "REC-140",
+    "status": "pending",
+    "report": "docs/recorder/relatorio-instalacao-limpa.md"
+  },
+  "documents": [
+    "flow.production.json",
+    "locators.production.json",
+    "rpa.policy.json"
+  ],
+  "verification": "pwsh ./tools/Run-Checks.ps1",
+  "rollback": "usar a versão anterior do repositório e seus artefatos; não há downgrade automático de conteúdo"
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "locators": [
+    {
+      "id": "submit",
+      "displayName": "Enviar",
+      "candidates": [
+        {
+          "id": "submit-original",
+          "origin": "developer",
+          "developerRole": "original",
+          "recipe": {
+            "frames": [],
+            "target": {
+              "strategy": "css",
+              "selector": "button",
+              "hasText": {
+                "literal": "Enviar",
+                "source": "input.rotulo"
+              }
+            }
+          }
+        }
+      ],
+      "fingerprints": []
+    }
+  ]
+}

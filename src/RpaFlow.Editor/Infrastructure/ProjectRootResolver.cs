@@ -23,16 +23,17 @@ public static class ProjectRootResolver
         var configurationFile = ResolveExistingFile(
             projectRoot,
             arguments.ConfigurationFile ?? profile.ConfigurationFile);
-        var flowFile = ResolveExistingFile(
+        var packageStoreRoot = ResolveDirectory(
             projectRoot,
-            arguments.FlowFile ?? profile.FlowFile);
+            profile.PackageStoreRoot);
 
         return new EditorPaths(
             projectRoot,
             profileFile,
             profile,
             configurationFile,
-            flowFile);
+            packageStoreRoot,
+            profile.RpaId);
     }
 
     private static string FindRoot()
@@ -107,6 +108,18 @@ public static class ProjectRootResolver
             throw new FileNotFoundException(
                 $"Arquivo necessário para o editor não encontrado: {fullPath}",
                 fullPath);
+        }
+
+        return fullPath;
+    }
+
+    private static string ResolveDirectory(string projectRoot, string path)
+    {
+        var fullPath = ResolveInsideProject(projectRoot, path);
+        if (File.Exists(fullPath))
+        {
+            throw new InvalidOperationException(
+                $"O caminho do package store não pode ser um arquivo: {fullPath}");
         }
 
         return fullPath;

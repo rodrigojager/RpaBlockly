@@ -6,7 +6,7 @@ internal static class FlowFailureClassifier
 {
     public static FlowExecutionException ForAction(
         FlowExecutionRequest request,
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         string? currentUrl,
         Exception exception)
     {
@@ -53,7 +53,7 @@ internal static class FlowFailureClassifier
     }
 
     private static (FlowFailureCategory Category, bool Retryable) Classify(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         Exception exception)
     {
         if (action.Type.Equals("fail", StringComparison.OrdinalIgnoreCase))

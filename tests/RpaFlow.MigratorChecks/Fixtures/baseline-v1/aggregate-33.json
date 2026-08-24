@@ -1,0 +1,439 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Catálogo completo sanitizado",
+  "Inputs": [],
+  "Actions": [
+    {
+      "Id": "catalogo-capturetimestamp",
+      "Type": "captureTimestamp",
+      "Name": "captureTimestamp",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-click",
+      "Type": "click",
+      "Name": "click",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-clickandswitchpage",
+      "Type": "clickAndSwitchPage",
+      "Name": "clickAndSwitchPage",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "ReadySelector": "#pronto",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-clickifvisible",
+      "Type": "clickIfVisible",
+      "Name": "clickIfVisible",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-closepage",
+      "Type": "closePage",
+      "Name": "closePage",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-completeauthenticationattempt",
+      "Type": "completeAuthenticationAttempt",
+      "Name": "completeAuthenticationAttempt",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-download",
+      "Type": "download",
+      "Name": "download",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "DownloadMode": "click",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-fail",
+      "Type": "fail",
+      "Name": "fail",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-fill",
+      "Type": "fill",
+      "Name": "fill",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-fillmaskedcurrency",
+      "Type": "fillMaskedCurrency",
+      "Name": "fillMaskedCurrency",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "DecimalPlaces": 2,
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-foreach",
+      "Type": "forEach",
+      "Name": "forEach",
+      "FrameSelectors": [],
+      "Actions": [
+        {
+          "Id": "catalogo-foreach-filho",
+          "Type": "setVariable",
+          "Name": "Filho do forEach",
+          "FrameSelectors": [],
+          "ValueSource": "loop.item",
+          "Target": "runtime.foreachFilho",
+          "Actions": [],
+          "ElseActions": []
+        }
+      ],
+      "ElseActions": [],
+      "Items": [
+        "item"
+      ],
+      "ItemVariable": "item",
+      "IndexVariable": "indice"
+    },
+    {
+      "Id": "catalogo-if",
+      "Type": "if",
+      "Name": "if",
+      "FrameSelectors": [],
+      "Condition": {
+        "Type": "value",
+        "Operator": "equals",
+        "LeftValue": true,
+        "RightValue": true,
+        "FrameSelectors": []
+      },
+      "Actions": [
+        {
+          "Id": "catalogo-if-filho",
+          "Type": "setVariable",
+          "Name": "Filho do if",
+          "FrameSelectors": [],
+          "Value": true,
+          "Target": "runtime.ifFilho",
+          "Actions": [],
+          "ElseActions": []
+        }
+      ],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-navigate",
+      "Type": "navigate",
+      "Name": "navigate",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-preserveorfill",
+      "Type": "preserveOrFill",
+      "Name": "preserveOrFill",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Comparison": "exact",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-presskey",
+      "Type": "pressKey",
+      "Name": "pressKey",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-readelement",
+      "Type": "readElement",
+      "Name": "readElement",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Property": "text",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-readelements",
+      "Type": "readElements",
+      "Name": "readElements",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Property": "text",
+      "MaxItems": 100,
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-repeat",
+      "Type": "repeat",
+      "Name": "repeat",
+      "FrameSelectors": [],
+      "Actions": [
+        {
+          "Id": "catalogo-repeat-filho",
+          "Type": "setVariable",
+          "Name": "Filho do repeat",
+          "FrameSelectors": [],
+          "Value": true,
+          "Target": "runtime.repeatFilho",
+          "Actions": [],
+          "ElseActions": []
+        }
+      ],
+      "ElseActions": [],
+      "Times": 1
+    },
+    {
+      "Id": "catalogo-runsubflow",
+      "Type": "runSubflow",
+      "Name": "runSubflow",
+      "FrameSelectors": [],
+      "Actions": [],
+      "ElseActions": [],
+      "Subflow": "apoio"
+    },
+    {
+      "Id": "catalogo-screenshot",
+      "Type": "screenshot",
+      "Name": "screenshot",
+      "FrameSelectors": [],
+      "FileName": "evidencia.png",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-select2",
+      "Type": "select2",
+      "Name": "select2",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "TriggerSelector": ".trigger",
+      "OptionSelector": ".option",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-selectoption",
+      "Type": "selectOption",
+      "Name": "selectOption",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "OptionMode": "value",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-setchecked",
+      "Type": "setChecked",
+      "Name": "setChecked",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-setvariable",
+      "Type": "setVariable",
+      "Name": "setVariable",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-switchpage",
+      "Type": "switchPage",
+      "Name": "switchPage",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Property": "url",
+      "Comparison": "contains",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-transformpath",
+      "Type": "transformPath",
+      "Name": "transformPath",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Operation": "fileName",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-typeacrossinputs",
+      "Type": "typeAcrossInputs",
+      "Name": "typeAcrossInputs",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-typesequentially",
+      "Type": "typeSequentially",
+      "Name": "typeSequentially",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-upload",
+      "Type": "upload",
+      "Name": "upload",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-wait",
+      "Type": "wait",
+      "Name": "wait",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "State": "visible",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-waitforonetimecode",
+      "Type": "waitForOneTimeCode",
+      "Name": "waitForOneTimeCode",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "ProviderAlias": "email-otp",
+      "NotBeforeSource": "runtime.requestedAt",
+      "Target": "runtime.resultado",
+      "TimeoutMs": 120000,
+      "PollIntervalMs": 5000,
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-waitstable",
+      "Type": "waitStable",
+      "Name": "waitStable",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-safefinalconfirmation",
+      "Type": "safeFinalConfirmation",
+      "Name": "safeFinalConfirmation",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "SuccessSelector": ".sucesso",
+      "SuccessText": "Concluído",
+      "ProtocolSelector": ".protocolo",
+      "ProtocolPattern": "(?<protocol>[A-Z]+-[0-9]+)",
+      "CompletionTarget": "runtime.concluido",
+      "ConfirmationMessageTarget": "runtime.mensagem",
+      "ProtocolTarget": "runtime.protocolo",
+      "Actions": [],
+      "ElseActions": []
+    }
+  ],
+  "Subflows": {
+    "apoio": [
+      {
+        "Id": "apoio-registrar",
+        "Type": "setVariable",
+        "Name": "Registrar apoio",
+        "FrameSelectors": [],
+        "Value": true,
+        "Target": "runtime.apoio",
+        "Actions": [],
+        "ElseActions": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Fixture sanitizada: control",
+  "Inputs": [],
+  "Actions": [
+    {
+      "Id": "catalogo-if",
+      "Type": "if",
+      "Name": "if",
+      "FrameSelectors": [],
+      "Condition": {
+        "Type": "value",
+        "Operator": "equals",
+        "LeftValue": true,
+        "RightValue": true,
+        "FrameSelectors": []
+      },
+      "Actions": [
+        {
+          "Id": "catalogo-if-filho",
+          "Type": "setVariable",
+          "Name": "Filho do if",
+          "FrameSelectors": [],
+          "Value": true,
+          "Target": "runtime.ifFilho",
+          "Actions": [],
+          "ElseActions": []
+        }
+      ],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-repeat",
+      "Type": "repeat",
+      "Name": "repeat",
+      "FrameSelectors": [],
+      "Actions": [
+        {
+          "Id": "catalogo-repeat-filho",
+          "Type": "setVariable",
+          "Name": "Filho do repeat",
+          "FrameSelectors": [],
+          "Value": true,
+          "Target": "runtime.repeatFilho",
+          "Actions": [],
+          "ElseActions": []
+        }
+      ],
+      "ElseActions": [],
+      "Times": 1
+    },
+    {
+      "Id": "catalogo-foreach",
+      "Type": "forEach",
+      "Name": "forEach",
+      "FrameSelectors": [],
+      "Actions": [
+        {
+          "Id": "catalogo-foreach-filho",
+          "Type": "setVariable",
+          "Name": "Filho do forEach",
+          "FrameSelectors": [],
+          "ValueSource": "loop.item",
+          "Target": "runtime.foreachFilho",
+          "Actions": [],
+          "ElseActions": []
+        }
+      ],
+      "ElseActions": [],
+      "Items": [
+        "item"
+      ],
+      "ItemVariable": "item",
+      "IndexVariable": "indice"
+    },
+    {
+      "Id": "catalogo-runsubflow",
+      "Type": "runSubflow",
+      "Name": "runSubflow",
+      "FrameSelectors": [],
+      "Actions": [],
+      "ElseActions": [],
+      "Subflow": "apoio"
+    }
+  ],
+  "Subflows": {
+    "apoio": [
+      {
+        "Id": "apoio-registrar",
+        "Type": "setVariable",
+        "Name": "Registrar apoio",
+        "FrameSelectors": [],
+        "Value": true,
+        "Target": "runtime.apoio",
+        "Actions": [],
+        "ElseActions": []
+      }
+    ]
+  }
+}

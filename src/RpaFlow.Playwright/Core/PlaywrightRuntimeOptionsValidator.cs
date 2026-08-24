@@ -46,6 +46,21 @@ public static class PlaywrightRuntimeOptionsValidator
                 "HoldBrowserOpenForInspection exige Headless=false para manter uma janela visível.");
         }
 
+        if (options.MaximumArtifactBytes is < 1_024 or > 1_073_741_824)
+        {
+            errors.Add("MaximumArtifactBytes deve estar entre 1024 e 1073741824.");
+        }
+
+        if (options.MaximumArtifactFilesPerExecution is < 1 or > 10_000)
+        {
+            errors.Add("MaximumArtifactFilesPerExecution deve estar entre 1 e 10000.");
+        }
+
+        if (options.ArtifactRetentionDays is < 1 or > 3_650)
+        {
+            errors.Add("ArtifactRetentionDays deve estar entre 1 e 3650.");
+        }
+
         if (string.IsNullOrWhiteSpace(options.OutputDirectory))
         {
             errors.Add("OutputDirectory é obrigatório.");

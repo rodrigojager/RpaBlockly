@@ -1,0 +1,14 @@
+{
+  "name": "@rpablockly/schema-conformance",
+  "version": "2.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && node conformance.mjs"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "typescript": "5.9.2"
+  }
+}

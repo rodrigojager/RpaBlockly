@@ -37,9 +37,10 @@ public sealed class JsonFlowActionStep : IRpaStep
             _subflows,
             _subflowDepth,
             _handlers);
+        var identity = new FlowActionIdentity(_action.Id, _action.Type, _action.Name);
         try
         {
-            await context.GuardBeforeActionAsync(_action, cancellationToken);
+            await context.GuardBeforeActionAsync(identity, cancellationToken);
             await context.ObserveAsync(
                 CreateEvent(
                     "actionStarted",
@@ -48,7 +49,7 @@ public sealed class JsonFlowActionStep : IRpaStep
                 cancellationToken);
             await _handlers.ExecuteAsync(_action, execution, cancellationToken);
             var directive = await context.GuardAfterActionAsync(
-                _action,
+                identity,
                 cancellationToken);
             if (directive is not FlowActionExecutionDirective.Continue and
                 not FlowActionExecutionDirective.CompleteExecution)
@@ -94,7 +95,7 @@ public sealed class JsonFlowActionStep : IRpaStep
         {
             var classified = FlowFailureClassifier.ForAction(
                 context.ExecutionRequest,
-                _action,
+                identity,
                 context.Page.Url,
                 exception);
             await context.ObserveAsync(

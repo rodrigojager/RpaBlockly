@@ -1,0 +1,7 @@
+{
+  "id": "product-structure-change",
+  "originalHtml": "product-original.html",
+  "changedHtml": "product-changed.html",
+  "originalSelector": "#p1",
+  "minimumPercentage": 40
+}

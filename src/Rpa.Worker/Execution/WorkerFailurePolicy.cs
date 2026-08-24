@@ -13,8 +13,17 @@ public static class WorkerFailurePolicy
         RpaDefinitionOptions definition,
         WorkerFlowExecutionObserver? observer,
         bool workerStopping,
-        bool leadershipLost)
+        bool leadershipLost,
+        bool irreversibleEffectCompleted = false)
     {
+        if (irreversibleEffectCompleted)
+        {
+            return Definitive(
+                "EFEITO_IRREVERSIVEL_CONCLUIDO",
+                exception.Message +
+                " O roteiro já concluiu uma ação irreversível e não será repetido.");
+        }
+
         var flowFailure = Find<FlowExecutionException>(exception)?.Failure;
         if (Matches(flowFailure?.ActionId, definition.MfaFailureActionIds))
             return Definitive("MFA_REJEITADO", flowFailure?.Message ?? exception.Message);

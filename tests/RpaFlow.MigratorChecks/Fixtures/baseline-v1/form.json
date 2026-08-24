@@ -1,0 +1,123 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Fixture sanitizada: form",
+  "Inputs": [],
+  "Actions": [
+    {
+      "Id": "catalogo-fill",
+      "Type": "fill",
+      "Name": "fill",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-selectoption",
+      "Type": "selectOption",
+      "Name": "selectOption",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "OptionMode": "value",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-setchecked",
+      "Type": "setChecked",
+      "Name": "setChecked",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-presskey",
+      "Type": "pressKey",
+      "Name": "pressKey",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-typesequentially",
+      "Type": "typeSequentially",
+      "Name": "typeSequentially",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-typeacrossinputs",
+      "Type": "typeAcrossInputs",
+      "Name": "typeAcrossInputs",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-upload",
+      "Type": "upload",
+      "Name": "upload",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-preserveorfill",
+      "Type": "preserveOrFill",
+      "Name": "preserveOrFill",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Comparison": "exact",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-select2",
+      "Type": "select2",
+      "Name": "select2",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "TriggerSelector": ".trigger",
+      "OptionSelector": ".option",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-fillmaskedcurrency",
+      "Type": "fillMaskedCurrency",
+      "Name": "fillMaskedCurrency",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "DecimalPlaces": 2,
+      "Actions": [],
+      "ElseActions": []
+    }
+  ],
+  "Subflows": {}
+}

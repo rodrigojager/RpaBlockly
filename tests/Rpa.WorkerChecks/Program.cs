@@ -8,7 +8,9 @@ using Rpa.Worker.Hosting;
 using Rpa.Worker.Data;
 using RpaFlow.Contracts;
 using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
 using RpaFlow.Runtime;
+using V2 = RpaFlow.Contracts.V2;
 
 CheckDisabledProviderDoesNotRequireCredentials();
 CheckEnabledProviderConfiguration();
@@ -25,24 +27,18 @@ Console.WriteLine("Worker e provider de OTP por e-mail validados com sucesso.");
 static void CheckConfiguredExecutionGuard()
 {
     var request = new FlowExecutionRequest("guard-worker", [], [], []);
-    var ordinaryAction = new FlowActionDefinition
-    {
-        Id = "preparar-evidencia",
-        Type = "setVariable",
-        Name = "Preparar evidência"
-    };
-    var boundaryAction = new FlowActionDefinition
-    {
-        Id = "registrar-limite-seguro",
-        Type = "screenshot",
-        Name = "Registrar limite seguro"
-    };
-    var irreversibleAction = new FlowActionDefinition
-    {
-        Id = "confirmar-operacao",
-        Type = "click",
-        Name = "Confirmar operação"
-    };
+    var ordinaryAction = new FlowActionIdentity(
+        "preparar-evidencia",
+        "setVariable",
+        "Preparar evidência");
+    var boundaryAction = new FlowActionIdentity(
+        "registrar-limite-seguro",
+        "screenshot",
+        "Registrar limite seguro");
+    var irreversibleAction = new FlowActionIdentity(
+        "confirmar-operacao",
+        "click",
+        "Confirmar operação");
     var definition = new RpaDefinitionOptions
     {
         SafeValidationBoundaryActionId = boundaryAction.Id,
@@ -165,9 +161,20 @@ static void CheckWorkerFailurePolicy()
         transient, item, definition, observer, false, false);
     Check(released.Retry,
         "marcador concluído libera retry técnico posterior sem liberar MFA");
-    Check(FlowActionHandlerRegistry.Default.SupportedTypes.Contains(
+    var irreversible = WorkerFailurePolicy.Decide(
+        transient,
+        item,
+        definition,
+        observer,
+        workerStopping: false,
+        leadershipLost: false,
+        irreversibleEffectCompleted: true);
+    Check(!irreversible.Retry &&
+          irreversible.ErrorCode == "EFEITO_IRREVERSIVEL_CONCLUIDO",
+        "efeito irreversível concluído bloqueia qualquer repetição automática");
+    Check(V2FlowActionHandlerRegistry.Default.SupportedTypes.Contains(
             "completeAuthenticationAttempt"),
-        "runtime possui handler para o marcador de autenticação");
+        "runtime V2 possui handler para o marcador de autenticação");
 }
 
 static void CheckWorkerReadiness()
@@ -193,17 +200,27 @@ static async Task CheckSafeValidationBoundaryConfigurationAsync()
     var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
     var options = CreateWorkerOptions();
     var definition = options.Definitions["exemplo"];
-    definition.FlowFile = "examples/RpaExemplo/flow.production.json";
+    definition.Package = new RpaPackageReferenceOptions
+    {
+        RpaId = "rpa-exemplo",
+        Provider = "File",
+        OriginName = "source",
+        Location = "examples/RpaExemplo/package-store"
+    };
     definition.SafeValidationBoundaryActionId = "iniciar-fluxo";
     var paths = new WorkerPaths(
         repositoryRoot,
         repositoryRoot,
         Path.Combine(repositoryRoot, "artifacts"),
         Path.Combine(repositoryRoot, "storage", "sessions"));
+    var registry = RpaPackageRegistryFactory.Create(
+        options,
+        new WorkerEnvironment(string.Empty, paths));
     await RpaWorkerOptionsValidator.ValidateFlowsAsync(
         options,
         paths,
-        CancellationToken.None);
+        CancellationToken.None,
+        registry);
     Pass("o worker aceita um limite seguro que referencia uma ação existente");
 
     definition.SafeValidationBoundaryActionId = "acao-inexistente";
@@ -211,7 +228,8 @@ static async Task CheckSafeValidationBoundaryConfigurationAsync()
         () => RpaWorkerOptionsValidator.ValidateFlowsAsync(
             options,
             paths,
-            CancellationToken.None),
+            CancellationToken.None,
+            registry),
         "SafeValidationBoundaryActionId referencia a ação inexistente");
 
     definition.SafeValidationBoundaryActionId = "iniciar-fluxo";
@@ -220,7 +238,8 @@ static async Task CheckSafeValidationBoundaryConfigurationAsync()
         () => RpaWorkerOptionsValidator.ValidateFlowsAsync(
             options,
             paths,
-            CancellationToken.None),
+            CancellationToken.None,
+            registry),
         "não pode ser também uma ação irreversível");
 
     definition.IrreversibleActionIds = [];
@@ -230,13 +249,10 @@ static async Task CheckSafeValidationBoundaryConfigurationAsync()
             "exemplo",
             definition,
             [
-                new FlowActionDefinition
-                {
-                    Id = "executar-subfluxo",
-                    Type = "runSubflow",
-                    Name = "Executar subfluxo",
-                    Subflow = "validacao"
-                }
+                new FlowActionIdentity(
+                    "executar-subfluxo",
+                    "runSubflow",
+                    "Executar subfluxo")
             ]),
         "deve referenciar uma ação-folha");
 }
@@ -417,19 +433,19 @@ static void CheckFlowProviderFences()
 {
     var options = CreateWorkerOptions();
     var definition = options.Definitions["exemplo"];
-    var flow = new FlowDefinition
+    var flow = new V2.FlowDefinition
     {
-        SchemaVersion = 1,
+        SchemaVersion = 2,
         Name = "Fluxo com OTP",
         Actions =
         [
-            new FlowActionDefinition
+            new V2.FlowActionDefinition
             {
                 Id = "aguardar-otp",
                 Type = "waitForOneTimeCode",
                 Name = "Aguardar OTP",
                 ProviderAlias = "email-otp",
-                Target = "runtime.authentication.otp"
+                Output = "runtime.authentication.otp"
             }
         ]
     };
@@ -484,19 +500,19 @@ static void CheckOneTimeCodeOutputSanitization()
     options.MaxParallelism = 1;
     options.EmailReader.Providers["email-otp"] = CreateEnabledProvider();
     var definition = options.Definitions["exemplo"];
-    var flow = new FlowDefinition
+    var flow = new V2.FlowDefinition
     {
-        SchemaVersion = 1,
+        SchemaVersion = 2,
         Name = "Fluxo com OTP",
         Actions =
         [
-            new FlowActionDefinition
+            new V2.FlowActionDefinition
             {
                 Id = "aguardar-otp",
                 Type = "waitForOneTimeCode",
                 Name = "Aguardar OTP",
                 ProviderAlias = "email-otp",
-                Target = "runtime.authentication.otp"
+                Output = "runtime.authentication.otp"
             }
         ]
     };
@@ -540,7 +556,13 @@ static RpaWorkerOptions CreateWorkerOptions()
     };
     options.Definitions["exemplo"] = new RpaDefinitionOptions
     {
-        FlowFile = "flow.production.json"
+        Package = new RpaPackageReferenceOptions
+        {
+            RpaId = "exemplo",
+            Provider = "File",
+            OriginName = "source",
+            Location = "package-store"
+        }
     };
     return options;
 }

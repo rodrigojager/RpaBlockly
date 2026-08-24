@@ -1,7 +1,8 @@
 using System.Net.Mail;
 using System.Text.RegularExpressions;
-using RpaFlow.Contracts;
 using RpaFlow.Playwright;
+using RpaFlow.Packages;
+using RpaFlow.Runtime;
 using Rpa.Worker.Execution;
 
 namespace Rpa.Worker.Configuration;
@@ -87,9 +88,14 @@ public static class RpaWorkerOptionsValidator
                 errors.Add($"{prefix} possui um código inválido.");
             }
 
-            if (string.IsNullOrWhiteSpace(definition.FlowFile))
+            if (definition.Package is null)
             {
-                errors.Add($"{prefix}.FlowFile é obrigatório.");
+                errors.Add(
+                    $"{prefix}.Package é obrigatório na V2.");
+            }
+            else
+            {
+                ValidatePackageReference(definition.Package, prefix, code, errors);
             }
 
             ValidateRuntime(definition.Runtime, prefix, workspaceRoot, errors);
@@ -124,22 +130,31 @@ public static class RpaWorkerOptionsValidator
     public static async Task ValidateFlowsAsync(
         RpaWorkerOptions options,
         WorkerPaths paths,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RpaPackageRuntimeRegistry? packageRegistry = null)
     {
-        var loader = new JsonFlowLoader();
         foreach (var (code, definition) in options.Definitions.Where(item => item.Value.Enabled))
         {
-            var flowPath = ResolvePath(paths.WorkspaceRoot, definition.FlowFile);
-            if (!File.Exists(flowPath))
+            if (packageRegistry is null)
             {
-                throw new FileNotFoundException(
-                    $"Fluxo da definição '{code}' não encontrado.",
-                    flowPath);
+                throw new InvalidOperationException(
+                    $"A definição V2 '{code}' exige RpaPackageRuntimeRegistry.");
             }
 
-            var flow = await loader.LoadAsync(flowPath, cancellationToken);
+            var reference = definition.Package!;
+            var rpaId = string.IsNullOrWhiteSpace(reference.RpaId)
+                ? code
+                : reference.RpaId;
+            var snapshot = await packageRegistry.ResolveAsync(
+                rpaId,
+                reference.OriginName,
+                string.IsNullOrWhiteSpace(reference.Revision)
+                    ? null
+                    : new PackageRevision(reference.Revision),
+                cancellationToken);
+            var flow = snapshot.Flow;
             ValidateOneTimeCodeProviders(options, code, definition, flow);
-            var actions = EnumerateActions(flow).ToArray();
+            var actions = EnumerateActions(flow).Select(FlowActionIdentity.From).ToArray();
             var knownIds = actions
                 .Select(action => action.Id)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -197,7 +212,7 @@ public static class RpaWorkerOptionsValidator
     internal static void ValidateSafeValidationBoundary(
         string code,
         RpaDefinitionOptions definition,
-        IReadOnlyList<FlowActionDefinition> actions)
+        IReadOnlyList<FlowActionIdentity> actions)
     {
         var safeBoundaryActionId = definition.SafeValidationBoundaryActionId?.Trim();
         if (string.IsNullOrWhiteSpace(safeBoundaryActionId))
@@ -236,9 +251,10 @@ public static class RpaWorkerOptionsValidator
         }
     }
 
-    private static IEnumerable<FlowActionDefinition> EnumerateActions(FlowDefinition flow)
+    private static IEnumerable<RpaFlow.Contracts.V2.FlowActionDefinition> EnumerateActions(
+        RpaFlow.Contracts.V2.FlowDefinition flow)
     {
-        var pending = new Stack<FlowActionDefinition>(
+        var pending = new Stack<RpaFlow.Contracts.V2.FlowActionDefinition>(
             flow.Actions.Concat(flow.Subflows.Values.SelectMany(actions => actions)));
         while (pending.TryPop(out var action))
         {
@@ -254,7 +270,7 @@ public static class RpaWorkerOptionsValidator
         RpaWorkerOptions options,
         string code,
         RpaDefinitionOptions definition,
-        FlowDefinition flow)
+        RpaFlow.Contracts.V2.FlowDefinition flow)
     {
         var aliases = EnumerateActions(flow)
             .Where(action => action.Type.Equals(
@@ -265,7 +281,90 @@ public static class RpaWorkerOptionsValidator
             .Cast<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        ValidateProviderAliases(options, code, definition, aliases);
+        ValidateSensitiveMappings(
+            code,
+            definition,
+            SensitiveRuntimeOutputSanitizer.EnumerateOneTimeCodeTargets(flow));
+    }
 
+    private static void ValidatePackageReference(
+        RpaPackageReferenceOptions package,
+        string prefix,
+        string code,
+        ICollection<string> errors)
+    {
+        var rpaId = string.IsNullOrWhiteSpace(package.RpaId) ? code : package.RpaId;
+        if (!LogicalIdentifier.IsMatch(rpaId))
+        {
+            errors.Add($"{prefix}.Package.RpaId possui um identificador inválido.");
+        }
+
+        ValidatePackageStoreReference(
+            package.OriginName,
+            package.Provider,
+            package.Location,
+            $"{prefix}.Package",
+            errors);
+
+        if (!string.IsNullOrWhiteSpace(package.Revision) &&
+            (package.Revision.Length != 64 ||
+             package.Revision.Any(character => !Uri.IsHexDigit(character))))
+        {
+            errors.Add(
+                $"{prefix}.Package.Revision deve conter um SHA-256 hexadecimal de 64 caracteres.");
+        }
+
+        if (package.Overlay is null)
+        {
+            return;
+        }
+
+        ValidatePackageStoreReference(
+            package.Overlay.OriginName,
+            package.Overlay.Provider,
+            package.Overlay.Location,
+            $"{prefix}.Package.Overlay",
+            errors);
+        if (package.OriginName.Equals(
+                package.Overlay.OriginName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(
+                $"{prefix}.Package.Overlay.OriginName deve ser diferente da origem principal.");
+        }
+    }
+
+    private static void ValidatePackageStoreReference(
+        string originName,
+        string provider,
+        string location,
+        string prefix,
+        ICollection<string> errors)
+    {
+        if (!LogicalIdentifier.IsMatch(originName))
+        {
+            errors.Add($"{prefix}.OriginName possui um identificador inválido.");
+        }
+
+        if (!provider.Equals("File", StringComparison.OrdinalIgnoreCase) &&
+            !provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add($"{prefix}.Provider deve ser 'File' ou 'SqlServer'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            errors.Add($"{prefix}.Location é obrigatório.");
+        }
+    }
+
+    private static void ValidateProviderAliases(
+        RpaWorkerOptions options,
+        string code,
+        RpaDefinitionOptions definition,
+        IReadOnlyCollection<string> aliases)
+    {
         foreach (var alias in aliases)
         {
             if (!options.EmailReader.Providers.TryGetValue(alias, out var provider))
@@ -283,25 +382,28 @@ public static class RpaWorkerOptionsValidator
             }
         }
 
-        if (definition.ClaimEnabled && aliases.Length > 0 && options.MaxParallelism != 1)
+        if (definition.ClaimEnabled && aliases.Count > 0 && options.MaxParallelism != 1)
         {
             throw new InvalidOperationException(
                 $"A definição '{code}' usa código de uso único por e-mail e exige " +
                 "RpaWorker:MaxParallelism igual a 1 para não correlacionar mensagens entre casos.");
         }
 
-
         if (definition.ClaimEnabled &&
-            aliases.Length > 0 &&
+            aliases.Count > 0 &&
             !definition.MfaAttemptActionIds.Any(value => !string.IsNullOrWhiteSpace(value)))
         {
             throw new InvalidOperationException(
                 $"A definição '{code}' usa código de uso único e precisa declarar " +
                 "MfaAttemptActionIds para impedir repetição automática do MFA.");
         }
+    }
 
-        var sensitiveTargets = SensitiveRuntimeOutputSanitizer
-            .EnumerateOneTimeCodeTargets(flow);
+    private static void ValidateSensitiveMappings(
+        string code,
+        RpaDefinitionOptions definition,
+        IReadOnlySet<string> sensitiveTargets)
+    {
         foreach (var mapping in definition.Outputs.Select(output =>
                      (Kind: "Outputs", output.Name, output.Source))
                  .Concat(definition.Artifacts.Select(artifact =>
@@ -354,7 +456,11 @@ public static class RpaWorkerOptionsValidator
                 runtime.ViewportHeight,
                 ReadinessQuietPeriodMs: runtime.ReadinessQuietPeriodMs,
                 FormStabilityMs: runtime.FormStabilityMs,
-                BusySelectors: runtime.BusySelectors));
+                BusySelectors: runtime.BusySelectors,
+                MaximumArtifactBytes: runtime.MaximumArtifactBytes,
+                MaximumArtifactFilesPerExecution:
+                    runtime.MaximumArtifactFilesPerExecution,
+                ArtifactRetentionDays: runtime.ArtifactRetentionDays));
         }
         catch (Exception exception)
         {

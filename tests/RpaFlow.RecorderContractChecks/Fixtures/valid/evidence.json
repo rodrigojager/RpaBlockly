@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "id": "evidence-001",
+      "eventId": "event-001",
+      "actionId": "preencher-nome",
+      "kind": "after",
+      "path": "evidence/step-0001-after.webp",
+      "thumbnailPath": "evidence/thumbnails/step-0001-after.webp",
+      "mimeType": "image/webp",
+      "width": 1280,
+      "height": 720,
+      "byteLength": 1024,
+      "capturedAtUtc": "2026-08-17T18:00:10Z",
+      "masks": [
+        { "x": 10, "y": 10, "width": 120, "height": 30, "reason": "sensitive-field" }
+      ]
+    }
+  ]
+}

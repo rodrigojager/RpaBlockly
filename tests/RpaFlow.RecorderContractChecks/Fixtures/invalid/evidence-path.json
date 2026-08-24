@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "id": "evidence-invalid",
+      "eventId": "event-001",
+      "actionId": "action-001",
+      "kind": "after",
+      "path": "../outside.webp",
+      "thumbnailPath": "evidence/thumbnails/ok.webp",
+      "mimeType": "image/webp",
+      "width": 1,
+      "height": 1,
+      "byteLength": 1,
+      "capturedAtUtc": "2026-08-17T18:00:00Z",
+      "masks": []
+    }
+  ]
+}

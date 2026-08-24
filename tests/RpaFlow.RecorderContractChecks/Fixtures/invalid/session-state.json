@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "session-invalid-state",
+  "name": "Inválida",
+  "state": "sleeping",
+  "startedAtUtc": "2026-08-17T18:00:00Z",
+  "timezone": "UTC",
+  "locale": "pt-BR",
+  "options": { "captureScreenshots": false, "captureSecrets": false, "includeUploads": false },
+  "origins": [],
+  "tabs": [],
+  "frames": [],
+  "eventCount": 0,
+  "associations": [],
+  "acceptedPrivacyNotices": []
+}

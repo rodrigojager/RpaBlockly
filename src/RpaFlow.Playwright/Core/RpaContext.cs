@@ -4,18 +4,15 @@ namespace RpaFlow.Playwright;
 
 public sealed class RpaContext : IDisposable
 {
-    private readonly IPagePolicyFactory _pagePolicyFactory;
     private readonly IFlowExecutionObserver _observer;
     private readonly IFlowActionExecutionGuard _executionGuard;
     private PageActivityMonitor? _activityMonitor;
-    private IPagePolicy? _pagePolicy;
 
     public RpaContext(
         IPage page,
         PlaywrightRuntimeOptions options,
         FlowExecutionRequest executionRequest,
         string outputDirectory,
-        IPagePolicyFactory? pagePolicyFactory = null,
         IFlowExecutionObserver? observer = null,
         IFlowActionExecutionGuard? executionGuard = null,
         IOneTimeCodeProvider? oneTimeCodeProvider = null,
@@ -25,7 +22,6 @@ public sealed class RpaContext : IDisposable
         Data = new FlowDataContext(executionRequest);
         ExecutionRequest = executionRequest;
         Page = page;
-        _pagePolicyFactory = pagePolicyFactory ?? DefaultPagePolicyFactory.Instance;
         _observer = observer ?? NullFlowExecutionObserver.Instance;
         _executionGuard = executionGuard ?? NullFlowActionExecutionGuard.Instance;
         OneTimeCodeProvider = oneTimeCodeProvider;
@@ -33,7 +29,10 @@ public sealed class RpaContext : IDisposable
         Artifacts = new ExecutionArtifacts(
             page,
             outputDirectory,
-            executionRequest.ExecutionId);
+            executionRequest.ExecutionId,
+            options.MaximumArtifactBytes,
+            options.MaximumArtifactFilesPerExecution,
+            TimeSpan.FromDays(options.ArtifactRetentionDays));
         SwitchToPage(page);
     }
 
@@ -52,8 +51,6 @@ public sealed class RpaContext : IDisposable
     public FlowExecutionBudget ExecutionBudget { get; } = new();
 
     public PageReadinessWaiter Readiness { get; private set; } = null!;
-
-    public IPagePolicy PagePolicy { get; private set; } = null!;
 
     public ExecutionArtifacts Artifacts { get; }
 
@@ -76,7 +73,7 @@ public sealed class RpaContext : IDisposable
     }
 
     public ValueTask GuardBeforeActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         CancellationToken cancellationToken) =>
         _executionGuard.BeforeActionAsync(
             action,
@@ -84,7 +81,7 @@ public sealed class RpaContext : IDisposable
             cancellationToken);
 
     public ValueTask<FlowActionExecutionDirective> GuardAfterActionAsync(
-        FlowActionDefinition action,
+        FlowActionIdentity action,
         CancellationToken cancellationToken) =>
         _executionGuard.AfterActionAsync(
             action,
@@ -96,14 +93,11 @@ public sealed class RpaContext : IDisposable
         ArgumentNullException.ThrowIfNull(newPage);
 
         _activityMonitor?.Dispose();
-        _pagePolicy?.Dispose();
-
         Page = newPage;
         Page.SetDefaultTimeout(Options.ActionTimeoutSeconds * 1_000);
         Page.SetDefaultNavigationTimeout(Options.ActionTimeoutSeconds * 1_000);
 
         _activityMonitor = new PageActivityMonitor(Page);
-        PagePolicy = _pagePolicy = _pagePolicyFactory.Create(Page);
         Readiness = new PageReadinessWaiter(
             Page,
             _activityMonitor,
@@ -117,6 +111,5 @@ public sealed class RpaContext : IDisposable
     public void Dispose()
     {
         _activityMonitor?.Dispose();
-        _pagePolicy?.Dispose();
     }
 }

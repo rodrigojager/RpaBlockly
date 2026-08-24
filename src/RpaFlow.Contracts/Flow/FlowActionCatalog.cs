@@ -1,5 +1,8 @@
 namespace RpaFlow.Contracts;
 
+using V2ActionDefinition = V2.FlowActionDefinition;
+using V2FlowDefinition = V2.FlowDefinition;
+
 public static class FlowCapabilities
 {
     public const string Web = "web";
@@ -58,7 +61,7 @@ public static class FlowActionCatalog
         new HashSet<string>(CapabilitiesByType.Keys, StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlySet<string> RequiredCapabilities(
-        FlowActionDefinition action)
+        V2ActionDefinition action)
     {
         if (!CapabilitiesByType.TryGetValue(action.Type, out var capabilities))
         {
@@ -75,7 +78,7 @@ public static class FlowActionCatalog
         return result;
     }
 
-    public static IReadOnlySet<string> RequiredCapabilities(FlowDefinition definition)
+    public static IReadOnlySet<string> RequiredCapabilities(V2FlowDefinition definition)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var action in EnumerateActions(definition))
@@ -86,10 +89,10 @@ public static class FlowActionCatalog
         return result;
     }
 
-    private static IEnumerable<FlowActionDefinition> EnumerateActions(
-        FlowDefinition definition)
+    private static IEnumerable<V2ActionDefinition> EnumerateActions(
+        V2FlowDefinition definition)
     {
-        var pending = new Stack<FlowActionDefinition>(
+        var pending = new Stack<V2ActionDefinition>(
             definition.Actions.Concat(definition.Subflows.Values.SelectMany(actions => actions)));
         while (pending.TryPop(out var action))
         {

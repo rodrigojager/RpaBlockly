@@ -37,7 +37,7 @@ public static class FlowDownloadExecutor
                 Timeout = action.TimeoutMs ??
                     context.Options.ActionTimeoutSeconds * 1_000
             });
-        var destination = ArtifactDestinationResolver.Resolve(action, context);
+        var destination = LegacyArtifactDestinationResolver.Resolve(action, context);
         var path = await context.Artifacts.SaveDownloadAsync(download, destination);
         StoreResult(action, context, path);
     }
@@ -48,7 +48,7 @@ public static class FlowDownloadExecutor
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var configuredUrl = FlowValueResolver.ResolveRequired(action, context.Data);
+        var configuredUrl = LegacyFlowValueResolver.ResolveRequired(action, context.Data);
         var url = Uri.TryCreate(configuredUrl, UriKind.Absolute, out var absoluteUrl)
             ? absoluteUrl.ToString()
             : new Uri(new Uri(context.Page.Url), configuredUrl).ToString();
@@ -73,7 +73,7 @@ public static class FlowDownloadExecutor
         var contents = await response.BodyAsync();
         cancellationToken.ThrowIfCancellationRequested();
         var suggestedFileName = ResolveResponseFileName(response);
-        var destination = ArtifactDestinationResolver.Resolve(action, context);
+        var destination = LegacyArtifactDestinationResolver.Resolve(action, context);
         var path = await context.Artifacts.SaveBytesAsync(
             contents,
             suggestedFileName,

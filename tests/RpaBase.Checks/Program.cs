@@ -1,359 +1,218 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using RpaFlow.Contracts;
-using RpaFlow.Runtime;
+using RpaFlow.Packages;
+using RpaFlow.Playwright.V2;
 
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-var strictUtf8 = new UTF8Encoding(false, true);
+var expectedActionTypes = FlowActionCatalog.SupportedTypes;
+Check(expectedActionTypes.Count == 33, "o catálogo oficial contém 33 tipos de ação");
 
-var flowPath = Path.Combine(
-    repositoryRoot,
-    "examples",
-    "RpaExemplo",
-    "flow.production.json");
-var flow = await new JsonFlowLoader().LoadAsync(flowPath, CancellationToken.None);
-Check(flow.SchemaVersion == 1, "o fluxo de exemplo usa schema 1");
-Check(flow.Actions.Count > 0, "o fluxo de exemplo possui ação");
-
-var appJs = ReadStrict(Path.Combine(
+var editorCatalogPath = Path.Combine(
     repositoryRoot,
     "src",
     "RpaFlow.Editor",
     "wwwroot",
-    "app.js"));
-var implementedBlocks = Regex.Matches(appJs, @"rpa_[a-z0-9_]+")
-    .Select(match => match.Value)
+    "v2",
+    "action-catalog.js");
+var editorCatalog = ReadStrict(editorCatalogPath);
+var calls = Regex.Matches(
+    editorCatalog,
+    "(?:entry|variant|control)\\(\\s*\"(?<action>[^\"]+)\"\\s*,\\s*\"(?<block>[^\"]+)\"",
+    RegexOptions.CultureInvariant);
+var editorActionTypes = calls
+    .Select(match => match.Groups["action"].Value)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+var editorBlockTypes = calls
+    .Select(match => match.Groups["block"].Value)
+    .Append("rpa_subflow_definition")
     .ToHashSet(StringComparer.Ordinal);
-Check(implementedBlocks.Count == 36, "o editor expõe 36 blocos distintos");
+Check(editorActionTypes.SetEquals(expectedActionTypes),
+    "o editor cobre exatamente os 33 tipos do runtime");
+Check(editorBlockTypes.Count == 36, "o editor preserva os 36 blocos do catálogo V2");
 
-var catalog = ReadStrict(Path.Combine(
+var flowSchema = ReadStrict(Path.Combine(repositoryRoot, "schemas", "flow-v2.schema.json"));
+Check(!Regex.IsMatch(
+        flowSchema,
+        "\"(?:selector|scope|frameSelectors|triggerSelector|optionSelector|readySelector|successSelector|protocolSelector)\"",
+        RegexOptions.CultureInvariant),
+    "o contrato de fluxo V2 não possui campos de seletor embutido");
+
+await CheckOperationalPackageAsync(
+    repositoryRoot,
+    Path.Combine("examples", "RpaExemplo", "package-store"),
+    "rpa-exemplo");
+await CheckOperationalPackageAsync(
+    repositoryRoot,
+    Path.Combine("templates", "rpa-web", "package-store"),
+    "rpa-template");
+
+var contractsAssembly = typeof(FlowActionCatalog).Assembly;
+var playwrightAssembly = typeof(PlaywrightV2FlowExecutor).Assembly;
+Check(contractsAssembly.GetType("RpaFlow.Contracts.FlowDefinition") is null,
+    "o assembly de contratos operacional não contém DTO V1");
+Check(playwrightAssembly.GetType("RpaFlow.Playwright.PlaywrightFlowExecutor") is null,
+    "o assembly Playwright operacional não contém interpretador V1");
+Check(
+    ProductionAssemblies().All(assembly => assembly.GetReferencedAssemblies().All(
+        reference => !reference.Name!.StartsWith("RpaFlow.Legacy", StringComparison.Ordinal))),
+    "assemblies de produção não referenciam assemblies históricos");
+
+var ownedFiles = EnumerateOwnedTextFiles(repositoryRoot).ToArray();
+foreach (var file in ownedFiles)
+{
+    _ = ReadStrict(file);
+}
+Check(true, "arquivos textuais próprios são UTF-8 estrito");
+
+var forbiddenClientTerms = new[]
+{
+    string.Concat("le", "af"),
+    string.Concat("neo", "energia"),
+    string.Concat("mar", "cus")
+};
+foreach (var file in ownedFiles)
+{
+    var content = ReadStrict(file);
+    var term = forbiddenClientTerms.FirstOrDefault(value =>
+        content.Contains(value, StringComparison.OrdinalIgnoreCase));
+    if (term is not null)
+    {
+        throw new InvalidOperationException(
+            $"Referência externa proibida '{term}' em {Path.GetRelativePath(repositoryRoot, file)}.");
+    }
+
+    if (HasMojibake(content))
+    {
+        throw new InvalidOperationException(
+            $"Possível mojibake em {Path.GetRelativePath(repositoryRoot, file)}.");
+    }
+
+    var privateKeyHeader = string.Concat("-----BEGIN ", "PRIVATE KEY-----");
+    var rsaPrivateKeyHeader = string.Concat("-----BEGIN RSA ", "PRIVATE KEY-----");
+    if (content.Contains(privateKeyHeader, StringComparison.Ordinal) ||
+        content.Contains(rsaPrivateKeyHeader, StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException(
+            $"Chave privada encontrada em {Path.GetRelativePath(repositoryRoot, file)}.");
+    }
+}
+Check(true, "não há referência de cliente externo, mojibake nem chave privada");
+
+var releaseMetadata = JsonNode.Parse(ReadStrict(
+    Path.Combine(repositoryRoot, "release", "2.0.0-rc.1.json")))?.AsObject()
+    ?? throw new InvalidOperationException("Metadados do release candidate estão vazios.");
+var acceptanceReport = ReadStrict(Path.Combine(
     repositoryRoot,
     "docs",
-    "assets",
-    "block-catalog.js"));
-var documentedBlocks = Regex.Matches(
-        catalog,
-        "blockType:\\s*\"(?<type>rpa_[a-z0-9_]+)\"")
-    .Select(match => match.Groups["type"].Value)
-    .ToHashSet(StringComparer.Ordinal);
-var missingDocumentation = implementedBlocks.Except(documentedBlocks).ToArray();
-var unknownDocumentation = documentedBlocks.Except(implementedBlocks).ToArray();
+    "recorder",
+    "relatorio-instalacao-limpa.md"));
 Check(
-    missingDocumentation.Length == 0,
-    "todos os blocos do editor possuem seção no manual",
-    missingDocumentation);
-Check(
-    unknownDocumentation.Length == 0 && documentedBlocks.Count == 36,
-    "o manual não documenta blocos inexistentes",
-    unknownDocumentation);
+    releaseMetadata["releaseStatus"]?.GetValue<string>() == "release-candidate" &&
+    releaseMetadata["humanAcceptance"]?["requirement"]?.GetValue<string>() == "REC-140" &&
+    releaseMetadata["humanAcceptance"]?["status"]?.GetValue<string>() == "pending" &&
+    acceptanceReport.Contains(
+        "PENDENTE — NÃO EXECUTADO POR PESSOA INDEPENDENTE",
+        StringComparison.Ordinal),
+    "release permanece RC enquanto o aceite humano REC-140 está pendente");
 
-var documentedActionTypes = Regex.Matches(
-        catalog,
-        "actionType:\\s*\"(?<type>[A-Za-z][A-Za-z0-9.]*)\"")
-    .Select(match => match.Groups["type"].Value)
-    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-var missingActionTypes = FlowActionCatalog.SupportedTypes
-    .Except(documentedActionTypes, StringComparer.OrdinalIgnoreCase)
+var forbiddenNames = Directory.EnumerateFiles(repositoryRoot, "*", SearchOption.AllDirectories)
+    .Where(path => !IsIgnored(repositoryRoot, path))
+    .Select(Path.GetFileName)
+    .Where(name => name is not null &&
+        (name.Equals("appsettings.local.json", StringComparison.OrdinalIgnoreCase) ||
+         name.Equals("secrets.json", StringComparison.OrdinalIgnoreCase) ||
+         name.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase) ||
+         name.EndsWith(".p12", StringComparison.OrdinalIgnoreCase)))
     .ToArray();
-Check(
-    missingActionTypes.Length == 0,
-    "todos os tipos do runtime estão documentados",
-    missingActionTypes);
+Check(forbiddenNames.Length == 0,
+    "o repositório não contém configuração local, cofre exportado ou certificado privado");
 
-var configuredConfirmation = CreateSafeFinalConfirmation(includeFeedback: true);
-FlowDefinitionValidator.Validate(CreateSingleActionFlow(configuredConfirmation));
-Check(true, "a confirmação final aceita o conjunto completo de feedback");
+Console.WriteLine("Baseline e fronteira operacional V2 validados com sucesso.");
 
-var legacyConfirmation = CreateSafeFinalConfirmation(includeFeedback: false);
-FlowDefinitionValidator.Validate(CreateSingleActionFlow(legacyConfirmation));
-Check(true, "a confirmação final segura legada permanece compatível");
-
-ExpectInvalid(
-    () =>
-    {
-        var action = CreateSafeFinalConfirmation(includeFeedback: true);
-        action.SuccessText = null;
-        FlowDefinitionValidator.Validate(CreateSingleActionFlow(action));
-    },
-    "actions[0].successText é obrigatório",
-    "a confirmação final rejeita feedback parcial");
-ExpectInvalid(
-    () =>
-    {
-        var action = CreateSafeFinalConfirmation(includeFeedback: true);
-        action.ProtocolPattern = @"#(\d+)";
-        FlowDefinitionValidator.Validate(CreateSingleActionFlow(action));
-    },
-    "grupo nomeado 'protocol'",
-    "a confirmação final exige o grupo nomeado do protocolo");
-ExpectInvalid(
-    () =>
-    {
-        var action = CreateSafeFinalConfirmation(includeFeedback: true);
-        action.ProtocolTarget = action.CompletionTarget;
-        FlowDefinitionValidator.Validate(CreateSingleActionFlow(action));
-    },
-    "devem ser destinos diferentes",
-    "a confirmação final rejeita destinos de feedback repetidos");
-
-var declaredRequirementsFlow = CreateSingleActionFlow(
-    CreateSafeFinalConfirmation(includeFeedback: false));
-declaredRequirementsFlow.Inputs =
-[
-    new FlowInputRequirementDefinition
-    {
-        Path = "input.caso",
-        Type = "object"
-    },
-    new FlowInputRequirementDefinition
-    {
-        Path = "attachments.documento",
-        Type = "string"
-    }
-];
-FlowDefinitionValidator.Validate(declaredRequirementsFlow);
-Check(true, "requisitos declarados aceitam input e attachments");
-var requirementsRequest = new FlowExecutionRequest(
-    "requisitos-de-caso",
-    new JsonObject { ["caso"] = new JsonObject() },
-    new JsonObject(),
-    new JsonObject { ["documento"] = "C:\\entrada\\documento.pdf" });
-FlowInputValidator.Validate(
-    declaredRequirementsFlow.Inputs,
-    new FlowDataContext(requirementsRequest));
-Check(true, "o preflight resolve requisitos em input e attachments");
-
-ExpectInvalid(
-    () => FlowInputValidator.Validate(
-        declaredRequirementsFlow.Inputs,
-        new FlowDataContext(requirementsRequest with
-        {
-            Attachments = new JsonObject()
-        })),
-    "Entrada obrigatória ausente: 'attachments.documento'",
-    "o preflight rejeita anexo obrigatório ausente");
-
-ExpectInvalid(
-    () =>
-    {
-        var invalidRequirementsFlow = CreateSingleActionFlow(
-            CreateSafeFinalConfirmation(includeFeedback: false));
-        invalidRequirementsFlow.Inputs =
-        [
-            new FlowInputRequirementDefinition
-            {
-                Path = "config.documento",
-                Type = "string"
-            }
-        ];
-        FlowDefinitionValidator.Validate(invalidRequirementsFlow);
-    },
-    "input.<caminho> ou attachments.<caminho>",
-    "requisitos declarados rejeitam raízes que não pertencem ao caso");
-
-ExpectInvalid(
-    () =>
-    {
-        var invalidRequirementsFlow = CreateSingleActionFlow(
-            CreateSafeFinalConfirmation(includeFeedback: false));
-        invalidRequirementsFlow.Inputs =
-        [
-            new FlowInputRequirementDefinition
-            {
-                Path = "attachments..documento",
-                Type = "string"
-            }
-        ];
-        FlowDefinitionValidator.Validate(invalidRequirementsFlow);
-    },
-    "input.<caminho> ou attachments.<caminho>",
-    "requisitos declarados rejeitam caminhos de anexo malformados");
-
-var workerConfiguration = JsonNode.Parse(ReadStrict(Path.Combine(
-    repositoryRoot,
-    "src",
-    "Rpa.Worker",
-    "appsettings.example.json")))!.AsObject();
-Check(
-    string.IsNullOrWhiteSpace(
-        workerConfiguration["ConnectionStrings"]?["RpaDatabase"]?.GetValue<string>()),
-    "a string de conexão do exemplo está vazia");
-Check(
-    workerConfiguration["RpaWorker"]?["Enabled"]?.GetValue<bool>() == false,
-    "o worker de exemplo nasce desabilitado");
-Check(
-    workerConfiguration["RpaWorker"]?["ExecutionMode"]?.GetValue<string>() ==
-        "SafeValidation",
-    "o worker de exemplo nasce em validação segura");
-var emailReader = workerConfiguration["RpaWorker"]?["EmailReader"]?.AsObject()
-    ?? throw new InvalidOperationException("EmailReader não foi encontrado no exemplo.");
-Check(
-    string.IsNullOrWhiteSpace(emailReader["TenantId"]?.GetValue<string>()) &&
-    string.IsNullOrWhiteSpace(emailReader["ClientId"]?.GetValue<string>()) &&
-    string.IsNullOrWhiteSpace(emailReader["ClientSecret"]?.GetValue<string>()),
-    "o exemplo não contém credenciais do Microsoft Graph");
-Check(
-    emailReader["Providers"]?["email-otp"]?["Enabled"]?.GetValue<bool>() == false,
-    "o provider de OTP do exemplo nasce desabilitado");
-
-var ignored = ReadStrict(Path.Combine(repositoryRoot, ".gitignore"));
-Check(ignored.Contains("appsettings.local.json", StringComparison.Ordinal),
-    "configuração local está ignorada");
-var ignoredLines = ignored.Split(
-    ['\r', '\n'],
-    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-Check(ignoredLines.Contains("/storage/", StringComparer.Ordinal),
-    "sessões e artefatos do worker na raiz estão ignorados");
-Check(
-    File.Exists(Path.Combine(
-        repositoryRoot,
-        "src",
-        "Rpa.Worker",
-        "Storage",
-        "WorkerArtifactMaterializer.cs")),
-    "o código-fonte de storage do worker está presente");
-
-var markdownLinkPattern = new Regex(
-    @"!?\[[^\]]*\]\(\s*(?<target><[^>]+>|[^)\s]+)(?:\s+[""'][^)]*[""'])?\s*\)",
-    RegexOptions.CultureInvariant,
-    TimeSpan.FromSeconds(1));
-var missingLocalLinks = new List<string>();
-foreach (var file in Directory.EnumerateFiles(
-             repositoryRoot,
-             "*.md",
-             SearchOption.AllDirectories)
-         .Where(file => !IsIgnoredPath(repositoryRoot, file)))
+static IEnumerable<Assembly> ProductionAssemblies()
 {
-    var relativeFile = Path.GetRelativePath(repositoryRoot, file);
-    var content = ReadStrict(file);
-    foreach (Match match in markdownLinkPattern.Matches(content))
-    {
-        var target = match.Groups["target"].Value.Trim().Trim('<', '>');
-        if (target.StartsWith('#') ||
-            target.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            target.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-            target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
-        {
-            continue;
-        }
-
-        var fragmentIndex = target.IndexOf('#', StringComparison.Ordinal);
-        if (fragmentIndex >= 0)
-        {
-            target = target[..fragmentIndex];
-        }
-
-        var queryIndex = target.IndexOf('?', StringComparison.Ordinal);
-        if (queryIndex >= 0)
-        {
-            target = target[..queryIndex];
-        }
-
-        if (string.IsNullOrWhiteSpace(target))
-        {
-            continue;
-        }
-
-        var decodedTarget = Uri.UnescapeDataString(target)
-            .Replace('/', Path.DirectorySeparatorChar);
-        var resolved = Path.GetFullPath(Path.Combine(
-            Path.GetDirectoryName(file)!,
-            decodedTarget));
-        if (!IsInsideRepository(repositoryRoot, resolved) ||
-            (!File.Exists(resolved) && !Directory.Exists(resolved)))
-        {
-            missingLocalLinks.Add($"{relativeFile} → {target}");
-        }
-    }
+    yield return typeof(FlowActionCatalog).Assembly;
+    yield return typeof(RpaPackageSnapshot).Assembly;
+    yield return typeof(PlaywrightV2FlowExecutor).Assembly;
 }
 
-Check(
-    missingLocalLinks.Count == 0,
-    "todos os links locais da documentação apontam para alvos existentes",
-    missingLocalLinks);
-
-var textExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+static async Task CheckOperationalPackageAsync(
+    string root,
+    string relativeStore,
+    string rpaId)
 {
-    ".cs", ".csproj", ".json", ".md", ".html", ".css", ".js", ".ps1",
-    ".cmd", ".sql", ".slnx", ".txt"
-};
-var invalidUtf8 = new List<string>();
-foreach (var file in Directory.EnumerateFiles(repositoryRoot, "*", SearchOption.AllDirectories))
-{
-    if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") ||
-        file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-        !textExtensions.Contains(Path.GetExtension(file)))
-    {
-        continue;
-    }
-
-    try
-    {
-        _ = strictUtf8.GetString(await File.ReadAllBytesAsync(file));
-    }
-    catch (DecoderFallbackException)
-    {
-        invalidUtf8.Add(Path.GetRelativePath(repositoryRoot, file));
-    }
+    var store = new FileRpaPackageStore(Path.Combine(root, relativeStore));
+    var snapshot = await store.LoadAsync(rpaId, null, CancellationToken.None);
+    Check(snapshot.Flow.SchemaVersion == 2, $"{rpaId} usa fluxo schema 2");
+    Check(snapshot.Policy.LocatorResilience.Mode ==
+          RpaFlow.Contracts.V2.LocatorResilienceMode.Strict,
+        $"{rpaId} parte de política strict");
 }
 
-Check(invalidUtf8.Count == 0, "todos os textos estão em UTF-8 estrito", invalidUtf8);
-Console.WriteLine("Base genérica validada com sucesso.");
+static IEnumerable<string> EnumerateOwnedTextFiles(string root)
+{
+    var extensions = new HashSet<string>(
+        [".cs", ".csproj", ".slnx", ".json", ".js", ".ts", ".md", ".html", ".css", ".sql", ".yml", ".yaml", ".ps1"],
+        StringComparer.OrdinalIgnoreCase);
+    return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        .Where(path => !IsIgnored(root, path))
+        .Where(path => extensions.Contains(Path.GetExtension(path)));
+}
+
+static bool IsIgnored(string root, string path)
+{
+    var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+    return relative.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
+        relative.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
+        relative.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
+        relative.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) ||
+        relative.StartsWith(
+            "src/RpaFlow.Recorder.Extension/build/",
+            StringComparison.OrdinalIgnoreCase) ||
+        relative.StartsWith(
+            "src/RpaFlow.Recorder.Extension/.test-build/",
+            StringComparison.OrdinalIgnoreCase) ||
+        relative.Contains("/__pycache__/", StringComparison.OrdinalIgnoreCase) ||
+        relative.StartsWith("tmp/", StringComparison.OrdinalIgnoreCase) ||
+        relative.StartsWith("artifacts/", StringComparison.OrdinalIgnoreCase) ||
+        relative.Contains("/wwwroot/vendor/", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool HasMojibake(string content)
+{
+    if (content.Contains('\uFFFD'))
+    {
+        return true;
+    }
+
+    for (var index = 0; index + 1 < content.Length; index++)
+    {
+        if (content[index] == '\u00C3' && content[index + 1] is >= '\u0080' and <= '\u00BF')
+        {
+            return true;
+        }
+
+        if (content[index] == '\u00C2' && content[index + 1] == '\u00A0')
+        {
+            return true;
+        }
+
+        if (index + 2 < content.Length &&
+            content[index] == '\u00E2' &&
+            content[index + 1] == '\u20AC')
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 static string ReadStrict(string path) =>
     new UTF8Encoding(false, true).GetString(File.ReadAllBytes(path));
-
-static FlowDefinition CreateSingleActionFlow(FlowActionDefinition action) =>
-    new()
-    {
-        SchemaVersion = 1,
-        Name = "Contrato genérico da confirmação final",
-        Actions = [action]
-    };
-
-static FlowActionDefinition CreateSafeFinalConfirmation(bool includeFeedback) =>
-    new()
-    {
-        Id = "confirmar-operacao",
-        Type = "safeFinalConfirmation",
-        Name = "Processar confirmação final protegida",
-        Selector = "button[type='submit']",
-        SuccessSelector = includeFeedback ? "p.mensagem-sucesso" : null,
-        SuccessText = includeFeedback ? "Operação concluída" : null,
-        ProtocolSelector = includeFeedback ? "body" : null,
-        ProtocolPattern = includeFeedback ? @"#(?<protocol>\d+)" : null,
-        CompletionTarget = includeFeedback ? "runtime.business.completed" : null,
-        ConfirmationMessageTarget = includeFeedback
-            ? "runtime.business.confirmationMessage"
-            : null,
-        ProtocolTarget = includeFeedback ? "runtime.business.protocol" : null,
-        TimeoutMs = includeFeedback ? 60_000 : null
-    };
-
-static bool IsIgnoredPath(string repositoryRoot, string path)
-{
-    var segments = Path.GetRelativePath(repositoryRoot, path)
-        .Split(
-            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-            StringSplitOptions.RemoveEmptyEntries);
-    return segments.Any(segment =>
-        segment.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
-        segment.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
-        segment.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
-        segment.Equals("tmp", StringComparison.OrdinalIgnoreCase));
-}
-
-static bool IsInsideRepository(string repositoryRoot, string path)
-{
-    var normalizedRoot = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(repositoryRoot));
-    var normalizedPath = Path.GetFullPath(path);
-    return normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
-        normalizedPath.StartsWith(
-            normalizedRoot + Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-}
 
 static string FindRepositoryRoot(string start)
 {
@@ -368,41 +227,15 @@ static string FindRepositoryRoot(string start)
         directory = directory.Parent;
     }
 
-    throw new DirectoryNotFoundException("A raiz da base RPA não foi encontrada.");
+    throw new DirectoryNotFoundException("A raiz do repositório não foi encontrada.");
 }
 
-static void Check(
-    bool condition,
-    string description,
-    IReadOnlyCollection<string>? details = null)
+static void Check(bool condition, string description)
 {
     if (!condition)
     {
-        var suffix = details is { Count: > 0 }
-            ? $": {string.Join(", ", details)}"
-            : string.Empty;
-        throw new InvalidOperationException($"Falha: {description}{suffix}");
+        throw new InvalidOperationException($"Falha: {description}.");
     }
 
     Console.WriteLine($"OK: {description}.");
-}
-
-static void ExpectInvalid(
-    Action action,
-    string expectedMessage,
-    string description)
-{
-    try
-    {
-        action();
-    }
-    catch (InvalidOperationException exception)
-        when (exception.Message.Contains(expectedMessage, StringComparison.Ordinal))
-    {
-        Console.WriteLine($"OK: {description}.");
-        return;
-    }
-
-    throw new InvalidOperationException(
-        $"Falha: {description}; a validação não produziu '{expectedMessage}'.");
 }

@@ -1,4 +1,4 @@
-using RpaFlow.Contracts;
+using FlowDefinitionValidator = RpaFlow.Contracts.V2.FlowDefinitionValidator;
 
 namespace RpaFlow.Runtime;
 

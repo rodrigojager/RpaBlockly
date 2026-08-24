@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "locators": [
+    {
+      "id": "submit",
+      "displayName": "Enviar",
+      "candidates": [
+        {
+          "id": "submit-original",
+          "origin": "developer",
+          "developerRole": "original",
+          "recipe": {
+            "frames": []
+          }
+        }
+      ],
+      "fingerprints": []
+    }
+  ]
+}

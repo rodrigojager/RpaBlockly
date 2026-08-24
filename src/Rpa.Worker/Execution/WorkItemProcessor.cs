@@ -7,8 +7,10 @@ using Rpa.Worker.Configuration;
 using Rpa.Worker.Data;
 using Rpa.Worker.Domain;
 using Rpa.Worker.Storage;
-using RpaFlow.Contracts;
+using RpaFlow.Packages;
 using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
+using RpaFlow.Playwright.V2.Adaptive;
 using RpaFlow.Runtime;
 
 namespace Rpa.Worker.Execution;
@@ -16,7 +18,8 @@ namespace Rpa.Worker.Execution;
 public sealed class WorkItemProcessor(
     RpaWorkerOptions options,
     WorkerEnvironment environment,
-    SqlWorkItemRepository repository,
+    RpaPackageRuntimeRegistry packageRegistry,
+    IWorkItemExecutionRepository repository,
     IOneTimeCodeProvider oneTimeCodeProvider,
     ILogger<WorkItemProcessor> logger)
 {
@@ -36,6 +39,9 @@ public sealed class WorkItemProcessor(
         using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             caseTimeout.Token);
         var heartbeatTask = RunHeartbeatAsync(workItem, heartbeatCancellation.Token);
+        ConfiguredExecutionGuard? executionGuard = null;
+        PlaywrightV2FlowExecutor? v2Executor = null;
+        FlowExecutionRequest? executionRequest = null;
         RpaDefinitionOptions? activeDefinition = null;
         WorkerFlowExecutionObserver? observer = null;
         _ = heartbeatTask.ContinueWith(
@@ -55,10 +61,25 @@ public sealed class WorkItemProcessor(
             }
             activeDefinition = definition;
 
-            var flowPath = RpaWorkerOptionsValidator.ResolvePath(
-                environment.Paths.WorkspaceRoot,
-                definition.FlowFile);
-            var flow = await new JsonFlowLoader().LoadAsync(flowPath, caseTimeout.Token);
+            var packageReference = definition.Package
+                ?? throw new InvalidOperationException(
+                    $"A definição V2 '{workItem.RpaCode}' não possui Package.");
+            var packageRpaId = string.IsNullOrWhiteSpace(packageReference.RpaId)
+                ? workItem.RpaCode
+                : packageReference.RpaId;
+            var packageSnapshot = await packageRegistry.ResolveAsync(
+                packageRpaId,
+                packageReference.OriginName,
+                string.IsNullOrWhiteSpace(packageReference.Revision)
+                    ? null
+                    : new PackageRevision(packageReference.Revision),
+                caseTimeout.Token);
+            await repository.SetExecutionPackageAsync(
+                executionId,
+                packageReference.OriginName,
+                packageSnapshot,
+                caseTimeout.Token);
+
             var baseConfiguration = await LoadBaseConfigurationAsync(
                 definition,
                 caseTimeout.Token);
@@ -75,7 +96,10 @@ public sealed class WorkItemProcessor(
                 attachments,
                 workItem.WorkItemId.ToString("D"),
                 workItem.BatchId);
-            FlowInputValidator.Validate(flow.Inputs, new FlowDataContext(request));
+            executionRequest = request;
+            FlowInputValidator.Validate(
+                packageSnapshot.Flow.Inputs,
+                new FlowDataContext(request));
 
             var runtime = definition.Runtime;
             var statePath = ResolveSessionStatePath(workItem, definition);
@@ -97,23 +121,39 @@ public sealed class WorkItemProcessor(
                 SaveStorageState: runtime.SaveSessionState && statePath is not null,
                 ReadinessQuietPeriodMs: runtime.ReadinessQuietPeriodMs,
                 FormStabilityMs: runtime.FormStabilityMs,
-                BusySelectors: runtime.BusySelectors);
+                BusySelectors: runtime.BusySelectors,
+                MaximumArtifactBytes: runtime.MaximumArtifactBytes,
+                MaximumArtifactFilesPerExecution:
+                    runtime.MaximumArtifactFilesPerExecution,
+                ArtifactRetentionDays: runtime.ArtifactRetentionDays);
             PlaywrightRuntimeOptionsValidator.Validate(runtimeOptions);
 
-            var executionGuard = new ConfiguredExecutionGuard(
+            executionGuard = new ConfiguredExecutionGuard(
                 options.ExecutionMode,
                 definition);
             observer = new WorkerFlowExecutionObserver(
                 repository,
                 definition.AuthenticationAttemptActionIds,
                 definition.MfaAttemptActionIds);
-            IFlowExecutor executor = new PlaywrightFlowExecutor(
-                flow,
+            var sourceWriter = packageRegistry.ResolveWriter(
+                packageRpaId,
+                packageReference.OriginName);
+            var overlayWriter = packageReference.Overlay is null
+                ? null
+                : packageRegistry.ResolveWriter(
+                    packageRpaId,
+                    packageReference.Overlay.OriginName);
+            v2Executor = new PlaywrightV2FlowExecutor(
+                packageSnapshot,
                 runtimeOptions,
                 observer: observer,
                 executionGuard: executionGuard,
-                oneTimeCodeProvider: oneTimeCodeProvider);
-            var result = await executor.ExecuteAsync(request, caseTimeout.Token);
+                oneTimeCodeProvider: oneTimeCodeProvider,
+                sourceWriteBack: sourceWriter,
+                overlayWriteBack: overlayWriter,
+                learningFinalization: LocatorLearningFinalizationMode.Deferred);
+
+            var result = await v2Executor.ExecuteAsync(request, caseTimeout.Token);
             var safeValidationBoundaryConfigured =
                 options.ExecutionMode == WorkerExecutionMode.SafeValidation &&
                 !string.IsNullOrWhiteSpace(definition.SafeValidationBoundaryActionId);
@@ -133,7 +173,7 @@ public sealed class WorkItemProcessor(
                 caseTimeout.Token);
             var persistedOutput = SensitiveRuntimeOutputSanitizer.RedactOneTimeCodes(
                 result.Output,
-                flow);
+                packageSnapshot.Flow);
             await repository.SaveOutputsAsync(
                 executionId,
                 workItem,
@@ -153,6 +193,12 @@ public sealed class WorkItemProcessor(
                 persistedOutput.ToJsonString(),
                 result.ExecutedActions,
                 caseTimeout.Token);
+            await v2Executor.CompleteLearningAsync(
+                request,
+                executionGuard.SafeValidationBoundaryReached
+                    ? LocatorLearningOutcome.Validated
+                    : LocatorLearningOutcome.Succeeded,
+                CancellationToken.None);
             if (executionGuard.SafeValidationBoundaryReached)
             {
                 logger.LogInformation(
@@ -190,6 +236,13 @@ public sealed class WorkItemProcessor(
                 output.ToJsonString(),
                 0,
                 CancellationToken.None);
+            if (v2Executor is not null && executionRequest is not null)
+            {
+                await v2Executor.CompleteLearningAsync(
+                    executionRequest,
+                    LocatorLearningOutcome.Validated,
+                    CancellationToken.None);
+            }
             logger.LogWarning(
                 "Item {WorkItemId} validado com parada segura antes de {ActionId}.",
                 workItem.WorkItemId,
@@ -208,12 +261,32 @@ public sealed class WorkItemProcessor(
                 activeDefinition ?? new RpaDefinitionOptions(),
                 observer,
                 stoppingToken.IsCancellationRequested,
-                leadershipLostToken.IsCancellationRequested);
-            await repository.FailAsync(
-                executionId,
-                workItem,
-                decision,
-                CancellationToken.None);
+                leadershipLostToken.IsCancellationRequested,
+                executionGuard?.IrreversibleEffectCompleted == true);
+            var outcome = exception.GetBaseException() is OperationCanceledException
+                ? LocatorLearningOutcome.Cancelled
+                : decision.Retry &&
+                  (decision.PreserveAttempt || workItem.AttemptCount < workItem.MaxAttempts)
+                    ? LocatorLearningOutcome.Retry
+                    : LocatorLearningOutcome.Failed;
+            try
+            {
+                await repository.FailAsync(
+                    executionId,
+                    workItem,
+                    decision,
+                    CancellationToken.None);
+            }
+            finally
+            {
+                if (v2Executor is not null && executionRequest is not null)
+                {
+                    await v2Executor.CompleteLearningAsync(
+                        executionRequest,
+                        outcome,
+                        CancellationToken.None);
+                }
+            }
         }
         finally
         {

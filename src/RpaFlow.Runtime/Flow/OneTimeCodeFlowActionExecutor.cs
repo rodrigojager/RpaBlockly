@@ -1,29 +1,27 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
-using RpaFlow.Contracts;
 
 namespace RpaFlow.Runtime;
 
 public static class OneTimeCodeFlowActionExecutor
 {
     public static void CaptureTimestamp(
-        FlowActionDefinition action,
+        RpaFlow.Contracts.V2.FlowActionDefinition action,
         FlowDataContext data,
         TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(data);
-
         var capturedAt = (timeProvider ?? TimeProvider.System)
             .GetUtcNow()
             .ToUniversalTime();
         data.SetRuntimeValue(
-            action.Target!,
+            action.Output!,
             JsonValue.Create(capturedAt.ToString("O", CultureInfo.InvariantCulture)));
     }
 
     public static async Task WaitForOneTimeCodeAsync(
-        FlowActionDefinition action,
+        RpaFlow.Contracts.V2.FlowActionDefinition action,
         FlowDataContext data,
         IOneTimeCodeProvider? provider,
         CancellationToken cancellationToken)
@@ -31,7 +29,6 @@ public static class OneTimeCodeFlowActionExecutor
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(data);
         cancellationToken.ThrowIfCancellationRequested();
-
         if (provider is null)
         {
             throw new InvalidOperationException(
@@ -39,9 +36,7 @@ public static class OneTimeCodeFlowActionExecutor
         }
 
         var source = action.NotBeforeSource!;
-        var sourceValue = data.ResolveRequired(
-            source,
-            $"A ação '{action.Name}'");
+        var sourceValue = data.ResolveRequired(source, $"A ação '{action.Name}'");
         var notBeforeText = FlowValueResolver.ConvertSimpleValue(sourceValue, source);
         if (string.IsNullOrWhiteSpace(notBeforeText) ||
             !DateTimeOffset.TryParseExact(
@@ -61,23 +56,15 @@ public static class OneTimeCodeFlowActionExecutor
             notBefore,
             TimeSpan.FromMilliseconds(action.TimeoutMs!.Value),
             TimeSpan.FromMilliseconds(action.PollIntervalMs!.Value));
-        var result = await provider.WaitForCodeAsync(request, cancellationToken)
-            ?? throw new InvalidOperationException(
+        var result = await provider.WaitForCodeAsync(request, cancellationToken) ??
+            throw new InvalidOperationException(
                 $"O provider '{action.ProviderAlias}' retornou um resultado nulo.");
-
-        if (string.IsNullOrWhiteSpace(result.Code))
+        if (string.IsNullOrWhiteSpace(result.Code) || result.ReceivedAt < notBefore)
         {
             throw new InvalidOperationException(
-                $"O provider '{action.ProviderAlias}' retornou um código vazio.");
+                $"O provider '{action.ProviderAlias}' retornou um código inválido.");
         }
 
-        if (result.ReceivedAt < notBefore)
-        {
-            throw new InvalidOperationException(
-                $"O provider '{action.ProviderAlias}' retornou um código anterior " +
-                "ao instante mínimo solicitado.");
-        }
-
-        data.SetRuntimeValue(action.Target!, JsonValue.Create(result.Code));
+        data.SetRuntimeValue(action.Output!, JsonValue.Create(result.Code));
     }
 }
