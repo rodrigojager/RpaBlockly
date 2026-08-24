@@ -1,12 +1,12 @@
 import type { RecorderCheckpoint, SessionStorageAdapter } from "./types.js";
 
-const checkpointKey = "rpablockly.recorder.checkpoint.v1";
+export const recorderCheckpointKey = "rpablockly.recorder.checkpoint.v1";
 
 export class RecorderCheckpointStore {
   public constructor(private readonly storage: SessionStorageAdapter) {}
 
   public async load(): Promise<RecorderCheckpoint | undefined> {
-    const value = await this.storage.get<RecorderCheckpoint>(checkpointKey);
+    const value = await this.storage.get<RecorderCheckpoint>(recorderCheckpointKey);
     if (value === undefined) return undefined;
     validateCheckpoint(value);
     return structuredClone(value);
@@ -15,11 +15,11 @@ export class RecorderCheckpointStore {
   public async save(checkpoint: RecorderCheckpoint): Promise<void> {
     validateCheckpoint(checkpoint);
     assertNoPlaintextSecret(checkpoint);
-    await this.storage.set(checkpointKey, structuredClone(checkpoint));
+    await this.storage.set(recorderCheckpointKey, structuredClone(checkpoint));
   }
 
   public async clear(): Promise<void> {
-    await this.storage.remove(checkpointKey);
+    await this.storage.remove(recorderCheckpointKey);
   }
 }
 

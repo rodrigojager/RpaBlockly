@@ -18,4 +18,5 @@ public sealed record PlaywrightRuntimeOptions(
     bool HoldBrowserOpenForInspection = false,
     long MaximumArtifactBytes = 50 * 1024 * 1024,
     int MaximumArtifactFilesPerExecution = 100,
-    int ArtifactRetentionDays = 30);
+    int ArtifactRetentionDays = 30,
+    bool CaptureScreenshotsAfterActions = false);

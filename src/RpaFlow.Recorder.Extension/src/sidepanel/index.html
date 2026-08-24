@@ -9,13 +9,29 @@
 <body>
   <header>
     <p class="eyebrow">RpaBlockly V2</p>
-    <h1>Recorder</h1>
+    <div class="recorder-heading">
+      <h1>Recorder</h1>
+      <div id="recording-indicator" class="recording-indicator" aria-label="Gravação em andamento" hidden>
+        <span class="recording-dot" aria-hidden="true"></span>
+        <strong>Gravando</strong>
+      </div>
+    </div>
     <p id="status" role="status" aria-live="polite">Nenhuma sessão ativa.</p>
+    <p id="recording-summary" class="recording-summary" aria-live="polite" hidden></p>
+    <p id="evidence-capture-status" class="evidence-capture-status" data-state="ready"
+      role="status" aria-live="polite" hidden></p>
   </header>
 
   <main>
     <section aria-labelledby="session-title">
       <h2 id="session-title">Sessão</h2>
+      <div id="page-target" class="page-target" data-state="checking" role="note" aria-live="polite" aria-atomic="true">
+        <span id="page-target-icon" class="page-target-icon" aria-hidden="true">…</span>
+        <div>
+          <strong id="page-target-title">Verificando a página ativa…</strong>
+          <small id="page-target-detail">O Recorder precisa de uma página HTTP(S) aberta.</small>
+        </div>
+      </div>
       <label for="session-name">Nome do roteiro</label>
       <input id="session-name" maxlength="200" value="Nova gravação" autocomplete="off">
 
@@ -91,11 +107,11 @@
 
       <label class="privacy check">
         <input id="privacy-accepted" type="checkbox">
-        Entendo que a extensão observará apenas a origem ativa e que senhas ficam desligadas por padrão.
+        Entendo que, durante esta sessão, a extensão poderá observar as páginas HTTP(S) visitadas na gravação, retirará esse acesso ao concluir ou excluir a sessão e manterá senhas desligadas por padrão.
       </label>
 
       <div class="actions">
-        <button id="start" class="primary">Iniciar</button>
+        <button id="start" class="primary" disabled>Iniciar</button>
         <button id="pause" disabled>Pausar</button>
         <button id="resume" disabled>Retomar</button>
         <button id="finalize" disabled>Revisar e baixar</button>
@@ -116,7 +132,8 @@
         <h2 id="timeline-title">Timeline</h2>
         <span id="step-count" class="badge">0</span>
       </div>
-      <ol id="timeline" class="cards"></ol>
+      <p id="timeline-empty" class="empty-state">As etapas aparecerão aqui conforme você usa a página.</p>
+      <ol id="timeline" class="cards" aria-live="polite" aria-relevant="additions text"></ol>
     </section>
 
     <section aria-labelledby="slideshow-title">
@@ -149,7 +166,8 @@
   <template id="step-template">
     <li class="card step-card">
       <span class="sequence"></span>
-      <div><strong></strong><small></small></div>
+      <div class="step-copy"><strong></strong><small></small></div>
+      <img class="step-thumbnail" alt="" hidden>
       <label>Comentário <input maxlength="1000" autocomplete="off"></label>
     </li>
   </template>

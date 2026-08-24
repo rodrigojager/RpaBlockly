@@ -9,6 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\RpaFlow.Contracts\RpaFlow.Contracts.csproj" />
     <ProjectReference Include="..\RpaFlow.Packages\RpaFlow.Packages.csproj" />
+    <ProjectReference Include="..\RpaFlow.Playwright\RpaFlow.Playwright.csproj" />
+    <ProjectReference Include="..\RpaFlow.Runtime\RpaFlow.Runtime.csproj" />
     <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

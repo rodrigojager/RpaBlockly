@@ -18,6 +18,12 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   const css = await readFile(join(root, "src", "sidepanel", "styles.css"), "utf8");
   assert.match(html, /<html lang="pt-BR">/u);
   assert.match(html, /role="status" aria-live="polite"/u);
+  assert.match(html, /id="recording-indicator"[^>]+aria-label="Gravação em andamento"/u);
+  assert.match(html, /id="evidence-capture-status"[^>]+role="status"/u);
+  assert.match(html, /class="recording-dot"/u);
+  assert.match(html, /id="page-target"[^>]+data-state="checking"[^>]+role="note"/u);
+  assert.match(html, /id="timeline"[^>]+aria-live="polite"/u);
+  assert.match(html, /class="step-thumbnail"/u);
   assert.match(html, /<progress[^>]+aria-label="Progresso da exportação"/u);
   for (const id of [
     "session-name", "secret-sharing-password", "recovery-key",
@@ -31,14 +37,48 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   assert.match(css, /input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)/u);
   assert.match(css, /grid-template-columns: 17px minmax\(0, 1fr\) auto/u);
   assert.match(css, /button:focus-visible/u);
+  assert.match(css, /@keyframes recording-pulse/u);
+  assert.match(css, /\.page-target\[data-state="blocked"\]/u);
+  assert.match(css, /\.step-thumbnail/u);
   assert.match(css, /prefers-reduced-motion/u);
 });
 
 test("permissão opcional é solicitada no gesto do painel, não no service worker", async () => {
+  const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8")) as {
+    permissions: string[];
+    optional_permissions?: string[];
+    optional_host_permissions?: string[];
+  };
   const sidepanel = await readFile(join(root, "src", "sidepanel", "sidepanel.ts"), "utf8");
   const serviceWorker = await readFile(join(root, "src", "background", "service-worker.ts"), "utf8");
+  assert.deepEqual(manifest.optional_permissions, ["tabs"]);
+  assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"]);
+  assert.ok(!manifest.permissions.includes("tabs"));
+  assert.match(sidepanel, /chrome\.permissions\.request\(\{ permissions: \["tabs"\] \}\)/u);
   assert.match(sidepanel, /chrome\.permissions\.request\(requestedOrigins\)/u);
+  assert.match(sidepanel, /captureScreenshots[\s\S]+recorderScreenshotOrigins/u);
   assert.doesNotMatch(serviceWorker, /chrome\.permissions\.request/u);
+});
+
+test("painel acompanha a gravação ao vivo e mantém a aba escolhida", async () => {
+  const sidepanel = await readFile(join(root, "src", "sidepanel", "sidepanel.ts"), "utf8");
+  const serviceWorker = await readFile(join(root, "src", "background", "service-worker.ts"), "utf8");
+  const messages = await readFile(join(root, "src", "shared", "messages.ts"), "utf8");
+  const bundle = await readFile(join(root, "src", "bundle", "bundle.ts"), "utf8");
+  assert.match(sidepanel, /chrome\.storage\.onChanged\.addListener/u);
+  assert.match(sidepanel, /scheduleCheckpointRender/u);
+  assert.match(sidepanel, /friendlyIntentTitle/u);
+  assert.match(messages, /type: "RECORDER_START";[\s\S]+temporaryOrigins: string\[\]/u);
+  assert.match(serviceWorker, /chrome\.tabs\.get\(request\.tabId\)/u);
+  assert.match(messages, /"RECORDER_GET_TARGET"/u);
+  assert.match(serviceWorker, /rememberRecorderTarget\(tab\)/u);
+  assert.match(serviceWorker, /chrome\.sidePanel\.open\(\{ tabId: tab\.id \}\)/u);
+  assert.match(serviceWorker, /openPanelOnActionClick: false/u);
+  assert.match(sidepanel, /lastFocusedWindow: true/u);
+  assert.match(sidepanel, /"http:\/\/\*\/\*", "https:\/\/\*\/\*"/u);
+  assert.match(serviceWorker, /releaseTemporaryPermissions/u);
+  assert.match(bundle, /origins: sessionOrigins\(input\.checkpoint\)/u);
+  assert.match(serviceWorker, /RPABLOCKLY_RECORDER_REFRESH/u);
 });
 
 test("bundles MV3 não contêm eval nem Function dinâmica", async () => {

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using RpaFlow.Editor.AssistedValidation;
 using RpaFlow.Editor.Configuration;
 using RpaFlow.Editor.Infrastructure;
 using RpaFlow.Editor.Recorder;
@@ -22,6 +23,7 @@ builder.Services.AddSingleton(editorPaths);
 builder.Services.AddSingleton<EditorSession>();
 builder.Services.AddSingleton<ProjectFileService>();
 builder.Services.AddSingleton<PackageEditorService>();
+builder.Services.AddSingleton<AssistedExecutionService>();
 builder.Services.AddSingleton<RecorderBundleInspector>();
 builder.Services.AddSingleton<RecorderStagingService>();
 builder.Services.AddSingleton<RecorderPackageMerger>();
@@ -240,6 +242,101 @@ app.MapPut("/api/configuration", async (
     catch (InvalidOperationException exception)
     {
         return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/api/assisted-executions", async (
+    HttpRequest request,
+    EditorSession session,
+    AssistedExecutionService executions,
+    AssistedExecutionStartRequest document,
+    CancellationToken cancellationToken) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        return Results.Json(await executions.StartAsync(document, cancellationToken));
+    }
+    catch (RpaFlow.Packages.PackageRevisionConflictException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
+    catch (Exception exception) when (exception is InvalidOperationException or
+                                             JsonException or
+                                             KeyNotFoundException or
+                                             FileNotFoundException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/api/assisted-executions/{executionId}", (
+    string executionId,
+    long? after,
+    HttpRequest request,
+    EditorSession session,
+    AssistedExecutionService executions) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        return Results.Json(executions.Get(executionId, after ?? 0));
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/api/assisted-executions/latest", (
+    HttpRequest request,
+    EditorSession session,
+    AssistedExecutionService executions) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        return Results.Json(executions.GetLatest());
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/api/assisted-executions/{executionId}/stop", (
+    string executionId,
+    HttpRequest request,
+    EditorSession session,
+    AssistedExecutionService executions) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        return Results.Json(executions.Stop(executionId));
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/api/assisted-executions/{executionId}/evidence/{evidenceId}", (
+    string executionId,
+    string evidenceId,
+    HttpRequest request,
+    EditorSession session,
+    AssistedExecutionService executions) =>
+{
+    if (!session.IsAuthorized(request)) return Results.Unauthorized();
+    try
+    {
+        var evidence = executions.GetEvidence(executionId, evidenceId);
+        return Results.File(evidence.Path, evidence.ContentType, evidence.FileName);
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
     }
 });
 

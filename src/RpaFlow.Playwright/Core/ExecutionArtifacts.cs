@@ -91,6 +91,19 @@ public sealed class ExecutionArtifacts
             path => locator.ScreenshotAsync(new LocatorScreenshotOptions { Path = path }));
     }
 
+    public async Task<string> CaptureSanitizedScreenshotAsync(string label)
+    {
+        try
+        {
+            await AddDiagnosticMaskAsync();
+            return await CaptureScreenshotAsync(label);
+        }
+        finally
+        {
+            await RemoveDiagnosticMaskAsync();
+        }
+    }
+
     public Task<string> SaveDownloadAsync(
         IDownload download,
         ArtifactDestination? destination = null) =>
@@ -120,12 +133,11 @@ public sealed class ExecutionArtifacts
         string? reportPath = null;
         try
         {
-            await AddDiagnosticMaskAsync();
-            screenshotPath = await CaptureScreenshotAsync("falha");
+            screenshotPath = await CaptureSanitizedScreenshotAsync("falha");
         }
-        finally
+        catch
         {
-            await RemoveDiagnosticMaskAsync();
+            // O DOM pode não estar mais disponível; os demais diagnósticos continuam.
         }
 
         try
@@ -280,35 +292,68 @@ public sealed class ExecutionArtifacts
             new ArtifactDestination(),
             path => File.WriteAllTextAsync(path, contents, new UTF8Encoding(false, true)));
 
-    private Task AddDiagnosticMaskAsync() => _page.EvaluateAsync(
-        """
-        () => {
-          const id = "rpa-diagnostic-mask";
-          document.getElementById(id)?.remove();
-          const style = document.createElement("style");
-          style.id = id;
-          style.textContent = `
-            input, textarea, select, [contenteditable="true"],
-            [data-private], [data-sensitive] {
-              color: transparent !important;
-              text-shadow: none !important;
-              background: #111827 !important;
-              caret-color: transparent !important;
-            }`;
-          document.documentElement.append(style);
+    private async Task AddDiagnosticMaskAsync()
+    {
+        foreach (var frame in _page.Frames)
+        {
+            try
+            {
+                await frame.EvaluateAsync(
+                    """
+                    () => {
+                      const id = "rpa-diagnostic-mask";
+                      const css = `
+                        input, textarea, select, [contenteditable="true"],
+                        [data-private], [data-sensitive] {
+                          color: transparent !important;
+                          text-shadow: none !important;
+                          background: #111827 !important;
+                          caret-color: transparent !important;
+                        }`;
+                      const install = root => {
+                        root.querySelector(`#${id}`)?.remove();
+                        const style = document.createElement("style");
+                        style.id = id;
+                        style.textContent = css;
+                        root.append(style);
+                        root.querySelectorAll("*").forEach(node => {
+                          if (node.shadowRoot) install(node.shadowRoot);
+                        });
+                      };
+                      install(document.documentElement);
+                    }
+                    """);
+            }
+            catch
+            {
+                // Um frame pode navegar ou desaparecer enquanto os demais são protegidos.
+            }
         }
-        """);
+    }
 
     private async Task RemoveDiagnosticMaskAsync()
     {
-        try
+        foreach (var frame in _page.Frames)
         {
-            await _page.EvaluateAsync(
-                "() => document.getElementById('rpa-diagnostic-mask')?.remove()");
-        }
-        catch
-        {
-            // A página pode ter encerrado durante a captura.
+            try
+            {
+                await frame.EvaluateAsync(
+                    """
+                    () => {
+                      const remove = root => {
+                        root.querySelector("#rpa-diagnostic-mask")?.remove();
+                        root.querySelectorAll("*").forEach(node => {
+                          if (node.shadowRoot) remove(node.shadowRoot);
+                        });
+                      };
+                      remove(document.documentElement);
+                    }
+                    """);
+            }
+            catch
+            {
+                // A página ou o frame pode ter encerrado durante a captura.
+            }
         }
     }
 

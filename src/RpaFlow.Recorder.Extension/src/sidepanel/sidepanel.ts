@@ -1,6 +1,12 @@
 import { buildBundle, verifyBundleIntegrity, type BundleComment } from "../bundle/bundle.js";
+import { recorderCheckpointKey } from "../core/checkpoint-store.js";
 import { stableId, slug } from "../core/stable.js";
-import type { RecorderCheckpoint, RecorderOptions } from "../core/types.js";
+import type {
+  NormalizedIntent,
+  RawCaptureEvent,
+  RecorderCheckpoint,
+  RecorderOptions
+} from "../core/types.js";
 import { EvidenceStore, slideshowItems, type EvidenceAsset } from "../evidence/evidence.js";
 import { assertFinalizable, generatePackage } from "../package/generator.js";
 import { validateGeneratedPackage } from "../package/validator.js";
@@ -10,25 +16,49 @@ import {
   type GeneratedRecipientAccess
 } from "../security/recovery.js";
 import { EncryptedSecretStore } from "../security/secret-store.js";
-import type { RecorderRequest, RecorderResponse } from "../shared/messages.js";
+import {
+  isRecorderUiRefresh,
+  type RecorderRequest,
+  type RecorderResponse,
+  type RecorderTarget
+} from "../shared/messages.js";
 import { hydrateUploads, UploadStore } from "../uploads/upload-store.js";
 
 const evidenceStore = new EvidenceStore();
 const secretStore = new EncryptedSecretStore();
 const uploadStore = new UploadStore();
-const objectUrls: string[] = [];
+const recorderHttpOrigins = ["http://*/*", "https://*/*"];
+const recorderScreenshotOrigins = ["<all_urls>"];
+const slideshowObjectUrls: string[] = [];
+const timelineObjectUrls: string[] = [];
+const downloadObjectUrls: string[] = [];
 let evidence: EvidenceAsset[] = [];
 let evidenceIndex = 0;
 let exportCancelled = false;
 let activeDownloadId: number | undefined;
 let comments: BundleComment[] = [];
 let generatedRecipientAccess: GeneratedRecipientAccess | undefined;
+let currentCheckpoint: RecorderCheckpoint | undefined;
+let currentTarget: RecorderTarget | undefined;
+let targetChecking = true;
+let startInProgress = false;
+let renderRevision = 0;
+let pendingCheckpoint: RecorderCheckpoint | undefined;
+let checkpointRenderTimer: ReturnType<typeof setTimeout> | undefined;
 
 const status = element<HTMLParagraphElement>("status");
+const recordingIndicator = element<HTMLDivElement>("recording-indicator");
+const recordingSummary = element<HTMLParagraphElement>("recording-summary");
+const evidenceCaptureStatus = element<HTMLParagraphElement>("evidence-capture-status");
 const issueList = element<HTMLOListElement>("issues");
 const timeline = element<HTMLOListElement>("timeline");
+const timelineEmpty = element<HTMLParagraphElement>("timeline-empty");
 const issueCount = element<HTMLSpanElement>("issue-count");
 const stepCount = element<HTMLSpanElement>("step-count");
+const pageTarget = element<HTMLDivElement>("page-target");
+const pageTargetIcon = element<HTMLSpanElement>("page-target-icon");
+const pageTargetTitle = element<HTMLElement>("page-target-title");
+const pageTargetDetail = element<HTMLElement>("page-target-detail");
 const secretToggle = element<HTMLInputElement>("capture-secrets");
 const secretOptions = element<HTMLDivElement>("secret-options");
 const simpleSecretOptions = element<HTMLDivElement>("simple-secret-options");
@@ -65,6 +95,22 @@ secretToggle.addEventListener("change", syncSecretOptions);
 issueList.addEventListener("click", (event) => void resolveIssue(event));
 timeline.addEventListener("change", (event) => void updateComment(event));
 addEventListener("unload", revokeObjectUrls);
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  const change = changes[recorderCheckpointKey];
+  if (areaName !== "session" || change?.newValue === undefined) return;
+  scheduleCheckpointRender(change.newValue as RecorderCheckpoint);
+});
+chrome.runtime.onMessage.addListener((message: unknown, sender) => {
+  if (sender.id !== chrome.runtime.id || !isRecorderUiRefresh(message)) return false;
+  void refreshRecorderUi().catch(showError);
+  return false;
+});
+chrome.tabs.onActivated.addListener(() => void refreshActiveTarget());
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (tab.active && (changeInfo.url !== undefined || changeInfo.status === "complete")) {
+    void refreshActiveTarget();
+  }
+});
 
 void initialize();
 
@@ -73,6 +119,7 @@ async function initialize(): Promise<void> {
   comments = await loadComments();
   const response = await send({ type: "RECORDER_GET_STATE" });
   await render(response.checkpoint);
+  await refreshActiveTarget();
 }
 
 async function start(): Promise<void> {
@@ -80,55 +127,111 @@ async function start(): Promise<void> {
     setStatus("Confirme o aviso de privacidade antes de iniciar.", true);
     return;
   }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.url === undefined || !/^https?:/u.test(tab.url)) {
-    setStatus("Abra uma página HTTP(S) antes de iniciar.", true);
+  if (currentTarget === undefined) {
+    await connectToActiveTab();
     return;
   }
-  const origin = new URL(tab.url).origin;
-  const requestedOrigins = { origins: [`${origin}/*`] };
-  const alreadyGranted = await chrome.permissions.contains(requestedOrigins);
-  const granted = alreadyGranted
-    ? true
-    : await chrome.permissions.request(requestedOrigins);
-  if (!granted) {
-    setStatus("A permissão para a origem ativa não foi concedida.", true);
+  await refreshActiveTarget();
+  const target = currentTarget;
+  if (target === undefined) {
+    setStatus("A aba ativa mudou. Clique novamente em Conectar à página.", true);
     return;
   }
-  const captureSecrets = secretToggle.checked;
-  let recipientOptions: Pick<RecorderOptions, "recipientKeyId" | "recipientPublicKeyPem"> = {};
-  if (captureSecrets && element<HTMLInputElement>("secret-mode-simple").checked) {
-    if (generatedRecipientAccess === undefined) {
-      await prepareSimpleRecipientAccess();
-      setStatus("Chave gerada. Copie a senha e a chave de recuperação e confirme antes de iniciar.", true);
+  startInProgress = true;
+  syncControls();
+  const startButton = element<HTMLButtonElement>("start");
+  startButton.textContent = "Iniciando…";
+  startButton.setAttribute("aria-busy", "true");
+  setStatus("Preparando a gravação com navegação entre páginas HTTP(S)…");
+  let temporaryOrigins: string[] = [];
+  let sessionStarted = false;
+  try {
+    const captureScreenshots = element<HTMLInputElement>("capture-screenshots").checked;
+    const requestedOriginValues = captureScreenshots
+      ? recorderScreenshotOrigins
+      : recorderHttpOrigins;
+    const requestedOrigins = { origins: [...requestedOriginValues] };
+    const alreadyGranted = await chrome.permissions.contains(requestedOrigins);
+    const granted = alreadyGranted
+      ? true
+      : await chrome.permissions.request(requestedOrigins);
+    if (!granted) {
+      setStatus("A autorização para gravar a navegação entre páginas HTTP(S) não foi concedida.", true);
       return;
     }
-    if (!element<HTMLInputElement>("recovery-copied").checked) {
-      setStatus("Confirme que copiou a senha e a chave de recuperação antes de iniciar.", true);
-      return;
+    temporaryOrigins = alreadyGranted ? [] : [...requestedOriginValues];
+    const captureSecrets = secretToggle.checked;
+    let recipientOptions: Pick<RecorderOptions, "recipientKeyId" | "recipientPublicKeyPem"> = {};
+    if (captureSecrets && element<HTMLInputElement>("secret-mode-simple").checked) {
+      if (generatedRecipientAccess === undefined) {
+        await prepareSimpleRecipientAccess();
+        setStatus("Chave gerada. Copie a senha e a chave de recuperação e confirme antes de iniciar.", true);
+        return;
+      }
+      if (!element<HTMLInputElement>("recovery-copied").checked) {
+        setStatus("Confirme que copiou a senha e a chave de recuperação antes de iniciar.", true);
+        return;
+      }
+      recipientOptions = {
+        recipientKeyId: generatedRecipientAccess.keyId,
+        recipientPublicKeyPem: generatedRecipientAccess.publicKeyPem
+      };
+    } else if (captureSecrets) {
+      recipientOptions = {
+        recipientKeyId: element<HTMLInputElement>("recipient-key-id").value.trim(),
+        recipientPublicKeyPem: element<HTMLTextAreaElement>("recipient-public-key").value.trim()
+      };
     }
-    recipientOptions = {
-      recipientKeyId: generatedRecipientAccess.keyId,
-      recipientPublicKeyPem: generatedRecipientAccess.publicKeyPem
+    const options: RecorderOptions = {
+      captureScreenshots,
+      captureSecrets,
+      includeUploads: element<HTMLInputElement>("include-uploads").checked,
+      ...recipientOptions
     };
-  } else if (captureSecrets) {
-    recipientOptions = {
-      recipientKeyId: element<HTMLInputElement>("recipient-key-id").value.trim(),
-      recipientPublicKeyPem: element<HTMLTextAreaElement>("recipient-public-key").value.trim()
-    };
+    const response = await send({
+      type: "RECORDER_START",
+      name: element<HTMLInputElement>("session-name").value.trim() || "Nova gravação",
+      tabId: target.tabId,
+      origin: target.origin,
+      options,
+      temporaryOrigins
+    });
+    sessionStarted = true;
+    await render(response.checkpoint);
+  } finally {
+    if (!sessionStarted && temporaryOrigins.length > 0) {
+      await chrome.permissions.remove({ origins: temporaryOrigins }).catch(() => false);
+    }
+    startInProgress = false;
+    startButton.removeAttribute("aria-busy");
+    syncControls();
   }
-  const options: RecorderOptions = {
-    captureScreenshots: element<HTMLInputElement>("capture-screenshots").checked,
-    captureSecrets,
-    includeUploads: element<HTMLInputElement>("include-uploads").checked,
-    ...recipientOptions
-  };
-  await invokeAndRender({
-    type: "RECORDER_START",
-    name: element<HTMLInputElement>("session-name").value.trim() || "Nova gravação",
-    origin,
-    options
-  });
+}
+
+async function connectToActiveTab(): Promise<void> {
+  startInProgress = true;
+  syncControls();
+  const startButton = element<HTMLButtonElement>("start");
+  startButton.textContent = "Conectando…";
+  startButton.setAttribute("aria-busy", "true");
+  setStatus("O Chrome precisa autorizar a identificação da aba ativa.");
+  try {
+    const granted = await chrome.permissions.request({ permissions: ["tabs"] });
+    if (!granted) {
+      setStatus("Sem essa autorização, o Recorder não consegue identificar a página ativa.", true);
+      return;
+    }
+    await refreshActiveTarget();
+    if (currentTarget === undefined) {
+      setStatus("O Chrome ainda não informou uma aba HTTP(S) ativa.", true);
+      return;
+    }
+    setStatus("Página identificada. Clique em Iniciar para começar a gravação.");
+  } finally {
+    startInProgress = false;
+    startButton.removeAttribute("aria-busy");
+    syncControls();
+  }
 }
 
 async function finalizeAndDownload(): Promise<void> {
@@ -167,7 +270,7 @@ async function finalizeAndDownload(): Promise<void> {
       [built.bytes.slice().buffer as ArrayBuffer],
       { type: "application/zip" }
     ));
-    objectUrls.push(url);
+    downloadObjectUrls.push(url);
     const downloadId = await chrome.downloads.download({
       url,
       filename: `${slug(checkpoint.name, "gravacao")}.rpablockly.zip`,
@@ -182,6 +285,7 @@ async function finalizeAndDownload(): Promise<void> {
     await clearComments();
     clearSensitiveAccess();
     await render(undefined);
+    await refreshActiveTarget();
     setStatus("Bundle V2 baixado com sucesso.");
   } catch (error) {
     activeDownloadId = undefined;
@@ -197,6 +301,7 @@ async function cancel(): Promise<void> {
   clearSensitiveAccess();
   evidence = [];
   await render(undefined);
+  await refreshActiveTarget();
   setStatus("Sessão excluída.");
 }
 
@@ -210,31 +315,70 @@ async function invokeAndRender(request: RecorderRequest): Promise<void> {
 }
 
 async function render(checkpoint: RecorderCheckpoint | undefined): Promise<void> {
+  const revision = ++renderRevision;
   const state = checkpoint?.state ?? "idle";
+  const generated = checkpoint === undefined
+    ? undefined
+    : generatePackage(checkpoint.name, checkpoint.events, checkpoint.resolvedIssueIds);
+  const loadedEvidence = checkpoint === undefined ? [] : await evidenceStore.list();
+  if (revision !== renderRevision) return;
+  currentCheckpoint = checkpoint;
+  evidence = loadedEvidence;
   setStatus(checkpoint === undefined ? "Nenhuma sessão ativa." : stateLabel(state));
-  setEnabled("start", checkpoint === undefined);
-  setEnabled("pause", state === "recording");
-  setEnabled("resume", state === "paused");
-  setEnabled("finalize", state === "recording" || state === "paused");
-  setEnabled("cancel", checkpoint !== undefined);
+  syncControls();
   setConfigurationEnabled(checkpoint === undefined);
-  issueList.replaceChildren();
-  timeline.replaceChildren();
   if (checkpoint === undefined) {
+    issueList.replaceChildren();
+    timeline.replaceChildren();
     issueCount.textContent = "0";
     stepCount.textContent = "0";
-    evidence = [];
+    timelineEmpty.hidden = false;
+    recordingIndicator.hidden = true;
+    recordingSummary.hidden = true;
+    evidenceCaptureStatus.hidden = true;
+    revokeTimelineObjectUrls();
     showEvidence(0);
     return;
   }
-  const generated = generatePackage(checkpoint.name, checkpoint.events, checkpoint.resolvedIssueIds);
-  renderIssues(generated.issues);
-  renderTimeline(generated.intents);
-  evidence = await evidenceStore.list();
+  const packagePreview = generated!;
+  setPageTarget(
+    "ready",
+    "Navegação HTTP(S) autorizada para esta sessão",
+    pageLabel(checkpoint.events.at(-1)?.url ?? checkpoint.origin),
+    "✓"
+  );
+  updateRecordingFeedback(checkpoint, packagePreview.intents);
+  renderEvidenceCaptureStatus(checkpoint, loadedEvidence.length);
+  renderIssues(packagePreview.issues);
+  renderTimeline(packagePreview.intents, checkpoint.events, evidence);
   showEvidence(Math.min(evidenceIndex, Math.max(0, evidence.length - 1)));
 }
 
+function renderEvidenceCaptureStatus(
+  checkpoint: RecorderCheckpoint,
+  storedEvidenceCount: number
+): void {
+  if (!checkpoint.options.captureScreenshots) {
+    evidenceCaptureStatus.hidden = true;
+    return;
+  }
+  const capture = checkpoint.evidenceCapture ?? {
+    attempted: 0,
+    captured: storedEvidenceCount,
+    skipped: 0,
+    failed: 0
+  };
+  evidenceCaptureStatus.hidden = false;
+  evidenceCaptureStatus.dataset.state = capture.failed > 0 ? "failed" : "ready";
+  const savedLabel = storedEvidenceCount === 1 ? "1 captura salva" : `${storedEvidenceCount} capturas salvas`;
+  const skippedLabel = capture.skipped === 1 ? "1 evento agrupado" : `${capture.skipped} eventos agrupados`;
+  evidenceCaptureStatus.textContent = capture.lastFailure === undefined
+    ? `Evidências visuais: ${savedLabel}; ${skippedLabel}.`
+    : `Evidências visuais: ${savedLabel}; ${capture.failed} falha(s). ${capture.lastFailure.message}`;
+}
+
 function renderIssues(issues: ReturnType<typeof generatePackage>["issues"]): void {
+  issueList.replaceChildren();
   issueCount.textContent = String(issues.filter((issue) => !issue.resolved).length);
   for (const issue of issues) {
     const fragment = element<HTMLTemplateElement>("issue-template").content.cloneNode(true) as DocumentFragment;
@@ -249,18 +393,59 @@ function renderIssues(issues: ReturnType<typeof generatePackage>["issues"]): voi
   }
 }
 
-function renderTimeline(intents: ReturnType<typeof generatePackage>["intents"]): void {
+function renderTimeline(
+  intents: ReturnType<typeof generatePackage>["intents"],
+  events: RawCaptureEvent[],
+  assets: EvidenceAsset[]
+): void {
   stepCount.textContent = String(intents.length);
+  timelineEmpty.hidden = intents.length > 0;
+  revokeTimelineObjectUrls();
+  const existing = new Map(
+    [...timeline.querySelectorAll<HTMLLIElement>("li[data-action-id]")]
+      .map((item) => [item.dataset.actionId!, item] as const)
+  );
+  const retained = new Set<string>();
   intents.forEach((intent, index) => {
-    const fragment = element<HTMLTemplateElement>("step-template").content.cloneNode(true) as DocumentFragment;
-    fragment.querySelector(".sequence")!.textContent = String(index + 1);
-    fragment.querySelector("strong")!.textContent = intent.name;
-    fragment.querySelector("small")!.textContent = `${intent.type} · ${intent.actionId}`;
-    const input = fragment.querySelector("input")!;
+    let item = existing.get(intent.actionId);
+    if (item === undefined) {
+      const fragment = element<HTMLTemplateElement>("step-template").content.cloneNode(true) as DocumentFragment;
+      item = fragment.querySelector<HTMLLIElement>("li")!;
+    }
+    retained.add(intent.actionId);
+    item.dataset.actionId = intent.actionId;
+    const title = friendlyIntentTitle(intent, events);
+    const sequence = item.querySelector<HTMLElement>(".sequence")!;
+    sequence.textContent = String(index + 1);
+    sequence.setAttribute("aria-label", `Etapa ${index + 1}`);
+    item.querySelector("strong")!.textContent = title;
+    item.querySelector("small")!.textContent = `Registrada em ${formatElapsed(intent.elapsedMs)}`;
+    const input = item.querySelector<HTMLInputElement>("input")!;
     input.dataset.actionId = intent.actionId;
-    input.value = comments.find((comment) => comment.actionId === intent.actionId)?.text ?? "";
-    timeline.append(fragment);
+    if (document.activeElement !== input) {
+      input.value = comments.find((comment) => comment.actionId === intent.actionId)?.text ?? "";
+    }
+    const thumbnail = item.querySelector<HTMLImageElement>(".step-thumbnail")!;
+    const asset = assets.find((candidate) => candidate.metadata.actionId === intent.actionId);
+    if (asset === undefined) {
+      thumbnail.hidden = true;
+      thumbnail.removeAttribute("src");
+      thumbnail.alt = "";
+    } else {
+      const url = URL.createObjectURL(new Blob(
+        [asset.thumbnail.slice().buffer as ArrayBuffer],
+        { type: "image/webp" }
+      ));
+      timelineObjectUrls.push(url);
+      thumbnail.src = url;
+      thumbnail.alt = `Miniatura da etapa ${index + 1}: ${title}`;
+      thumbnail.hidden = false;
+    }
+    timeline.append(item);
   });
+  for (const [actionId, item] of existing) {
+    if (!retained.has(actionId)) item.remove();
+  }
 }
 
 async function resolveIssue(event: Event): Promise<void> {
@@ -285,7 +470,7 @@ async function updateComment(event: Event): Promise<void> {
 }
 
 function showEvidence(index: number): void {
-  revokeObjectUrls();
+  revokeSlideshowObjectUrls();
   const slideshow = element<HTMLDivElement>("slideshow");
   slideshow.replaceChildren();
   const items = slideshowItems(evidence);
@@ -301,7 +486,7 @@ function showEvidence(index: number): void {
       [asset.image.slice().buffer as ArrayBuffer],
       { type: "image/webp" }
     ));
-    objectUrls.push(url);
+    slideshowObjectUrls.push(url);
     const image = document.createElement("img");
     image.src = url;
     image.alt = item.alt;
@@ -313,17 +498,220 @@ function showEvidence(index: number): void {
 }
 
 async function removeCurrentEvidence(): Promise<void> {
-  const asset = evidence[evidenceIndex];
+  const current = slideshowItems(evidence)[evidenceIndex];
+  const asset = current === undefined
+    ? undefined
+    : evidence.find((candidate) => candidate.metadata.id === current.id);
   if (asset === undefined) return;
   await evidenceStore.delete(asset.metadata.id);
-  evidence = evidence.filter((candidate) => candidate.metadata.id !== asset.metadata.id);
-  showEvidence(Math.min(evidenceIndex, evidence.length - 1));
+  if (currentCheckpoint === undefined) {
+    evidence = evidence.filter((candidate) => candidate.metadata.id !== asset.metadata.id);
+    showEvidence(Math.min(evidenceIndex, evidence.length - 1));
+  } else {
+    await render(currentCheckpoint);
+  }
 }
 
 async function send(request: RecorderRequest): Promise<Extract<RecorderResponse, { ok: true }>> {
   const response = await chrome.runtime.sendMessage(request) as RecorderResponse;
   if (!response.ok) throw new Error(response.error);
   return response;
+}
+
+function scheduleCheckpointRender(checkpoint: RecorderCheckpoint): void {
+  pendingCheckpoint = checkpoint;
+  if (checkpointRenderTimer !== undefined) return;
+  checkpointRenderTimer = globalThis.setTimeout(() => {
+    checkpointRenderTimer = undefined;
+    const latest = pendingCheckpoint;
+    pendingCheckpoint = undefined;
+    if (latest !== undefined) void render(latest).catch(showError);
+  }, 120);
+}
+
+async function refreshRecorderUi(): Promise<void> {
+  const response = await send({ type: "RECORDER_GET_STATE" });
+  await render(response.checkpoint);
+  if (response.checkpoint === undefined) await refreshActiveTarget();
+}
+
+async function refreshActiveTarget(): Promise<void> {
+  if (currentCheckpoint !== undefined) {
+    targetChecking = false;
+    setPageTarget(
+      "ready",
+      "Navegação HTTP(S) autorizada para esta sessão",
+      pageLabel(currentCheckpoint.events.at(-1)?.url ?? currentCheckpoint.origin),
+      "✓"
+    );
+    syncControls();
+    return;
+  }
+  targetChecking = true;
+  currentTarget = undefined;
+  setPageTarget(
+    "checking",
+    "Verificando a página ativa…",
+    "O Recorder precisa de uma página HTTP(S) aberta.",
+    "…"
+  );
+  syncControls();
+  try {
+    const [targetResponse, tabs] = await Promise.all([
+      send({ type: "RECORDER_GET_TARGET" }),
+      chrome.tabs.query({ active: true, lastFocusedWindow: true })
+    ]);
+    const [tab] = tabs;
+    const selectedTarget = targetResponse.target?.tabId === tab?.id
+      ? targetResponse.target
+      : undefined;
+    const urlText = tab?.url ?? tab?.pendingUrl ?? selectedTarget?.url;
+    if (tab?.id === undefined || urlText === undefined) {
+      setPageTarget(
+        "blocked",
+        tab?.id === undefined
+          ? "Nenhuma aba ativa foi encontrada"
+          : "O Chrome ainda não liberou os dados desta aba",
+        tab?.id === undefined
+          ? "Abra um site HTTP(S) em uma aba normal do navegador."
+          : "Clique em Conectar à página e autorize o acesso opcional às informações da aba.",
+        "!"
+      );
+      return;
+    }
+    let url: URL;
+    try {
+      url = new URL(urlText);
+    } catch {
+      setPageTarget(
+        "blocked",
+        "O endereço da página não pôde ser identificado",
+        "Abra um site HTTP(S) e clique novamente no ícone do Recorder.",
+        "!"
+      );
+      return;
+    }
+    if (!/^https?:$/u.test(url.protocol)) {
+      setPageTarget(
+        "blocked",
+        "Esta página do navegador não pode ser gravada",
+        "Abra um site HTTP(S) e clique no ícone do Recorder nessa página.",
+        "!"
+      );
+      return;
+    }
+    currentTarget = {
+      tabId: tab.id,
+      windowId: tab.windowId,
+      url: url.href,
+      origin: url.origin
+    };
+    setPageTarget("ready", "Página pronta para gravar", pageLabel(url.href), "✓");
+  } finally {
+    targetChecking = false;
+    syncControls();
+  }
+}
+
+function setPageTarget(
+  state: "checking" | "ready" | "blocked",
+  title: string,
+  detail: string,
+  icon: string
+): void {
+  pageTarget.dataset.state = state;
+  pageTargetTitle.textContent = title;
+  pageTargetDetail.textContent = detail;
+  pageTargetIcon.textContent = icon;
+}
+
+function syncControls(): void {
+  const state = currentCheckpoint?.state ?? "idle";
+  setEnabled(
+    "start",
+    currentCheckpoint === undefined && !targetChecking && !startInProgress
+  );
+  if (!startInProgress) {
+    element<HTMLButtonElement>("start").textContent = currentTarget === undefined
+      ? "Conectar à página"
+      : "Iniciar";
+  }
+  setEnabled("pause", state === "recording");
+  setEnabled("resume", state === "paused");
+  setEnabled("finalize", state === "recording" || state === "paused");
+  setEnabled("cancel", currentCheckpoint !== undefined);
+}
+
+function updateRecordingFeedback(
+  checkpoint: RecorderCheckpoint,
+  intents: NormalizedIntent[]
+): void {
+  const recording = checkpoint.state === "recording";
+  recordingIndicator.hidden = !recording;
+  recordingSummary.hidden = !recording;
+  if (!recording) return;
+  const count = intents.length;
+  const last = intents.at(-1);
+  recordingSummary.textContent = `${count} ${count === 1 ? "etapa registrada" : "etapas registradas"}. ${
+    last === undefined ? "Continue usando a página." : `Última: ${friendlyIntentTitle(last, checkpoint.events)}.`
+  }`;
+}
+
+function friendlyIntentTitle(intent: NormalizedIntent, events: RawCaptureEvent[]): string {
+  const target = targetLabel(intent, events);
+  const quotedTarget = target === undefined ? undefined : `“${target}”`;
+  switch (intent.type) {
+    case "navigate":
+      return `Abrir ${pageLabel(intent.url)}`;
+    case "click":
+      return quotedTarget === undefined ? "Clicar na página" : `Clicar em ${quotedTarget}`;
+    case "fill":
+      return quotedTarget === undefined ? "Preencher um campo" : `Preencher ${quotedTarget}`;
+    case "selectOption":
+      return quotedTarget === undefined ? "Selecionar uma opção" : `Selecionar em ${quotedTarget}`;
+    case "setChecked":
+      return quotedTarget === undefined ? "Alterar uma marcação" : `Alterar ${quotedTarget}`;
+    case "pressKey":
+      return quotedTarget === undefined ? intent.name : `${intent.name} em ${quotedTarget}`;
+    case "clickAndSwitchPage":
+      return quotedTarget === undefined
+        ? "Abrir uma nova página"
+        : `Abrir nova página por ${quotedTarget}`;
+    case "upload":
+      return quotedTarget === undefined ? "Selecionar um arquivo" : `Selecionar arquivo em ${quotedTarget}`;
+  }
+}
+
+function targetLabel(intent: NormalizedIntent, events: RawCaptureEvent[]): string | undefined {
+  const event = intent.eventIds
+    .map((eventId) => events.find((candidate) => candidate.id === eventId))
+    .find((candidate) => candidate?.target !== undefined);
+  const target = event?.target;
+  const value = target?.accessibleName ?? target?.attributes["aria-label"] ??
+    target?.attributes.name ?? target?.attributes.placeholder ?? target?.text;
+  if (value === undefined) return undefined;
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  return normalized.length === 0 ? undefined : normalized.slice(0, 80);
+}
+
+function pageLabel(value: string): string {
+  try {
+    const url = new URL(value);
+    const path = url.pathname === "/" ? "" : url.pathname;
+    return `${url.host}${path}`.slice(0, 100);
+  } catch {
+    return "a página autorizada";
+  }
+}
+
+function formatElapsed(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor(totalSeconds % 3_600 / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 async function waitForDownload(downloadId: number): Promise<void> {
@@ -390,7 +778,8 @@ function setProgress(value: number, message: string): void {
 
 function setStatus(message: string, error = false): void {
   status.textContent = message;
-  status.style.color = error ? "#fecaca" : "";
+  if (error) status.dataset.tone = "error";
+  else delete status.dataset.tone;
 }
 
 function setEnabled(id: string, enabled: boolean): void {
@@ -504,7 +893,7 @@ function showError(error: unknown): void {
 function stateLabel(state: RecorderCheckpoint["state"]): string {
   return ({
     idle: "Pronta para iniciar.",
-    recording: "Gravando a origem autorizada.",
+    recording: "Gravando a navegação em páginas HTTP(S).",
     paused: "Gravação pausada.",
     finalizing: "Finalizando bundle.",
     completed: "Download concluído.",
@@ -513,7 +902,17 @@ function stateLabel(state: RecorderCheckpoint["state"]): string {
 }
 
 function revokeObjectUrls(): void {
-  while (objectUrls.length > 0) URL.revokeObjectURL(objectUrls.pop()!);
+  revokeSlideshowObjectUrls();
+  revokeTimelineObjectUrls();
+  while (downloadObjectUrls.length > 0) URL.revokeObjectURL(downloadObjectUrls.pop()!);
+}
+
+function revokeSlideshowObjectUrls(): void {
+  while (slideshowObjectUrls.length > 0) URL.revokeObjectURL(slideshowObjectUrls.pop()!);
+}
+
+function revokeTimelineObjectUrls(): void {
+  while (timelineObjectUrls.length > 0) URL.revokeObjectURL(timelineObjectUrls.pop()!);
 }
 
 function element<T extends HTMLElement>(id: string): T {

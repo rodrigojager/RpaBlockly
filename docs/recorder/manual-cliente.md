@@ -7,7 +7,7 @@ script autônomo de replay.
 
 ## Instalar
 
-1. obtenha `rpablockly-recorder-1.0.0-rc.5.zip` e o arquivo `.sha256` da mesma release;
+1. obtenha `rpablockly-recorder-1.0.0-rc.6.zip` e o arquivo `.sha256` da mesma release;
 2. confira o SHA-256 antes de descompactar;
 3. abra `chrome://extensions`, ative o modo do desenvolvedor e escolha
    **Carregar sem compactação**;
@@ -17,7 +17,7 @@ script autônomo de replay.
 No PowerShell, a verificação do arquivo é:
 
 ```powershell
-(Get-FileHash .\rpablockly-recorder-1.0.0-rc.5.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+(Get-FileHash .\rpablockly-recorder-1.0.0-rc.6.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
 O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
@@ -27,15 +27,18 @@ O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
 1. informe um nome claro para a gravação;
 2. escolha se deseja evidências visuais e conteúdo de uploads;
 3. leia e aceite o aviso de privacidade;
-4. clique em **Iniciar** e conceda acesso somente à origem solicitada pelo Chrome;
+4. clique em **Iniciar** e autorize o acesso temporário solicitado; com
+   evidências visuais, o Chrome mostra uma autorização ampla porque sua API de
+   screenshot exige `<all_urls>`, embora o Recorder só aceite páginas HTTP(S);
 5. navegue normalmente, usando cliques, campos, checkbox, radio, select, upload,
-   SPA, novas páginas e iframes acessíveis;
+   SPA, outros sites, novas páginas e iframes acessíveis;
 6. use **Pausar** se precisar fazer algo que não deve entrar no roteiro;
 7. escolha **Revisar e baixar**, resolva as pendências e confira a timeline;
 8. remova evidências desnecessárias e conclua o download.
 
 A sessão só é apagada automaticamente depois que o Chrome confirma o download.
-Cancelar remove explicitamente a sessão local.
+Cancelar remove explicitamente a sessão local. O acesso concedido pela sessão é
+retirado nos dois casos e também quando a gravação termina com falha.
 
 ## Senhas, uploads e evidências
 
@@ -64,6 +67,8 @@ limites são recusados.
 
 Antes de um screenshot, a extensão mascara campos sensíveis. Ainda assim, revise
 cada imagem: informações visíveis fora dos campos podem ser pessoais.
+O painel informa quantas capturas foram salvas e mostra uma mensagem explícita
+quando o Chrome recusa ou não consegue processar uma evidência.
 
 ## O que entregar ao desenvolvedor
 

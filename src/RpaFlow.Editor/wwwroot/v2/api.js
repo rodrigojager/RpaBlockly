@@ -100,6 +100,43 @@ export async function recorderEvidence(stagingId, stagingToken, evidenceId, thum
   return response.blob();
 }
 
+export function startAssistedExecution(document) {
+  return request("/api/assisted-executions", {
+    method: "POST",
+    body: JSON.stringify(document)
+  });
+}
+
+export function getAssistedExecution(executionId, afterSequence = 0) {
+  return request(
+    `/api/assisted-executions/${encodeURIComponent(executionId)}` +
+      `?after=${encodeURIComponent(afterSequence)}`);
+}
+
+export async function getLatestAssistedExecution() {
+  const response = await fetch("/api/assisted-executions/latest", {
+    cache: "no-store",
+    headers: headers()
+  });
+  if (response.status === 404) return null;
+  return readResponse(response);
+}
+
+export function stopAssistedExecution(executionId) {
+  return request(
+    `/api/assisted-executions/${encodeURIComponent(executionId)}/stop`,
+    { method: "POST" });
+}
+
+export async function assistedEvidence(executionId, evidenceId) {
+  const response = await fetch(
+    `/api/assisted-executions/${encodeURIComponent(executionId)}/evidence/` +
+      encodeURIComponent(evidenceId),
+    { cache: "no-store", headers: headers() });
+  if (!response.ok) await readResponse(response);
+  return response.blob();
+}
+
 export class RevisionConflictError extends Error {
   constructor(message) {
     super(message || "A revisão do pacote mudou. Recarregue e compare antes de salvar.");

@@ -63,6 +63,34 @@ Antes do apply, mapeie referências `input.recorded.*`, `secret.recorded.*` e
 um subflow. A publicação usa a revisão esperada; o bundle e os mappings ficam
 arquivados como evidência lateral.
 
+## Homologação assistida
+
+O botão **Validar roteiro** executa o rascunho atual sem publicá-lo. O backend
+valida flow, locators e policy, cria um `RpaPackageSnapshot` temporário e usa o
+mesmo `PlaywrightV2FlowExecutor` da execução operacional.
+
+Antes de iniciar:
+
+1. escolha `CloakBrowser` ou `Chromium Playwright`;
+2. escolha a última ação-folha que pode ser executada com segurança;
+3. confirme explicitamente o limite;
+4. mantenha screenshots habilitadas quando o conteúdo puder ser armazenado com
+   a política de privacidade do ambiente.
+
+A janela do navegador é sempre visível. O painel mostra o bloco ativo, cards por
+etapa, falha estruturada, botão **Parar agora** e capturas sanitizadas. A execução
+termina imediatamente depois da ação escolhida; terminar o fluxo sem alcançá-la
+é falha. Somente uma homologação pode ficar ativa por sessão do editor.
+
+O modo assistido:
+
+- lê `Input`, `Attachments` e `Blockly.Variables` da configuração local;
+- nunca salva storage state, pacote, resultados ou aprendizado;
+- desabilita promoção e write-back no snapshot temporário;
+- guarda imagens por sete dias sob `artifacts/homologacao-editor`, pasta ignorada
+  pelo Git;
+- não consulta fila nem banco e não substitui os intertravamentos do worker.
+
 ## Referências
 
 - [guia operacional do editor](../../docs/referencia-markdown/guia-editor-blockly.md);

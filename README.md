@@ -67,6 +67,13 @@ No editor, os 35 blocos cobrem os 32 tipos de ação. O pacote é aberto por rev
 salvar publica os três documentos atomicamente. Conflito de revisão nunca
 sobrescreve alterações silenciosamente.
 
+O botão **Validar roteiro** executa um snapshot temporário do rascunho em uma
+janela visível do Chromium ou CloakBrowser. Antes de iniciar, a pessoa escolhe a
+última ação-folha segura que pode ser executada. O painel destaca o bloco ativo,
+mostra cards de progresso, permite interromper e exibe screenshots sanitizadas.
+Essa homologação não publica o rascunho, não usa o worker e desabilita write-back
+de aprendizado.
+
 ## Gravar um roteiro no Chrome
 
 O Recorder V2 é uma extensão Manifest V3 que captura interações consentidas,
@@ -105,6 +112,11 @@ Opções do host local:
 - `--rpa-id <id>`: pacote dentro do store;
 - `--revision <sha256>`: fixa revisão; sem ela, usa a atual;
 - `--validate-only`: valida pacote e inputs sem abrir navegador.
+
+Para homologar sem terminal, abra o editor, ajuste a **Configuração local**,
+clique em **Validar roteiro**, escolha o navegador e confirme a última etapa
+segura. A execução usa `Input`, `Attachments` e `Blockly.Variables` da
+configuração local; segredos continuam fora do pacote.
 
 ## Modos de localização
 

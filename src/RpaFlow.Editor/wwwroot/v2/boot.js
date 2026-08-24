@@ -8,6 +8,7 @@ import {
   savePackage
 } from "./api.js";
 import { actionCatalog } from "./action-catalog.js";
+import { initializeAssistedValidation } from "./assisted-validation.js";
 import { initializeConfigurationUi } from "./configuration-ui.js";
 import { setLocatorProvider } from "./field-locator-reference.js";
 import { initializeLocatorUi } from "./locator-ui.js";
@@ -53,6 +54,7 @@ const compareDialog = document.getElementById("compare-dialog");
 const compareContent = document.getElementById("compare-content");
 let changeTimer = null;
 let conflictDraft = null;
+let highlightedActionId = null;
 
 const locatorUi = initializeLocatorUi(
   refresh,
@@ -130,6 +132,12 @@ initializeConfigurationUi({
   save: saveConfiguration,
   onMessage: showMessage
 });
+initializeAssistedValidation({
+  documents: currentDocuments,
+  revision: () => editorState.package?.revision,
+  onAction: actionId => highlightAction(actionId),
+  onMessage: showMessage
+});
 
 try {
   const session = await connect();
@@ -182,6 +190,7 @@ if (new URLSearchParams(window.location.search).has("roundtrip-test")) {
     setPackage(flow, locators, policy) {
       updateState({
         package: {
+          ...(editorState.package ?? {}),
           flow: structuredClone(flow),
           locators: structuredClone(locators),
           policy: structuredClone(policy)
@@ -200,10 +209,16 @@ if (new URLSearchParams(window.location.search).has("roundtrip-test")) {
       testingLocatorBlock.getField("LOCATOR_TARGET").showEditor_();
     },
     locatorPickerValue() {
-      return testingLocatorBlock?.getFieldValue("LOCATOR_TARGET") ?? null;
+      const value = testingLocatorBlock?.getFieldValue("LOCATOR_TARGET") ?? null;
+      testingLocatorBlock?.dispose(false);
+      testingLocatorBlock = null;
+      return value;
     },
     packagePolicy() {
       return structuredClone(editorState.package?.policy ?? null);
+    },
+    highlightedActionId() {
+      return highlightedActionId;
     }
   };
 }
@@ -373,4 +388,15 @@ function showMessage(message, error = false) {
 
 function short(revision) {
   return String(revision ?? "").slice(0, 12);
+}
+
+function highlightAction(actionId) {
+  workspace.highlightBlock();
+  highlightedActionId = actionId ?? null;
+  if (!actionId) return;
+  const block = workspace.getAllBlocks(false).find(candidate =>
+    candidate.getFieldValue("ID") === actionId);
+  if (!block) return;
+  workspace.highlightBlock(block.id);
+  workspace.centerOnBlock(block.id);
 }

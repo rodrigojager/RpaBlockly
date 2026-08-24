@@ -210,6 +210,7 @@ public sealed class V2FlowActionStep : IRpaStep
                 CreateEvent("actionStarted", context),
                 cancellationToken);
             await _handlers.ExecuteAsync(_action, execution, cancellationToken);
+            await CaptureStepEvidenceAsync(context, cancellationToken);
             var directive = await context.GuardAfterActionAsync(identity, cancellationToken);
             if (directive is not FlowActionExecutionDirective.Continue and
                 not FlowActionExecutionDirective.CompleteExecution)
@@ -265,12 +266,48 @@ public sealed class V2FlowActionStep : IRpaStep
         }
     }
 
+    private async Task CaptureStepEvidenceAsync(
+        RpaContext context,
+        CancellationToken cancellationToken)
+    {
+        if (!context.Options.CaptureScreenshotsAfterActions)
+        {
+            return;
+        }
+
+        try
+        {
+            var path = await context.Artifacts.CaptureSanitizedScreenshotAsync(
+                $"etapa-{context.ExecutionBudget.ExecutedActions:000}-{_action.Id}");
+            await context.ObserveAsync(
+                CreateEvent(
+                    "actionEvidenceCaptured",
+                    context,
+                    detail: path),
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await context.ObserveAsync(
+                CreateEvent(
+                    "actionEvidenceFailed",
+                    context,
+                    detail: exception.GetType().Name),
+                cancellationToken);
+        }
+    }
+
     private FlowExecutionEvent CreateEvent(
         string kind,
         RpaContext context,
         long? elapsedMilliseconds = null,
         FlowFailureCategory? failureCategory = null,
-        bool? retryable = null) =>
+        bool? retryable = null,
+        string? detail = null) =>
         new(
             kind,
             context.ExecutionRequest.ExecutionId,
@@ -283,7 +320,8 @@ public sealed class V2FlowActionStep : IRpaStep
             context.ExecutionBudget.ExecutedActions,
             elapsedMilliseconds,
             failureCategory,
-            retryable);
+            retryable,
+            Detail: detail);
 }
 
 public static class V2FlowCompiler

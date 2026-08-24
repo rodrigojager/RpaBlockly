@@ -169,6 +169,22 @@ public sealed class RpaRunner(
                     Console.Error.WriteLine(
                         $"Evidências sanitizadas da falha: {diagnostics.ScreenshotPath}; " +
                         $"{diagnostics.SanitizedHtmlPath}; {diagnostics.ResolutionReportPath}");
+                    if (diagnostics.ScreenshotPath is not null)
+                    {
+                        var failure = (executionException as FlowExecutionException)?.Failure;
+                        await ObserveSafelyAsync(
+                            new FlowExecutionEvent(
+                                "failureEvidenceCaptured",
+                                executionRequest.ExecutionId,
+                                executionRequest.WorkItemId,
+                                executionRequest.BatchId,
+                                DateTimeOffset.UtcNow,
+                                failure?.ActionId,
+                                failure?.ActionName,
+                                failure?.ActionType,
+                                Detail: diagnostics.ScreenshotPath),
+                            CancellationToken.None);
+                    }
                 }
                 catch
                 {

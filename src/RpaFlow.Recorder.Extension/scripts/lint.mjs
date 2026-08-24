@@ -12,9 +12,14 @@ if (JSON.stringify(manifest.permissions) !== JSON.stringify(expectedPermissions)
 if (forbiddenPermissions.some((permission) => manifest.permissions.includes(permission))) {
   throw new Error("O manifest contém uma permissão bloqueada pelo threat model.");
 }
-if ((manifest.host_permissions ?? []).length !== 0 ||
-    manifest.optional_host_permissions?.includes("<all_urls>")) {
-  throw new Error("Acesso amplo e permanente a hosts não é permitido.");
+if (JSON.stringify(manifest.optional_permissions) !== JSON.stringify(["tabs"])) {
+  throw new Error("O manifest deve declarar somente tabs como permissão opcional.");
+}
+if ((manifest.host_permissions ?? []).length !== 0) {
+  throw new Error("Acesso permanente a hosts não é permitido.");
+}
+if (JSON.stringify(manifest.optional_host_permissions) !== JSON.stringify(["<all_urls>"])) {
+  throw new Error("A captura visual deve declarar somente <all_urls> como host opcional.");
 }
 if (manifest.minimum_chrome_version !== "116" || manifest.manifest_version !== 3) {
   throw new Error("A extensão deve usar MV3 e Chrome 116 como versão mínima.");

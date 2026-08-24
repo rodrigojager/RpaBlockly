@@ -21,6 +21,10 @@ export class ScreenshotRateLimiter {
     this.lastCaptureAt = nowMs;
     return true;
   }
+
+  public reset(): void {
+    this.lastCaptureAt = Number.NEGATIVE_INFINITY;
+  }
 }
 
 export async function createEvidenceAsset(
@@ -123,11 +127,40 @@ export class EvidenceStore {
   ): Promise<unknown> {
     const database = await this.open();
     return await new Promise((resolve, reject) => {
-      const transaction = database.transaction("evidence", mode);
-      const request = operation(transaction.objectStore("evidence"));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error("Falha no IndexedDB."));
-      transaction.oncomplete = () => database.close();
+      let settled = false;
+      let result: unknown;
+      const closeAndReject = (error: DOMException | null, fallback: string): void => {
+        if (settled) return;
+        settled = true;
+        database.close();
+        reject(error ?? new Error(fallback));
+      };
+      let transaction: IDBTransaction;
+      let request: IDBRequest;
+      try {
+        transaction = database.transaction("evidence", mode);
+        request = operation(transaction.objectStore("evidence"));
+      } catch (error) {
+        database.close();
+        reject(error);
+        return;
+      }
+      request.onsuccess = () => { result = request.result; };
+      request.onerror = () => closeAndReject(request.error, "Falha no IndexedDB.");
+      transaction.oncomplete = () => {
+        if (settled) return;
+        settled = true;
+        database.close();
+        resolve(result);
+      };
+      transaction.onerror = () => closeAndReject(
+        transaction.error,
+        "Falha ao concluir a gravação da evidência."
+      );
+      transaction.onabort = () => closeAndReject(
+        transaction.error,
+        "A gravação da evidência foi cancelada pelo IndexedDB."
+      );
     });
   }
 

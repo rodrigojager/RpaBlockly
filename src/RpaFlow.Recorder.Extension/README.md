@@ -45,8 +45,12 @@ O release compila duas vezes e exige igualdade byte a byte. O ZIP vai para
 4. Selecione a pasta `src/RpaFlow.Recorder.Extension/build`.
 5. Fixe a extensão e clique no ícone para abrir o side panel.
 
-Ao iniciar uma sessão, o Chrome solicita acesso apenas à origem da aba ativa. A
-extensão não declara `<all_urls>` permanente. Senhas ficam desligadas por padrão.
+Ao iniciar uma sessão sem evidências, o Chrome solicita acesso temporário às
+páginas HTTP(S). Com evidências visuais, solicita `<all_urls>` como permissão
+opcional porque `captureVisibleTab` exige esse padrão literalmente. O Recorder
+continua limitado por código a páginas HTTP(S), registra a concessão da sessão e
+a retira ao concluir, excluir ou falhar. Não existe acesso permanente a hosts.
+Senhas ficam desligadas por padrão.
 No modo recomendado, a pessoa escolhe uma senha e recebe uma chave de recuperação
 cifrada; no modo avançado, o opt-in aceita um key ID e uma chave pública RSA/SPKI
 de pelo menos 2048 bits. Nenhuma senha ou chave privada é persistida.

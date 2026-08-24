@@ -23,6 +23,7 @@ O editor abre uma revisão completa. A tela possui:
 - drawer de `rpa.policy.json`;
 - propriedades avançadas da ação;
 - warnings de locator ausente, não utilizado e cardinalidade;
+- homologação assistida com navegador visível, progresso e evidências;
 - identidade da revisão e painel de conflito.
 
 `FieldLocatorReference` grava somente `locatorId` e cardinalidade no bloco. Receitas
@@ -46,9 +47,42 @@ sobrescrita silenciosa.
 3. escolha locator IDs nos blocos;
 4. corrija erros e revise warnings;
 5. aplique alterações da policy ao rascunho;
-6. salve o pacote;
-7. reabra e confira a nova revisão;
-8. execute o host com `--validate-only`.
+6. abra **Validar roteiro** e escolha a última etapa segura;
+7. execute no Chromium ou CloakBrowser, revise cards e screenshots e corrija o
+   rascunho até o limite ser alcançado;
+8. salve o pacote;
+9. reabra e confira a nova revisão;
+10. execute o host com `--validate-only`.
+
+## Validar roteiro visualmente
+
+A homologação usa o rascunho que está na tela, inclusive mudanças ainda não
+salvas, mas exige que a revisão de origem continue atual. O backend repete a
+validação oficial e cria um snapshot imutável apenas para aquela execução.
+
+O limite é inclusivo: a ação escolhida é executada e o runtime encerra antes da
+ação seguinte. Somente ações-folha aparecem na lista. Se a ação estiver em um
+ramo que não for percorrido, o término sem alcançar o limite é tratado como
+falha, não como sucesso.
+
+Durante a execução:
+
+- o navegador permanece visível;
+- o bloco ativo é destacado no Blockly;
+- cada ação recebe card com estado e duração;
+- **Parar agora** cancela o token e fecha o contexto do navegador;
+- screenshots por etapa mascaram campos de formulário, conteúdo editável e
+  elementos marcados como privados, inclusive em iframes e shadow roots abertos;
+- falhas geram evidência auxiliar sem substituir a causa original.
+
+O painel nunca devolve valores de `input.*`, `config.*`, `attachments.*` ou
+`runtime.*`. Imagens ficam em `artifacts/homologacao-editor` e devem seguir a
+retenção e o controle de acesso do ambiente. Reabrir o diálogo reconecta à
+execução mais recente da sessão local.
+
+Esta função é para homologação assistida. Banco, claim, retry, persistência de
+resultado e ações autorizadas em produção continuam sob responsabilidade do
+worker.
 
 ## Configuração
 
@@ -59,4 +93,5 @@ editor não copia credenciais para nenhum documento do pacote.
 ## Verificação
 
 `RpaFlow.EditorRoundTrip` abre uma cópia temporária, instancia os 35 blocos, testa
-busca/picker/policy, publica por todas as APIs e comprova CAS e round-trip.
+busca/picker/policy, executa homologação com screenshot, limite e cancelamento,
+publica por todas as APIs e comprova CAS e round-trip.

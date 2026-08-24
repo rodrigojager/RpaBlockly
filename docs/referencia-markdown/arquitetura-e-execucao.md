@@ -8,7 +8,7 @@
 | Packages | validação cruzada, snapshot, hash, revisão, stores e registry. |
 | Runtime | request, contexto de dados, observer, falha e orçamento. |
 | Playwright | compilador de receitas, resolver, handlers, heurística e artefatos. |
-| Editor | autoria Blockly e publicação atômica. |
+| Editor | autoria Blockly, publicação atômica e homologação local assistida. |
 | Worker | claim SQL, configuração, snapshot, execução e persistência. |
 
 O runtime V1 não faz parte dessas camadas operacionais. Ele existe em assemblies
@@ -45,6 +45,19 @@ policy pode promover em memória, source ou overlay. Persistência usa CAS; conf
 Eventos registram execução, ação, RPA, locator, candidato, revisão, hash, tempo e
 motivo sem valores sensíveis. Uma falha pode gerar screenshot mascarada, HTML
 sanitizado/truncado e `resolucao.json`. Os artefatos respeitam limites e retenção.
+
+## Homologação assistida
+
+O editor pode criar um snapshot temporário a partir do rascunho visual e executar
+o `PlaywrightV2FlowExecutor` com janela visível. Essa rota não publica o pacote e
+não participa da execução em produção. Ela exige uma última ação-folha segura,
+desabilita write-back e promoção, aceita somente uma execução simultânea e
+propaga cancelamento ao mesmo runtime.
+
+Quando habilitada, a captura posterior a cada ação é feita pelo contrato de
+artefatos do Playwright. O observer traduz eventos em cards sem expor dados do
+caso; caminhos físicos permanecem no backend e as imagens só são entregues pela
+API local autenticada.
 
 ## Extensibilidade
 

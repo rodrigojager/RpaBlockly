@@ -24,6 +24,9 @@
         <span id="server-status" class="server-status">Conectando ao pacote V2...</span>
         <span id="package-identity" class="package-identity"></span>
         <button id="save-package" type="button">Salvar pacote</button>
+        <button id="open-assisted-validation" type="button" class="validation-launch">
+          Validar roteiro
+        </button>
         <button id="reload-package" type="button" class="secondary">Recarregar revisão</button>
         <button id="reset-flow" type="button" class="secondary">Restaurar fluxo aberto</button>
         <button id="open-configuration" type="button" class="secondary">Configuração local</button>
@@ -176,6 +179,88 @@
         </header>
         <pre><code id="compare-content"></code></pre>
       </form>
+    </dialog>
+
+    <dialog id="assisted-validation-dialog" aria-labelledby="assisted-validation-title">
+      <div class="configuration-form assisted-validation-shell">
+        <header class="dialog-heading">
+          <div>
+            <p class="eyebrow">Homologação assistida</p>
+            <h2 id="assisted-validation-title">Validar o roteiro em um navegador visível</h2>
+            <p class="dialog-description">
+              A execução usa um snapshot do rascunho atual, dados da configuração local e
+              para imediatamente depois da última etapa segura escolhida.
+            </p>
+          </div>
+          <button id="close-assisted-validation" type="button" class="secondary">Fechar</button>
+        </header>
+
+        <section id="assisted-runtime-state" class="assisted-runtime-state" data-status="idle">
+          <span class="assisted-recording-dot" aria-hidden="true"></span>
+          <div>
+            <strong id="assisted-status-title">Pronto para configurar</strong>
+            <p id="assisted-status-detail">Nenhuma homologação foi iniciada.</p>
+          </div>
+        </section>
+
+        <section class="assisted-setup-grid" aria-label="Configuração da homologação">
+          <label>
+            Navegador
+            <select id="assisted-browser">
+              <option value="cloakbrowser">CloakBrowser</option>
+              <option value="chromium">Chromium Playwright</option>
+            </select>
+          </label>
+          <label>
+            Última etapa segura permitida
+            <select id="assisted-boundary"></select>
+          </label>
+          <label class="assisted-check">
+            <input id="assisted-capture-screenshots" type="checkbox" checked>
+            Capturar uma evidência visual sanitizada depois de cada etapa
+          </label>
+          <label class="assisted-check assisted-safety-confirmation">
+            <input id="assisted-confirm-boundary" type="checkbox">
+            Confirmo que a etapa escolhida pode ser executada neste ambiente. Nenhuma etapa
+            posterior será executada.
+          </label>
+        </section>
+
+        <div class="dialog-actions assisted-actions">
+          <button id="start-assisted-validation" type="button">Iniciar validação visual</button>
+          <button id="stop-assisted-validation" type="button" class="danger" disabled>
+            Parar agora
+          </button>
+        </div>
+
+        <section class="assisted-results-grid">
+          <article class="assisted-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Progresso ao vivo</p>
+                <h3>Etapas executadas</h3>
+              </div>
+              <span id="assisted-progress-count" class="assisted-count">0 etapas</span>
+            </div>
+            <ol id="assisted-timeline" class="assisted-timeline">
+              <li class="assisted-empty">O progresso aparecerá aqui.</li>
+            </ol>
+          </article>
+
+          <article class="assisted-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Evidências</p>
+                <h3>Capturas da execução</h3>
+              </div>
+              <span id="assisted-evidence-count" class="assisted-count">0 capturas</span>
+            </div>
+            <div id="assisted-evidence-gallery" class="assisted-evidence-gallery">
+              <p class="assisted-empty">As telas sanitizadas aparecerão aqui.</p>
+            </div>
+          </article>
+        </section>
+      </div>
     </dialog>
 
     <dialog id="recorder-import-dialog" aria-labelledby="recorder-import-title">

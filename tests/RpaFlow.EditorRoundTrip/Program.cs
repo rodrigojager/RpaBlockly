@@ -40,7 +40,10 @@ try
     try
     {
         await WaitForEditorAsync(editorUrl, editor);
+        await CheckAssistedExecutionApiAsync(editorUrl);
         await CheckBrowserRoundTripAsync(editorUrl, testRoot);
+        await CheckAssistedCancellationApiAsync(editorUrl);
+        await CheckAssistedFailureApiAsync(editorUrl);
         await CheckAtomicPackageApiAsync(editorUrl);
         await CheckRecorderImportApiAsync(editorUrl, testRoot, repositoryRoot);
     }
@@ -149,6 +152,15 @@ static async Task CheckBrowserRoundTripAsync(string editorUrl, string testRoot)
     await using var browser = await playwright.Chromium.LaunchAsync(
         new BrowserTypeLaunchOptions { Headless = true });
     var page = await browser.NewPageAsync();
+    page.PageError += (_, error) =>
+        Console.Error.WriteLine("Erro JavaScript no editor: " + error);
+    page.Console += (_, message) =>
+    {
+        if (message.Type == "error")
+        {
+            Console.Error.WriteLine("Console do editor: " + message.Text);
+        }
+    };
     await page.GotoAsync(
         $"{editorUrl}/?roundtrip-test=1",
         new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
@@ -274,12 +286,214 @@ static async Task CheckBrowserRoundTripAsync(string editorUrl, string testRoot)
               ?.GetValue<string>() == "sim",
         "campos ocultos da configuração são preservados");
 
+    await page.ClickAsync("#open-assisted-validation");
+    Check(await page.Locator("#assisted-validation-dialog").GetAttributeAsync("open") is not null,
+        "homologação assistida abre dentro do editor real");
+    Check(await page.Locator("#assisted-boundary option").CountAsync() == 1,
+        "limite seguro lista somente ações-folha do rascunho");
+    await page.WaitForFunctionAsync(
+        """
+        () => ["validated", "cancelled", "failed"].includes(
+          document.querySelector("#assisted-runtime-state")?.dataset.status)
+        """,
+        null,
+        new PageWaitForFunctionOptions { Timeout = 30_000 });
+    var assistedState = JsonNode.Parse(await page.EvaluateAsync<string>(
+        """
+        () => JSON.stringify({
+          status: document.querySelector("#assisted-runtime-state")?.dataset.status,
+          detail: document.querySelector("#assisted-status-detail")?.textContent
+        })
+        """))!.AsObject();
+    Check(assistedState["status"]?.GetValue<string>() == "validated",
+        "homologação assistida alcança o limite seguro: " +
+        assistedState["detail"]?.GetValue<string>());
+    Check(await page.Locator("#assisted-timeline .assisted-step-card[data-status='completed']")
+              .CountAsync() == 1,
+        "execução assistida mostra a etapa concluída como card de progresso");
+    await page.Locator("#assisted-evidence-gallery img").WaitForAsync(
+        new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10_000
+        });
+    Check(await page.Locator("#assisted-evidence-gallery img").CountAsync() == 1,
+        "execução assistida exibe screenshot sanitizada da etapa");
+    Check(await page.EvaluateAsync<string>(
+              "() => window.RpaFlowEditorTesting.highlightedActionId()") == "iniciar-fluxo",
+        "bloco em execução fica destacado pelo actionId");
+    Check(await page.IsDisabledAsync("#stop-assisted-validation"),
+        "botão Parar é desabilitado depois do limite seguro");
+    Check(!await page.IsDisabledAsync("#start-assisted-validation"),
+        "uma nova homologação pode ser iniciada depois do limite seguro");
+    await page.ClickAsync("#close-assisted-validation");
+
     await page.ClickAsync("#open-recorder-import");
     Check(await page.Locator("#recorder-import-dialog").GetAttributeAsync("open") is not null,
         "wizard Recorder abre dentro do editor real");
     Check(await page.Locator("[data-recorder-step]").CountAsync() == 5,
         "wizard expõe selecionar, revisar, mapear, confirmar e aplicar");
     await page.ClickAsync("#close-recorder-import");
+}
+
+static async Task CheckAssistedExecutionApiAsync(string editorUrl)
+{
+    using var client = await AuthorizedEditorClientAsync(editorUrl);
+    var opened = await client.GetFromJsonAsync<JsonObject>("/api/package")
+        ?? throw new InvalidOperationException("Pacote do editor vazio.");
+    var firstActionId = opened["flow"]?["actions"]?[0]?["id"]?.GetValue<string>()
+        ?? throw new InvalidOperationException("Fluxo de teste sem ação inicial.");
+    using var startedResponse = await client.PostAsJsonAsync(
+        "/api/assisted-executions",
+        new JsonObject
+        {
+            ["expectedRevision"] = opened["revision"]!.DeepClone(),
+            ["flow"] = opened["flow"]!.DeepClone(),
+            ["locators"] = opened["locators"]!.DeepClone(),
+            ["policy"] = opened["policy"]!.DeepClone(),
+            ["browser"] = "chromium",
+            ["boundaryActionId"] = firstActionId,
+            ["captureScreenshots"] = true
+        });
+    Check(startedResponse.IsSuccessStatusCode,
+        "API inicia homologação assistida com snapshot do rascunho");
+    var started = JsonNode.Parse(await startedResponse.Content.ReadAsStringAsync())!.AsObject();
+    var executionId = started["executionId"]!.GetValue<string>();
+    var completed = await WaitForAssistedExecutionAsync(client, executionId);
+    Check(completed["status"]?.GetValue<string>() == "validated" &&
+          completed["boundaryReached"]?.GetValue<bool>() == true &&
+          completed["executedActions"]?.GetValue<int>() == 1,
+        "runtime para exatamente depois da última etapa segura escolhida");
+    var events = completed["events"]!.AsArray();
+    Check(events.Any(item => item?["kind"]?.GetValue<string>() == "actionStarted") &&
+          events.Any(item => item?["kind"]?.GetValue<string>() == "actionCompleted") &&
+          events.Any(item => item?["kind"]?.GetValue<string>() ==
+              "validationBoundaryReached"),
+        "API publica progresso por ação e alcance do limite seguro");
+    var evidence = completed["evidence"]!.AsArray();
+    Check(evidence.Count == 1,
+        "homologação salva uma screenshot sanitizada por etapa");
+    var evidenceId = evidence[0]?["id"]?.GetValue<string>()
+        ?? throw new InvalidOperationException("Evidência sem ID.");
+    var bytes = await client.GetByteArrayAsync(
+        $"/api/assisted-executions/{executionId}/evidence/{evidenceId}");
+    Check(bytes.Length > 8 && bytes[0] == 0x89 && bytes[1] == 0x50 &&
+          bytes[2] == 0x4E && bytes[3] == 0x47,
+        "endpoint autenticado entrega a imagem PNG registrada");
+}
+
+static async Task CheckAssistedCancellationApiAsync(string editorUrl)
+{
+    using var client = await AuthorizedEditorClientAsync(editorUrl);
+    var opened = await client.GetFromJsonAsync<JsonObject>("/api/package")
+        ?? throw new InvalidOperationException("Pacote do editor vazio.");
+    var flow = opened["flow"]!.DeepClone().AsObject();
+    flow["actions"] = new JsonArray
+    {
+        new JsonObject
+        {
+            ["id"] = "aguardar-cancelamento",
+            ["type"] = "waitStable",
+            ["name"] = "Aguardar cancelamento"
+        }
+    };
+    using var startedResponse = await client.PostAsJsonAsync(
+        "/api/assisted-executions",
+        new JsonObject
+        {
+            ["expectedRevision"] = opened["revision"]!.DeepClone(),
+            ["flow"] = flow,
+            ["locators"] = opened["locators"]!.DeepClone(),
+            ["policy"] = opened["policy"]!.DeepClone(),
+            ["browser"] = "chromium",
+            ["boundaryActionId"] = "aguardar-cancelamento",
+            ["captureScreenshots"] = false
+        });
+    Check(startedResponse.IsSuccessStatusCode,
+        "uma segunda homologação pode iniciar após a primeira terminar");
+    var started = JsonNode.Parse(await startedResponse.Content.ReadAsStringAsync())!.AsObject();
+    var executionId = started["executionId"]!.GetValue<string>();
+    using var stopped = await client.PostAsync(
+        $"/api/assisted-executions/{executionId}/stop",
+        null);
+    Check(stopped.IsSuccessStatusCode,
+        "API aceita interrupção explícita da homologação");
+    var completed = await WaitForAssistedExecutionAsync(client, executionId);
+    Check(completed["status"]?.GetValue<string>() == "cancelled",
+        "interrupção fecha a execução sem alcançar novas etapas");
+}
+
+static async Task CheckAssistedFailureApiAsync(string editorUrl)
+{
+    using var client = await AuthorizedEditorClientAsync(editorUrl);
+    var opened = await client.GetFromJsonAsync<JsonObject>("/api/package")
+        ?? throw new InvalidOperationException("Pacote do editor vazio.");
+    var flow = opened["flow"]!.DeepClone().AsObject();
+    flow["actions"] = new JsonArray
+    {
+        new JsonObject
+        {
+            ["id"] = "falha-controlada",
+            ["type"] = "fail",
+            ["name"] = "Falha controlada",
+            ["value"] = "Falha esperada da homologação"
+        }
+    };
+    using var startedResponse = await client.PostAsJsonAsync(
+        "/api/assisted-executions",
+        new JsonObject
+        {
+            ["expectedRevision"] = opened["revision"]!.DeepClone(),
+            ["flow"] = flow,
+            ["locators"] = opened["locators"]!.DeepClone(),
+            ["policy"] = opened["policy"]!.DeepClone(),
+            ["browser"] = "chromium",
+            ["boundaryActionId"] = "falha-controlada",
+            ["captureScreenshots"] = true
+        });
+    Check(startedResponse.IsSuccessStatusCode,
+        "homologação controlada de falha pode ser iniciada");
+    var started = JsonNode.Parse(await startedResponse.Content.ReadAsStringAsync())!.AsObject();
+    var completed = await WaitForAssistedExecutionAsync(
+        client,
+        started["executionId"]!.GetValue<string>());
+    Check(completed["status"]?.GetValue<string>() == "failed" &&
+          completed["events"]!.AsArray().Any(item =>
+              item?["kind"]?.GetValue<string>() == "actionFailed"),
+        "falha do roteiro aparece no progresso estruturado");
+    Check(completed["evidence"]!.AsArray().Any(item =>
+              item?["kind"]?.GetValue<string>() == "failure"),
+        "falha produz evidência visual sem ocultar a causa original");
+}
+
+static async Task<HttpClient> AuthorizedEditorClientAsync(string editorUrl)
+{
+    var client = new HttpClient { BaseAddress = new Uri(editorUrl) };
+    var session = await client.GetFromJsonAsync<JsonObject>("/api/session")
+        ?? throw new InvalidOperationException("Sessão do editor vazia.");
+    client.DefaultRequestHeaders.Add(
+        "X-Editor-Token",
+        session["token"]!.GetValue<string>());
+    return client;
+}
+
+static async Task<JsonObject> WaitForAssistedExecutionAsync(
+    HttpClient client,
+    string executionId)
+{
+    var deadline = DateTime.UtcNow.AddSeconds(30);
+    while (DateTime.UtcNow < deadline)
+    {
+        var current = await client.GetFromJsonAsync<JsonObject>(
+            $"/api/assisted-executions/{executionId}")
+            ?? throw new InvalidOperationException("Estado da homologação vazio.");
+        if (current["status"]?.GetValue<string>() is "validated" or "cancelled" or "failed")
+        {
+            return current;
+        }
+        await Task.Delay(100);
+    }
+    throw new TimeoutException("A homologação assistida não terminou em 30 segundos.");
 }
 
 static LocatorDefinition LocatorForUi(string id, string displayName, string selector) =>
@@ -592,6 +806,7 @@ static async Task CheckProductionRecorderPipelineAsync(
 {
     var fixtureRoot = Path.Combine(repositoryRoot, "tests", "fixtures", "recorder-site");
     await using var fixture = RecorderFixtureServer.Start(fixtureRoot);
+    await using var crossOriginFixture = RecorderFixtureServer.Start(fixtureRoot);
     var extensionRoot = Path.Combine(
         repositoryRoot,
         "src",
@@ -608,7 +823,8 @@ static async Task CheckProductionRecorderPipelineAsync(
     await RecorderExtensionLifecycle.VerifyLoadedAsync(
         Path.Combine(extensionRoot, "build"),
         testRoot,
-        fixture.BaseUrl);
+        fixture.BaseUrl,
+        crossOriginFixture.BaseUrl);
     Check(true,
         "o Chromium carrega manifesto, service worker e side panel MV3 empacotados");
     var messages = await CaptureRecorderMessagesAsync(
@@ -1259,8 +1475,14 @@ static Process StartEditor(string editorDll, string projectRoot, string editorUr
     startInfo.ArgumentList.Add("--url");
     startInfo.ArgumentList.Add(editorUrl);
     startInfo.ArgumentList.Add("--no-open");
-    return Process.Start(startInfo)
+    startInfo.Environment["RPABLOCKLY_ASSISTED_HEADLESS"] = "1";
+    var process = Process.Start(startInfo)
         ?? throw new InvalidOperationException("Não foi possível iniciar o editor de teste.");
+    process.OutputDataReceived += (_, _) => { };
+    process.ErrorDataReceived += (_, _) => { };
+    process.BeginOutputReadLine();
+    process.BeginErrorReadLine();
+    return process;
 }
 
 static async Task WaitForEditorAsync(string editorUrl, Process process)
@@ -1272,8 +1494,7 @@ static async Task WaitForEditorAsync(string editorUrl, Process process)
         if (process.HasExited)
         {
             throw new InvalidOperationException(
-                "O editor encerrou antes de iniciar: " +
-                await process.StandardError.ReadToEndAsync());
+                $"O editor encerrou antes de iniciar com o código {process.ExitCode}.");
         }
         try
         {

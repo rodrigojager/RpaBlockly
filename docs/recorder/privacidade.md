@@ -39,8 +39,17 @@ organização. Remova evidências e uploads que não sejam necessários.
 ## Permissões do Chrome
 
 As permissões permanentes são limitadas a `activeTab`, `scripting`, `storage`,
-`downloads` e `sidePanel`. Acesso a hosts é opcional, solicitado por origem e por
-gesto do usuário. Não existe `<all_urls>` permanente.
+`downloads` e `sidePanel`. Quando o Chrome não expõe a URL pelo `activeTab`, o
+painel solicita `tabs` como permissão opcional para identificar a aba ativa. O
+código consulta somente essa aba. Sem evidências visuais, o gesto de iniciar
+solicita acesso às páginas `http://` e `https://` para atravessar origens. Com
+evidências, o painel solicita `<all_urls>` como permissão opcional porque a API
+`captureVisibleTab` do Chrome exige literalmente `<all_urls>` ou `activeTab`;
+`activeTab` não cobre a sessão depois de navegações. O Recorder continua
+rejeitando páginas fora de HTTP(S). A concessão feita pela sessão é registrada no
+estado local e retirada ao concluir, excluir ou encerrar com falha. Uma concessão
+que já existia antes da sessão não é removida. Não existe acesso permanente a
+hosts.
 
 Incidentes ou suspeitas devem incluir versão da extensão, horário, origem afetada
 e hash do bundle, nunca senhas, chaves de recuperação ou chaves privadas.

@@ -4,6 +4,7 @@ Comece pelo [README da raiz](../README.md). A documentação operacional da V2 �
 
 - [pacote operacional](v2/pacote-operacional.md): os três documentos, revisão e stores;
 - [editor Blockly](referencia-markdown/guia-editor-blockly.md): abrir, editar e resolver conflitos;
+- [diagrama da homologação assistida](diagramas/homologacao-assistida.drawio);
 - [catálogo de blocos](referencia-markdown/catalogo-de-blocos.md): 35 blocos e 32 ações;
 - [como adicionar um bloco](referencia-markdown/como-adicionar-bloco.md): sincronização contrato → runtime → editor;
 - [arquitetura e execução](referencia-markdown/arquitetura-e-execucao.md);

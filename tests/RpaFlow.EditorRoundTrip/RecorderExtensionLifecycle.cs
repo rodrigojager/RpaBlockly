@@ -8,7 +8,8 @@ internal static class RecorderExtensionLifecycle
     public static async Task VerifyLoadedAsync(
         string extensionBuildRoot,
         string testRoot,
-        string fixtureUrl)
+        string fixtureUrl,
+        string crossOriginFixtureUrl)
     {
         var profileRoot = Path.Combine(testRoot, "recorder-extension-profile");
         Directory.CreateDirectory(profileRoot);
@@ -72,6 +73,29 @@ internal static class RecorderExtensionLifecycle
             throw new InvalidOperationException(
                 "O side panel empacotado não abriu com os controles de consentimento.");
         }
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelector('#page-target')?.getAttribute('data-state') === 'blocked' && document.querySelector('#start')?.disabled === false && document.querySelector('#start')?.textContent === 'Conectar à página'");
+        await probe.BringToFrontAsync();
+        await extensionPage.EvaluateAsync(
+            """
+            async (urlText) => {
+                const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+                const url = new URL(urlText);
+                await chrome.storage.session.set({
+                    'rpablockly.recorder.target.v1': {
+                        tabId: tab.id,
+                        windowId: tab.windowId,
+                        url: url.href,
+                        origin: url.origin
+                    }
+                });
+            }
+            """,
+            fixtureUrl);
+        await extensionPage.BringToFrontAsync();
+        await probe.BringToFrontAsync();
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelector('#page-target')?.getAttribute('data-state') === 'ready' && document.querySelector('#start')?.disabled === false");
         var stateJson = await extensionPage.EvaluateAsync<string>(
             "async () => JSON.stringify(await chrome.runtime.sendMessage({ type: 'RECORDER_GET_STATE' }))");
         using var state = JsonDocument.Parse(stateJson);
@@ -89,18 +113,22 @@ internal static class RecorderExtensionLifecycle
                 string.Join("\n", browserErrors.Distinct(StringComparer.Ordinal)));
         }
         await context.CloseAsync();
-        await VerifyWorkflowAsync(extensionBuildRoot, testRoot, fixtureUrl);
+        await VerifyWorkflowAsync(
+            extensionBuildRoot,
+            testRoot,
+            fixtureUrl,
+            crossOriginFixtureUrl);
     }
 
     private static async Task VerifyWorkflowAsync(
         string extensionBuildRoot,
         string testRoot,
-        string fixtureUrl)
+        string fixtureUrl,
+        string crossOriginFixtureUrl)
     {
         var authorizedBuildRoot = await CreateAuthorizedBuildAsync(
             extensionBuildRoot,
-            testRoot,
-            new Uri(fixtureUrl).GetLeftPart(UriPartial.Authority));
+            testRoot);
         var profileRoot = Path.Combine(testRoot, "recorder-extension-workflow-profile");
         Directory.CreateDirectory(profileRoot);
         using var playwright = await Playwright.CreateAsync();
@@ -145,21 +173,77 @@ internal static class RecorderExtensionLifecycle
             $"chrome-extension://{extensionId}/sidepanel/index.html",
             new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await targetPage.BringToFrontAsync();
-        await extensionPage.Locator("#capture-screenshots").UncheckAsync();
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelector('#page-target')?.getAttribute('data-state') === 'ready' && document.querySelector('#start')?.disabled === false");
         await extensionPage.Locator("#privacy-accepted").CheckAsync();
         await extensionPage.Locator("#start").ClickAsync();
         await extensionPage.WaitForFunctionAsync(
-            "() => document.querySelector('#status')?.textContent === 'Gravando a origem autorizada.'");
+            "() => document.querySelector('#status')?.textContent === 'Gravando a navegação em páginas HTTP(S).'");
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelector('#recording-indicator')?.hidden === false && Number(document.querySelector('#step-count')?.textContent) >= 1");
+        await extensionPage.WaitForFunctionAsync(
+            "async () => { const response = await chrome.runtime.sendMessage({ type: 'RECORDER_GET_STATE' }); const capture = response.checkpoint?.evidenceCapture; return response.ok && (capture?.captured >= 1 || capture?.failed >= 1); }");
+        var initialCaptureJson = await extensionPage.EvaluateAsync<string>(
+            "async () => JSON.stringify((await chrome.runtime.sendMessage({ type: 'RECORDER_GET_STATE' })).checkpoint?.evidenceCapture)");
+        using (var initialCapture = JsonDocument.Parse(initialCaptureJson))
+        {
+            if (initialCapture.RootElement.GetProperty("captured").GetInt32() < 1)
+            {
+                var captureApiProbe = await extensionPage.EvaluateAsync<string>(
+                    "async () => { try { await chrome.tabs.captureVisibleTab(); return 'captura aceita'; } catch (error) { return String(error); } }");
+                throw new InvalidOperationException(
+                    $"A captura visual inicial falhou no Chrome: {initialCaptureJson}. API: {captureApiProbe}");
+            }
+        }
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelectorAll('#timeline .step-thumbnail:not([hidden])').length >= 1");
         await targetPage.Locator("#nome").FillAsync("Teste funcional do Recorder");
         await targetPage.Locator("#nome").PressAsync("Tab");
         await extensionPage.WaitForFunctionAsync(
             "async () => { const response = await chrome.runtime.sendMessage({ type: 'RECORDER_GET_STATE' }); return response.ok && response.checkpoint?.events?.length >= 2; }");
+        await extensionPage.WaitForFunctionAsync(
+            "() => Number(document.querySelector('#step-count')?.textContent) >= 2 && document.querySelectorAll('#timeline .step-card').length >= 2");
         await extensionPage.Locator("#pause").ClickAsync();
         await extensionPage.WaitForFunctionAsync(
             "() => document.querySelector('#status')?.textContent === 'Gravação pausada.'");
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelector('#recording-indicator')?.hidden === true");
         await extensionPage.Locator("#resume").ClickAsync();
         await extensionPage.WaitForFunctionAsync(
-            "() => document.querySelector('#status')?.textContent === 'Gravando a origem autorizada.'");
+            "() => document.querySelector('#status')?.textContent === 'Gravando a navegação em páginas HTTP(S).'");
+        await extensionPage.WaitForFunctionAsync(
+            "() => document.querySelector('#recording-indicator')?.hidden === false");
+        await targetPage.GotoAsync(
+            $"{crossOriginFixtureUrl}/index.html",
+            new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        var crossOriginJson = JsonSerializer.Serialize(crossOriginFixtureUrl);
+        await extensionPage.WaitForFunctionAsync(
+            $"async () => {{ const response = await chrome.runtime.sendMessage({{ type: 'RECORDER_GET_STATE' }}); return response.ok && response.checkpoint?.events?.some(event => event.type === 'navigation' && event.url.startsWith({crossOriginJson}) && event.unsupportedReason === undefined); }}");
+        await extensionPage.WaitForFunctionAsync(
+            """
+            async () => {
+                const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+                if (tab?.id === undefined) return false;
+                try {
+                    const response = await chrome.tabs.sendMessage(tab.id, {
+                        type: 'RECORDER_CONFIGURE_CONTENT',
+                        options: {
+                            captureScreenshots: true,
+                            captureSecrets: false,
+                            includeUploads: false
+                        }
+                    });
+                    return response?.ok === true;
+                } catch {
+                    return false;
+                }
+            }
+            """);
+        await targetPage.Locator("#dynamic-action").ClickAsync();
+        await extensionPage.WaitForFunctionAsync(
+            $"async () => {{ const response = await chrome.runtime.sendMessage({{ type: 'RECORDER_GET_STATE' }}); return response.ok && response.checkpoint?.events?.some(event => event.url.startsWith({crossOriginJson}) && event.target?.attributes?.['data-testid'] === 'dynamic-action'); }}");
+        await extensionPage.WaitForFunctionAsync(
+            "async () => { const response = await chrome.runtime.sendMessage({ type: 'RECORDER_GET_STATE' }); return response.ok && response.checkpoint?.evidenceCapture?.captured >= 2; }");
         var finalizeJson = await extensionPage.EvaluateAsync<string>(
             "async () => JSON.stringify(await chrome.runtime.sendMessage({ type: 'RECORDER_FINALIZE' }))");
         using var finalized = JsonDocument.Parse(finalizeJson);
@@ -193,8 +277,7 @@ internal static class RecorderExtensionLifecycle
 
     private static async Task<string> CreateAuthorizedBuildAsync(
         string extensionBuildRoot,
-        string testRoot,
-        string origin)
+        string testRoot)
     {
         var destination = Path.Combine(testRoot, "recorder-extension-authorized-build");
         foreach (var directory in Directory.EnumerateDirectories(extensionBuildRoot, "*", SearchOption.AllDirectories))
@@ -212,7 +295,9 @@ internal static class RecorderExtensionLifecycle
         var strictUtf8 = new UTF8Encoding(false, true);
         var manifest = JsonNode.Parse(strictUtf8.GetString(await File.ReadAllBytesAsync(manifestPath)))
             ?.AsObject() ?? throw new InvalidOperationException("Manifesto de teste inválido.");
-        manifest["host_permissions"] = new JsonArray(JsonValue.Create($"{origin}/*"));
+        manifest["host_permissions"] = new JsonArray(
+            JsonValue.Create("<all_urls>"));
+        manifest.Remove("optional_host_permissions");
         await File.WriteAllTextAsync(
             manifestPath,
             manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n",

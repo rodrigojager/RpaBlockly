@@ -148,6 +148,25 @@ button.secondary {
   min-height: 680px;
 }
 
+button.validation-launch {
+  background: #9f1239;
+}
+
+button.validation-launch:hover,
+button.danger:hover {
+  background: #881337;
+}
+
+button.danger {
+  background: #be123c;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
 .v2-layout {
   min-height: 620px;
 }
@@ -412,6 +431,259 @@ dialog::backdrop {
 .recorder-evidence { display: grid; min-height: 180px; place-items: center; overflow: hidden; border-radius: 0.55rem; color: #cbd5e1; background: #0f172a; }
 .recorder-evidence img { display: block; max-width: 100%; max-height: 420px; object-fit: contain; }
 
+.assisted-validation-shell {
+  gap: 1rem;
+}
+
+.assisted-runtime-state {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  color: #334155;
+  background: #f8fafc;
+}
+
+.assisted-runtime-state p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.assisted-runtime-state[data-status="running"],
+.assisted-runtime-state[data-status="starting"],
+.assisted-runtime-state[data-status="stopping"] {
+  border-color: #fb7185;
+  color: #9f1239;
+  background: #fff1f2;
+}
+
+.assisted-runtime-state[data-status="validated"] {
+  border-color: #34d399;
+  color: #065f46;
+  background: #ecfdf5;
+}
+
+.assisted-runtime-state[data-status="failed"] {
+  border-color: #f87171;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.assisted-recording-dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+[data-status="running"] .assisted-recording-dot,
+[data-status="starting"] .assisted-recording-dot,
+[data-status="stopping"] .assisted-recording-dot {
+  background: #e11d48;
+  box-shadow: 0 0 0 0 rgb(225 29 72 / 45%);
+  animation: assisted-pulse 1.2s infinite;
+}
+
+@keyframes assisted-pulse {
+  70% { box-shadow: 0 0 0 0.55rem rgb(225 29 72 / 0%); }
+  100% { box-shadow: 0 0 0 0 rgb(225 29 72 / 0%); }
+}
+
+.assisted-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.assisted-setup-grid > label:not(.assisted-check) {
+  display: grid;
+  gap: 0.35rem;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.assisted-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  color: #475569;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.assisted-check input {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  margin-top: 0.12rem;
+}
+
+.assisted-safety-confirmation {
+  padding: 0.75rem;
+  border: 1px solid #f59e0b;
+  border-radius: 0.55rem;
+  color: #78350f;
+  background: #fffbeb;
+}
+
+.assisted-actions {
+  border-top: 0;
+}
+
+.assisted-results-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.assisted-panel {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.assisted-panel h3 {
+  margin: 0;
+}
+
+.assisted-count {
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  color: #475569;
+  background: #e2e8f0;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.assisted-timeline {
+  display: grid;
+  gap: 0.6rem;
+  max-height: 28rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.assisted-step-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  background: #f8fafc;
+}
+
+.assisted-step-card[data-status="running"] {
+  border-color: #fb7185;
+  background: #fff1f2;
+}
+
+.assisted-step-card[data-status="completed"] {
+  border-color: #6ee7b7;
+  background: #ecfdf5;
+}
+
+.assisted-step-card[data-status="failed"] {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.assisted-step-marker {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.25rem;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+[data-status="running"] > .assisted-step-marker { background: #e11d48; }
+[data-status="completed"] > .assisted-step-marker { background: #059669; }
+[data-status="failed"] > .assisted-step-marker { background: #dc2626; }
+
+.assisted-step-card p {
+  margin: 0.2rem 0;
+  color: #64748b;
+  font: 0.72rem/1.35 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.assisted-step-card span,
+.assisted-step-card small {
+  display: block;
+  color: #475569;
+  font-size: 0.76rem;
+}
+
+.assisted-evidence-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  max-height: 28rem;
+  margin-top: 0.9rem;
+  overflow: auto;
+}
+
+.assisted-evidence-card {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: 0.65rem;
+  background: #0f172a;
+}
+
+.assisted-evidence-card[data-kind="failure"] {
+  border-color: #ef4444;
+}
+
+.assisted-evidence-card img,
+.assisted-evidence-loading {
+  display: block;
+  width: 100%;
+  height: 10rem;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.assisted-evidence-loading {
+  display: grid;
+  place-items: center;
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  cursor: default;
+}
+
+.assisted-evidence-card figcaption {
+  padding: 0.55rem;
+  overflow: hidden;
+  color: #e2e8f0;
+  font-size: 0.73rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assisted-empty {
+  margin: 0;
+  padding: 1rem;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
 h3 {
   margin: 0 0 0.8rem;
   font-size: 1rem;
@@ -518,6 +790,9 @@ textarea {
   .policy-grid,
   .recorder-review-grid,
   .recorder-options-grid,
+  .assisted-setup-grid,
+  .assisted-results-grid,
+  .assisted-evidence-gallery,
   .mapping-row,
   .variable-row,
   .new-variable-row {

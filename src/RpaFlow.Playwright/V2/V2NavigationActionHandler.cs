@@ -22,13 +22,7 @@ internal sealed class V2NavigationActionHandler : IV2FlowActionHandler
         switch (action.Type.ToLowerInvariant())
         {
             case "navigate":
-                await execution.Context.Page.GotoAsync(
-                    V2FlowValueResolver.ResolveRequired(action, execution.Context.Data),
-                    new PageGotoOptions
-                    {
-                        WaitUntil = WaitUntilState.DOMContentLoaded,
-                        Timeout = action.TimeoutMs
-                    });
+                await NavigateAsync(action, execution.Context);
                 return;
             case "click":
                 await ClickAsync(action, execution, cancellationToken);
@@ -54,6 +48,60 @@ internal sealed class V2NavigationActionHandler : IV2FlowActionHandler
             default:
                 throw new InvalidOperationException(
                     $"O handler V2 de navegação não interpreta '{action.Type}'.");
+        }
+    }
+
+    private static async Task NavigateAsync(
+        FlowActionDefinition action,
+        RpaContext context)
+    {
+        var url = V2FlowValueResolver.ResolveRequired(action, context.Data);
+        try
+        {
+            await context.Page.GotoAsync(
+                url,
+                new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = action.TimeoutMs
+                });
+        }
+        catch (TimeoutException)
+        {
+            if (!await HasUsableDocumentAsync(context.Page))
+            {
+                throw;
+            }
+
+            Console.WriteLine(
+                $"  A página de '{action.Name}' já está utilizável; " +
+                "a espera por DOMContentLoaded foi encerrada pelo limite de tempo.");
+        }
+    }
+
+    private static async Task<bool> HasUsableDocumentAsync(IPage page)
+    {
+        if (!Uri.TryCreate(page.Url, UriKind.Absolute, out var current) ||
+            current.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        try
+        {
+            return await page.EvaluateAsync<bool>(
+                """
+                () => Boolean(
+                  document.body &&
+                  (document.readyState === 'interactive' ||
+                   document.readyState === 'complete' ||
+                   document.body.childElementCount > 0 ||
+                   document.body.innerText.trim().length > 0))
+                """);
+        }
+        catch (PlaywrightException)
+        {
+            return false;
         }
     }
 

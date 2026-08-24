@@ -29,6 +29,12 @@ export function createCheckpoint(
     locale: navigatorLocale(),
     origin: safeOrigin,
     options: { ...options },
+    evidenceCapture: {
+      attempted: 0,
+      captured: 0,
+      skipped: 0,
+      failed: 0
+    },
     nextSequence: 1,
     events: [],
     resolvedIssueIds: [],

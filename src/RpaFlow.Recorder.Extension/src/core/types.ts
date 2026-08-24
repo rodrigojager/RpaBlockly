@@ -134,6 +134,25 @@ export interface RecorderOptions {
   recipientPublicKeyPem?: string;
 }
 
+export type EvidenceCaptureFailureStage =
+  | "prepare"
+  | "capture"
+  | "process"
+  | "store";
+
+export interface EvidenceCaptureStatus {
+  attempted: number;
+  captured: number;
+  skipped: number;
+  failed: number;
+  lastFailure?: {
+    eventId: string;
+    stage: EvidenceCaptureFailureStage;
+    message: string;
+    occurredAtUtc: string;
+  };
+}
+
 export interface EncryptedSecretEnvelope {
   schemaVersion: 1;
   reference: string;
@@ -156,6 +175,7 @@ export interface RecorderCheckpoint {
   locale: string;
   origin: string;
   options: RecorderOptions;
+  evidenceCapture?: EvidenceCaptureStatus;
   nextSequence: number;
   events: RawCaptureEvent[];
   resolvedIssueIds: string[];

@@ -20,6 +20,7 @@
 | [016](016-retencao-recorder.md) | Retenção de sessão e staging | Aceita |
 | [017](017-zip-seguro.md) | ZIP determinístico e seguro | Aceita |
 | [018](018-importacao-atomica.md) | Importação em duas fases | Aceita |
+| [019](019-homologacao-assistida.md) | Homologação assistida no editor | Aceita |
 
 O [threat model do Recorder](../recorder/threat-model.md) registra ativos,
 fronteiras e controles associados a essas decisões.

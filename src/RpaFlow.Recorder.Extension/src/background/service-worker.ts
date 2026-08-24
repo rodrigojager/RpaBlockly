@@ -2,13 +2,28 @@ import type { EvidenceMask } from "../../../../schemas/generated/contracts.js";
 import { RecorderCheckpointStore, ChromeSessionStorage } from "../core/checkpoint-store.js";
 import { stableId } from "../core/stable.js";
 import { createCheckpoint, transition } from "../core/state-machine.js";
-import type { RawCaptureEvent, RecorderCheckpoint } from "../core/types.js";
-import { ScreenshotRateLimiter, EvidenceStore, createEvidenceAsset } from "../evidence/evidence.js";
+import type {
+  EvidenceCaptureFailureStage,
+  RawCaptureEvent,
+  RecorderCheckpoint
+} from "../core/types.js";
+import {
+  ScreenshotRateLimiter,
+  EvidenceStore,
+  createEvidenceAsset,
+  maximumEvidenceItems
+} from "../evidence/evidence.js";
 import { generatePackage, assertFinalizable } from "../package/generator.js";
 import { validateGeneratedPackage } from "../package/validator.js";
 import { EncryptedSecretStore } from "../security/secret-store.js";
 import { encryptSecret, validateRecipientKey } from "../security/secrets.js";
-import { isRecorderRequest, type RecorderRequest, type RecorderResponse } from "../shared/messages.js";
+import {
+  isRecorderRequest,
+  type RecorderRequest,
+  type RecorderResponse,
+  type RecorderTarget,
+  type RecorderUiRefresh
+} from "../shared/messages.js";
 import { UploadStore } from "../uploads/upload-store.js";
 import { validateUploadTotals } from "../uploads/uploads.js";
 
@@ -17,7 +32,22 @@ const evidenceStore = new EvidenceStore();
 const secretStore = new EncryptedSecretStore();
 const uploadStore = new UploadStore();
 const screenshotLimiter = new ScreenshotRateLimiter();
-let queue = Promise.resolve();
+const recorderTargetKey = "rpablockly.recorder.target.v1";
+const temporaryOriginsKey = "rpablockly.recorder.temporary-origins.v1";
+const recorderHttpOrigins = ["http://*/*", "https://*/*"] as const;
+const recorderScreenshotOrigins = ["<all_urls>"] as const;
+let queue = cleanupOrphanedTemporaryPermissions().catch(() => undefined);
+
+type ScreenshotCaptureResult =
+  | { outcome: "captured" }
+  | { outcome: "skipped" }
+  | { outcome: "failed"; stage: EvidenceCaptureFailureStage; message: string };
+
+interface ScreenshotTarget {
+  tabId: number;
+  windowId: number;
+  frameId: number;
+}
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (!isRecorderRequest(message) || sender.id !== chrome.runtime.id) return false;
@@ -31,12 +61,15 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 });
 
 if (chrome.sidePanel !== undefined) {
-  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false })
     .catch(() => undefined);
   chrome.action.onClicked.addListener((tab) => {
-    if (tab.windowId !== undefined) {
-      void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
-    }
+    if (tab.id === undefined) return;
+    void chrome.sidePanel.open({ tabId: tab.id }).catch(() => undefined);
+    queue = queue
+      .then(async () => await rememberRecorderTarget(tab))
+      .then(async () => await notifyUiRefresh())
+      .catch(() => undefined);
   });
 }
 
@@ -67,6 +100,7 @@ chrome.tabs.onCreated.addListener((tab) => {
       events: [...checkpoint.events, event],
       lastCheckpointAtUtc: now.toISOString()
     });
+    await notifyUiRefresh();
   }).catch(() => undefined);
 });
 
@@ -77,23 +111,38 @@ chrome.tabs.onUpdated.addListener((changedTabId, changeInfo, tab) => {
     const checkpoint = await checkpointStore.load();
     if (checkpoint?.state !== "recording" ||
         !checkpoint.events.some((event) => event.tabId === tabId(changedTabId))) return;
-    const origin = new URL(updatedUrl).origin;
-    const permitted = await chrome.permissions.contains({ origins: [`${origin}/*`] });
+    const permitted = await chrome.permissions.contains({
+      origins: requiredRecorderOrigins(checkpoint.options)
+    });
     if (!permitted) {
       await appendBrowserEvent(checkpoint, changedTabId, updatedUrl, "unsupported", {
-        unsupportedCode: "CROSS_ORIGIN_FRAME_NOT_CAPTURED",
-        unsupportedReason: `A navegação mudou para a origem não autorizada ${origin}.`
+        unsupportedCode: "UNSUPPORTED_INTERACTION",
+        unsupportedReason: "A autorização HTTP(S) da sessão foi removida durante a gravação."
       });
+      await notifyUiRefresh();
       return;
     }
     const recent = [...checkpoint.events].reverse().find((event) => event.tabId === tabId(changedTabId));
+    let current = checkpoint;
+    let navigationEvent: RawCaptureEvent | undefined;
     if (recent?.type !== "navigation" || recent.url !== updatedUrl) {
-      await appendBrowserEvent(checkpoint, changedTabId, updatedUrl, "navigation", {
+      const appended = await appendBrowserEvent(checkpoint, changedTabId, updatedUrl, "navigation", {
         ...(recent?.type === "click" ? { causalEventId: recent.id } : {}),
         navigationKind: "traditional"
       });
+      current = appended?.checkpoint ?? checkpoint;
+      navigationEvent = appended?.event;
     }
-    await injectRecorder(changedTabId, checkpoint.options);
+    await injectRecorder(changedTabId, current.options);
+    if (current.options.captureScreenshots && navigationEvent !== undefined) {
+      await captureAndRecordScreenshot(
+        current,
+        navigationEvent,
+        navigationEvent.id,
+        { tabId: changedTabId, windowId: tab.windowId, frameId: 0 }
+      );
+    }
+    await notifyUiRefresh();
   }).catch(() => undefined);
 });
 
@@ -103,6 +152,11 @@ async function handleRequest(request: RecorderRequest, sender: chrome.runtime.Me
       {
         const checkpoint = await checkpointStore.load();
         return { ok: true, ...(checkpoint === undefined ? {} : { checkpoint }) };
+      }
+    case "RECORDER_GET_TARGET":
+      {
+        const target = await loadRecorderTarget();
+        return { ok: true, ...(target === undefined ? {} : { target }) };
       }
     case "RECORDER_START":
       return await start(request);
@@ -132,6 +186,45 @@ async function handleRequest(request: RecorderRequest, sender: chrome.runtime.Me
   }
 }
 
+async function rememberRecorderTarget(tab: chrome.tabs.Tab): Promise<void> {
+  const urlText = tab.url ?? tab.pendingUrl;
+  if (tab.id === undefined || urlText === undefined) {
+    await chrome.storage.session.remove(recorderTargetKey);
+    return;
+  }
+  let url: URL;
+  try {
+    url = new URL(urlText);
+  } catch {
+    await chrome.storage.session.remove(recorderTargetKey);
+    return;
+  }
+  if (!/^https?:$/u.test(url.protocol)) {
+    await chrome.storage.session.remove(recorderTargetKey);
+    return;
+  }
+  await chrome.storage.session.set({
+    [recorderTargetKey]: {
+      tabId: tab.id,
+      windowId: tab.windowId,
+      url: url.href,
+      origin: url.origin
+    } satisfies RecorderTarget
+  });
+}
+
+async function loadRecorderTarget(): Promise<RecorderTarget | undefined> {
+  const result = await chrome.storage.session.get(recorderTargetKey);
+  const value = result[recorderTargetKey];
+  if (value === null || typeof value !== "object") return undefined;
+  const candidate = value as Partial<RecorderTarget>;
+  if (!Number.isInteger(candidate.tabId) || !Number.isInteger(candidate.windowId) ||
+      typeof candidate.url !== "string" || typeof candidate.origin !== "string") {
+    return undefined;
+  }
+  return candidate as RecorderTarget;
+}
+
 async function start(request: Extract<RecorderRequest, { type: "RECORDER_START" }>): Promise<RecorderResponse> {
   const existing = await checkpointStore.load();
   if (existing !== undefined && !["completed", "failed"].includes(existing.state)) {
@@ -148,34 +241,72 @@ async function start(request: Extract<RecorderRequest, { type: "RECORDER_START" 
       pem: request.options.recipientPublicKeyPem
     });
   }
-  const requestedOrigins = { origins: [`${origin}/*`] };
-  if (!await chrome.permissions.contains(requestedOrigins)) {
-    throw new Error("A permissão para a origem ativa deve ser concedida pelo painel.");
+  if (!await chrome.permissions.contains({ origins: requiredRecorderOrigins(request.options) })) {
+    throw new Error(request.options.captureScreenshots
+      ? "Autorize a captura visual temporária pelo painel antes de iniciar."
+      : "Autorize a gravação em páginas HTTP(S) pelo painel antes de iniciar.");
   }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id === undefined || tab.url === undefined || new URL(tab.url).origin !== origin) {
-    throw new Error("A aba ativa não corresponde à origem autorizada.");
+  const temporaryOrigins = validateTemporaryOrigins(request.temporaryOrigins);
+  const tab = await chrome.tabs.get(request.tabId);
+  if (!tab.active || tab.url === undefined || new URL(tab.url).origin !== origin) {
+    throw new Error("A página escolhida deixou de ser a aba ativa ou mudou de origem.");
   }
-  await Promise.all([evidenceStore.clear(), secretStore.clear(), uploadStore.clear()]);
-  let checkpoint = createCheckpoint(request.name, origin, request.options);
-  checkpoint.acceptedPrivacyNotices = ["recorder-privacy-v1"];
-  checkpoint = transition(checkpoint, "recording");
-  const initial: RawCaptureEvent = {
-    id: stableId("event", checkpoint.sessionId, 1, "navigation", tab.url),
-    sequence: 1,
-    elapsedMs: 0,
-    capturedAtUtc: checkpoint.startedAtUtc,
-    tabId: tabId(tab.id),
-    frameId: frameId(tab.id, 0),
-    url: tab.url,
-    type: "navigation",
-    trusted: true,
-    navigationKind: "traditional"
-  };
-  checkpoint = { ...checkpoint, events: [initial], nextSequence: 2 };
-  await checkpointStore.save(checkpoint);
-  await injectRecorder(tab.id, request.options);
-  return { ok: true, checkpoint };
+  if (temporaryOrigins.length > 0) {
+    await chrome.storage.session.set({ [temporaryOriginsKey]: temporaryOrigins });
+  }
+  try {
+    await Promise.all([evidenceStore.clear(), secretStore.clear(), uploadStore.clear()]);
+    screenshotLimiter.reset();
+    let checkpoint = createCheckpoint(request.name, origin, request.options);
+    checkpoint.acceptedPrivacyNotices = ["recorder-privacy-v2"];
+    checkpoint = transition(checkpoint, "recording");
+    const initial: RawCaptureEvent = {
+      id: stableId("event", checkpoint.sessionId, 1, "navigation", tab.url),
+      sequence: 1,
+      elapsedMs: 0,
+      capturedAtUtc: checkpoint.startedAtUtc,
+      tabId: tabId(request.tabId),
+      frameId: frameId(request.tabId, 0),
+      url: tab.url,
+      type: "navigation",
+      trusted: true,
+      navigationKind: "traditional"
+    };
+    checkpoint = { ...checkpoint, events: [initial], nextSequence: 2 };
+    await injectRecorder(request.tabId, request.options);
+    await checkpointStore.save(checkpoint);
+    if (checkpoint.options.captureScreenshots) {
+      checkpoint = await captureAndRecordScreenshot(
+        checkpoint,
+        initial,
+        initial.id,
+        { tabId: request.tabId, windowId: tab.windowId, frameId: 0 }
+      );
+      await notifyUiRefresh();
+    }
+    return { ok: true, checkpoint };
+  } catch {
+    if (temporaryOrigins.length > 0) await releaseTemporaryPermissions();
+    throw new Error(
+      "Não foi possível ativar o gravador nesta página. Recarregue a aba e tente novamente."
+    );
+  }
+}
+
+function validateTemporaryOrigins(origins: string[]): string[] {
+  const unique = [...new Set(origins)];
+  const allowed = new Set<string>([...recorderHttpOrigins, ...recorderScreenshotOrigins]);
+  if (unique.length !== origins.length ||
+      unique.some((origin) => !allowed.has(origin))) {
+    throw new Error("A lista de permissões temporárias da sessão é inválida.");
+  }
+  return unique;
+}
+
+function requiredRecorderOrigins(options: RecorderCheckpoint["options"]): string[] {
+  return options.captureScreenshots
+    ? [...recorderScreenshotOrigins]
+    : [...recorderHttpOrigins];
 }
 
 async function injectRecorder(tab: number, options: RecorderCheckpoint["options"]): Promise<void> {
@@ -183,8 +314,10 @@ async function injectRecorder(tab: number, options: RecorderCheckpoint["options"
     target: { tabId: tab, allFrames: true },
     files: ["content/content-script.js"]
   });
-  await chrome.tabs.sendMessage(tab, { type: "RECORDER_CONFIGURE_CONTENT", options } satisfies RecorderRequest)
-    .catch(() => undefined);
+  await chrome.tabs.sendMessage(
+    tab,
+    { type: "RECORDER_CONFIGURE_CONTENT", options } satisfies RecorderRequest
+  );
 }
 
 async function appendCapturedEvent(
@@ -248,7 +381,7 @@ async function appendCapturedEvent(
       };
     }
   }
-  const updated: RecorderCheckpoint = {
+  let updated: RecorderCheckpoint = {
     ...checkpoint,
     nextSequence: checkpoint.nextSequence + 1,
     events: [...checkpoint.events, event],
@@ -256,7 +389,17 @@ async function appendCapturedEvent(
   };
   await checkpointStore.save(updated);
   if (updated.options.captureScreenshots && sender.tab.windowId !== undefined) {
-    await captureScreenshot(updated, event, request.event.id, sender).catch(() => undefined);
+    updated = await captureAndRecordScreenshot(
+      updated,
+      event,
+      request.event.id,
+      {
+        tabId: sender.tab.id,
+        windowId: sender.tab.windowId,
+        frameId: sender.frameId ?? 0
+      }
+    );
+    await notifyUiRefresh();
   }
   return { ok: true, checkpoint: updated };
 }
@@ -265,32 +408,142 @@ async function captureScreenshot(
   checkpoint: RecorderCheckpoint,
   event: RawCaptureEvent,
   sourceEventId: string,
-  sender: chrome.runtime.MessageSender
-): Promise<void> {
-  if (!screenshotLimiter.tryAcquire(Date.now()) || sender.tab?.id === undefined || sender.tab.windowId === undefined) return;
-  const currentTab = await chrome.tabs.get(sender.tab.id);
-  if (!currentTab.active || currentTab.windowId !== sender.tab.windowId) return;
+  target: ScreenshotTarget
+): Promise<ScreenshotCaptureResult> {
+  if (!screenshotLimiter.tryAcquire(Date.now())) return { outcome: "skipped" };
+  let currentTab: chrome.tabs.Tab;
+  try {
+    currentTab = await chrome.tabs.get(target.tabId);
+  } catch {
+    return screenshotFailure(
+      "capture",
+      "A aba deixou de existir antes da captura da evidência."
+    );
+  }
+  if (!currentTab.active || currentTab.windowId !== target.windowId) {
+    return { outcome: "skipped" };
+  }
   const generated = generatePackage(checkpoint.name, checkpoint.events, checkpoint.resolvedIssueIds);
   const intent = generated.intents.find((candidate) => candidate.eventIds.includes(event.id));
-  if (intent === undefined) return;
+  if (intent === undefined) return { outcome: "skipped" };
   let masks: EvidenceMask[] = [];
+  let prepared = false;
   try {
-    const response = await chrome.tabs.sendMessage(
-      sender.tab.id,
-      { type: "RECORDER_PREPARE_SCREENSHOT", eventId: sourceEventId } satisfies RecorderRequest,
-      { frameId: sender.frameId ?? 0 }
-    ) as { ok?: boolean; masks?: EvidenceMask[] };
-    masks = response.masks ?? [];
-    const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: "png" });
-    const asset = await createEvidenceAsset(dataUrl, event.id, intent.actionId, event.capturedAtUtc, masks);
-    if ((await evidenceStore.list()).length < 200) await evidenceStore.put(asset);
+    try {
+      const response = await chrome.tabs.sendMessage(
+        target.tabId,
+        { type: "RECORDER_PREPARE_SCREENSHOT", eventId: sourceEventId } satisfies RecorderRequest,
+        { frameId: target.frameId }
+      ) as { ok?: boolean; masks?: EvidenceMask[] };
+      if (response.ok !== true) {
+        return screenshotFailure(
+          "prepare",
+          "A página não confirmou a preparação das máscaras da evidência."
+        );
+      }
+      masks = response.masks ?? [];
+      prepared = true;
+    } catch {
+      return screenshotFailure(
+        "prepare",
+        "A página mudou antes de preparar as máscaras da evidência."
+      );
+    }
+    let dataUrl: string;
+    try {
+      dataUrl = await chrome.tabs.captureVisibleTab(target.windowId, { format: "png" });
+    } catch {
+      return screenshotFailure(
+        "capture",
+        "O Chrome recusou a captura da aba visível."
+      );
+    }
+    let asset: Awaited<ReturnType<typeof createEvidenceAsset>>;
+    try {
+      asset = await createEvidenceAsset(
+        dataUrl,
+        event.id,
+        intent.actionId,
+        event.capturedAtUtc,
+        masks
+      );
+    } catch {
+      return screenshotFailure(
+        "process",
+        "A imagem foi capturada, mas não pôde ser processada como evidência."
+      );
+    }
+    try {
+      if ((await evidenceStore.list()).length >= maximumEvidenceItems) {
+        return { outcome: "skipped" };
+      }
+      await evidenceStore.put(asset);
+    } catch {
+      return screenshotFailure(
+        "store",
+        "A imagem foi processada, mas não pôde ser salva no armazenamento local."
+      );
+    }
+    return { outcome: "captured" };
   } finally {
-    await chrome.tabs.sendMessage(
-      sender.tab.id,
-      { type: "RECORDER_CLEAR_SCREENSHOT", eventId: sourceEventId } satisfies RecorderRequest,
-      { frameId: sender.frameId ?? 0 }
-    ).catch(() => undefined);
+    if (prepared) {
+      await chrome.tabs.sendMessage(
+        target.tabId,
+        { type: "RECORDER_CLEAR_SCREENSHOT", eventId: sourceEventId } satisfies RecorderRequest,
+        { frameId: target.frameId }
+      ).catch(() => undefined);
+    }
   }
+}
+
+async function captureAndRecordScreenshot(
+  checkpoint: RecorderCheckpoint,
+  event: RawCaptureEvent,
+  sourceEventId: string,
+  target: ScreenshotTarget
+): Promise<RecorderCheckpoint> {
+  const result = await captureScreenshot(checkpoint, event, sourceEventId, target);
+  const evidenceCapture = checkpoint.evidenceCapture ?? {
+    attempted: 0,
+    captured: 0,
+    skipped: 0,
+    failed: 0
+  };
+  const updated: RecorderCheckpoint = {
+    ...checkpoint,
+    evidenceCapture: result.outcome === "captured"
+      ? {
+          ...evidenceCapture,
+          attempted: evidenceCapture.attempted + 1,
+          captured: evidenceCapture.captured + 1
+        }
+      : result.outcome === "failed"
+        ? {
+            ...evidenceCapture,
+            attempted: evidenceCapture.attempted + 1,
+            failed: evidenceCapture.failed + 1,
+            lastFailure: {
+              eventId: event.id,
+              stage: result.stage,
+              message: result.message,
+              occurredAtUtc: new Date().toISOString()
+            }
+          }
+        : {
+            ...evidenceCapture,
+            skipped: evidenceCapture.skipped + 1
+          },
+    lastCheckpointAtUtc: new Date().toISOString()
+  };
+  await checkpointStore.save(updated);
+  return updated;
+}
+
+function screenshotFailure(
+  stage: EvidenceCaptureFailureStage,
+  message: string
+): ScreenshotCaptureResult {
+  return { outcome: "failed", stage, message };
 }
 
 async function changeState(next: "paused" | "recording"): Promise<RecorderResponse> {
@@ -310,7 +563,12 @@ async function finalize(): Promise<RecorderResponse> {
 }
 
 async function complete(): Promise<RecorderResponse> {
-  const checkpoint = transition(await requireCheckpoint(), "completed");
+  const current = await requireCheckpoint();
+  if (current.state === "completed") {
+    await clearSession();
+    return { ok: true };
+  }
+  const checkpoint = transition(current, "completed");
   await checkpointStore.save(checkpoint);
   await clearSession();
   return { ok: true };
@@ -318,12 +576,17 @@ async function complete(): Promise<RecorderResponse> {
 
 async function fail(_reason: string): Promise<RecorderResponse> {
   const current = await requireCheckpoint();
+  if (current.state === "failed") {
+    await releaseTemporaryPermissions();
+    return { ok: true, checkpoint: current };
+  }
   if (current.state !== "finalizing" && current.state !== "recording" && current.state !== "paused") {
     return { ok: true, checkpoint: current };
   }
   const checkpoint = transition(current, "failed");
   await checkpointStore.save(checkpoint);
   await clearSensitiveStores();
+  await releaseTemporaryPermissions();
   return { ok: true, checkpoint };
 }
 
@@ -338,9 +601,36 @@ async function resolveIssue(issueId: string): Promise<RecorderResponse> {
 }
 
 async function clearSession(): Promise<void> {
+  await releaseTemporaryPermissions();
   await Promise.all([
     checkpointStore.clear(), evidenceStore.clear(), secretStore.clear(), uploadStore.clear()
   ]);
+}
+
+async function cleanupOrphanedTemporaryPermissions(): Promise<void> {
+  const checkpoint = await checkpointStore.load();
+  if (checkpoint === undefined || checkpoint.state === "completed" || checkpoint.state === "failed") {
+    await releaseTemporaryPermissions();
+  }
+}
+
+async function releaseTemporaryPermissions(): Promise<void> {
+  const stored = await chrome.storage.session.get(temporaryOriginsKey);
+  const raw = stored[temporaryOriginsKey];
+  const origins = Array.isArray(raw)
+    ? raw.filter((value): value is string =>
+      typeof value === "string" &&
+      new Set<string>([...recorderHttpOrigins, ...recorderScreenshotOrigins]).has(value))
+    : [];
+  if (origins.length === 0) {
+    await chrome.storage.session.remove(temporaryOriginsKey);
+    return;
+  }
+  const removed = await chrome.permissions.remove({ origins });
+  if (!removed && await chrome.permissions.contains({ origins })) {
+    throw new Error("Não foi possível retirar a autorização HTTP(S) temporária da sessão.");
+  }
+  await chrome.storage.session.remove(temporaryOriginsKey);
 }
 
 async function clearSensitiveStores(): Promise<void> {
@@ -371,13 +661,14 @@ async function appendBrowserEvent(
   url: string,
   type: RawCaptureEvent["type"],
   details: Partial<RawCaptureEvent>
-): Promise<void> {
+): Promise<{ checkpoint: RecorderCheckpoint; event: RawCaptureEvent } | undefined> {
   const now = new Date();
   if (elapsed(checkpoint, now) > 480 * 60 * 1_000) {
     const failed = transition(checkpoint, "failed");
     await checkpointStore.save(failed);
     await clearSensitiveStores();
-    return;
+    await releaseTemporaryPermissions();
+    return undefined;
   }
   const event: RawCaptureEvent = {
     id: stableId("event", checkpoint.sessionId, checkpoint.nextSequence, type, url),
@@ -391,10 +682,18 @@ async function appendBrowserEvent(
     trusted: true,
     ...details
   };
-  await checkpointStore.save({
+  const updated: RecorderCheckpoint = {
     ...checkpoint,
     nextSequence: checkpoint.nextSequence + 1,
     events: [...checkpoint.events, event],
     lastCheckpointAtUtc: now.toISOString()
-  });
+  };
+  await checkpointStore.save(updated);
+  return { checkpoint: updated, event };
+}
+
+async function notifyUiRefresh(): Promise<void> {
+  await chrome.runtime.sendMessage({
+    type: "RPABLOCKLY_RECORDER_REFRESH"
+  } satisfies RecorderUiRefresh).catch(() => undefined);
 }

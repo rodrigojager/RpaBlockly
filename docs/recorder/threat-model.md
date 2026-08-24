@@ -26,7 +26,7 @@
 | Segredo aparece em texto claro | captura opt-in, criptografia imediata, máscara e busca automatizada. |
 | Senha fraca protege a recuperação | mínimo de 12 caracteres com letras e números, PBKDF2-HMAC-SHA-256 com salt e 600.000 iterações e sugestão aleatória. |
 | Material de recuperação fica no estado | senha e chave de recuperação permanecem somente no painel; cópia confirmada antes da gravação; nenhuma delas entra em checkpoint ou bundle. |
-| Permissão excessiva | hosts opcionais por origem e gesto; sem `<all_urls>`. |
+| Permissão excessiva | nenhum host permanente; `<all_urls>` é opcional, solicitado somente por gesto quando screenshots estão ligados, limitado por código a HTTP(S), rastreado por sessão e retirado ao terminar. |
 | Suspensão duplica passos | checkpoint em `storage.session` e IDs determinísticos. |
 | ZIP adulterado | integridade por entrada antes do JSON. |
 | Zip Slip/Bomb/symlink | inspeção sem extração, limites e rejeição de paths/tipos. |

@@ -97,8 +97,8 @@ export async function buildBundle(input: BundleBuildInput): Promise<BuiltBundle>
     bundleVersion: 1,
     bundleId: input.bundleId,
     createdAtUtc: input.createdAtUtc,
-    recorderVersion: "1.0.0-rc.5",
-    generatorVersion: "1.0.0-rc.5",
+    recorderVersion: "1.0.0-rc.6",
+    generatorVersion: "1.0.0-rc.6",
     rpaPackageRoot: "package",
     schemas: {
       flow: 2, locators: 1, policy: 1, session: 1, evidence: 1, issues: 1, integrity: 1
@@ -149,10 +149,12 @@ export async function verifyBundleIntegrity(bytes: Uint8Array): Promise<void> {
 }
 
 function createSessionDocument(input: BundleBuildInput): RpaBlocklyRecorderSessionV1 {
-  const tabs = [...new Map(input.checkpoint.events.map((event) => [event.tabId, {
-    id: event.tabId,
-    initialUrl: event.url
-  }])).values()];
+  const tabs = [...input.checkpoint.events.reduce((result, event) => {
+    if (!result.has(event.tabId)) {
+      result.set(event.tabId, { id: event.tabId, initialUrl: event.url });
+    }
+    return result;
+  }, new Map<string, { id: string; initialUrl: string }>()).values()];
   const frames = [...new Map(input.checkpoint.events.map((event) => [event.frameId, {
     id: event.frameId,
     tabId: event.tabId,
@@ -174,7 +176,7 @@ function createSessionDocument(input: BundleBuildInput): RpaBlocklyRecorderSessi
       captureSecrets: input.checkpoint.options.captureSecrets,
       includeUploads: input.checkpoint.options.includeUploads
     },
-    origins: [input.checkpoint.origin],
+    origins: sessionOrigins(input.checkpoint),
     tabs,
     frames,
     eventCount: input.checkpoint.events.length,
@@ -188,6 +190,19 @@ function createSessionDocument(input: BundleBuildInput): RpaBlocklyRecorderSessi
     })),
     acceptedPrivacyNotices: input.checkpoint.acceptedPrivacyNotices
   };
+}
+
+function sessionOrigins(checkpoint: RecorderCheckpoint): string[] {
+  const origins = new Set<string>([checkpoint.origin]);
+  for (const event of checkpoint.events) {
+    try {
+      const url = new URL(event.url);
+      if (/^https?:$/u.test(url.protocol)) origins.add(url.origin);
+    } catch {
+      // A URL já será rejeitada pelo validador correspondente quando for inválida.
+    }
+  }
+  return [...origins];
 }
 
 function stripPrivateEventData(event: RecorderCheckpoint["events"][number]) {
