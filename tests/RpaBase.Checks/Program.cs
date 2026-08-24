@@ -8,7 +8,7 @@ using RpaFlow.Playwright.V2;
 
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var expectedActionTypes = FlowActionCatalog.SupportedTypes;
-Check(expectedActionTypes.Count == 32, "o catálogo oficial contém 32 tipos de ação");
+Check(expectedActionTypes.Count == 33, "o catálogo oficial contém 33 tipos de ação");
 
 var editorCatalogPath = Path.Combine(
     repositoryRoot,
@@ -30,8 +30,8 @@ var editorBlockTypes = calls
     .Append("rpa_subflow_definition")
     .ToHashSet(StringComparer.Ordinal);
 Check(editorActionTypes.SetEquals(expectedActionTypes),
-    "o editor cobre exatamente os 32 tipos do runtime");
-Check(editorBlockTypes.Count == 35, "o editor preserva os 35 blocos do baseline");
+    "o editor cobre exatamente os 33 tipos do runtime");
+Check(editorBlockTypes.Count == 36, "o editor preserva os 36 blocos do catálogo V2");
 
 var flowSchema = ReadStrict(Path.Combine(repositoryRoot, "schemas", "flow-v2.schema.json"));
 Check(!Regex.IsMatch(

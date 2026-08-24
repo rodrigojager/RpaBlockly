@@ -56,7 +56,7 @@ public sealed class AssistedExecutionService : IAsyncDisposable
         }
 
         var documents = DeserializeDocuments(request);
-        var boundary = FindLeafAction(documents.Flow, request.BoundaryActionId)
+        var boundary = FindExecutableAction(documents.Flow, request.BoundaryActionId)
             ?? throw new InvalidOperationException(
                 "O limite seguro deve apontar para uma ação-folha existente no rascunho.");
         documents.Policy.LocatorResilience.LearningWriteBack =
@@ -262,7 +262,7 @@ public sealed class AssistedExecutionService : IAsyncDisposable
             ?? throw new InvalidOperationException("A configuração local está vazia.");
     }
 
-    private static FlowActionDefinition? FindLeafAction(
+    private static FlowActionDefinition? FindExecutableAction(
         FlowDefinition flow,
         string actionId)
     {

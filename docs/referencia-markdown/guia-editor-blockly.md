@@ -16,7 +16,7 @@ pacote sem o header local. Arquivos estáticos não dependem de CDN.
 
 O editor abre uma revisão completa. A tela possui:
 
-- Blockly com 35 blocos;
+- Blockly com 36 blocos;
 - JSON gerado do fluxo;
 - catálogo pesquisável por locator ID ou nome amigável;
 - drawer de locator com candidatos, receitas, fingerprints, origem e ordem;
@@ -92,6 +92,6 @@ editor não copia credenciais para nenhum documento do pacote.
 
 ## Verificação
 
-`RpaFlow.EditorRoundTrip` abre uma cópia temporária, instancia os 35 blocos, testa
+`RpaFlow.EditorRoundTrip` abre uma cópia temporária, instancia os 36 blocos, testa
 busca/picker/policy, executa homologação com screenshot, limite e cancelamento,
 publica por todas as APIs e comprova CAS e round-trip.

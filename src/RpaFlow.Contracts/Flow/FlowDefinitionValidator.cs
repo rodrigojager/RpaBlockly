@@ -404,6 +404,7 @@ public static class FlowDefinitionValidator
                 }
                 break;
             case "closepage":
+            case "completeauthenticationattempt":
                 break;
             case "download":
                 ValidateDownload(action, prefix, errors);

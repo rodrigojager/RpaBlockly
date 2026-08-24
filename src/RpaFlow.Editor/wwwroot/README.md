@@ -5,8 +5,8 @@ CDN. O frontend abre uma revisão de pacote recebida do microservidor e mantém
 os três documentos operacionais no estado da sessão.
 
 Os módulos em `v2/` separam boot, estado, API, catálogo de ações, toolbox,
-serialização, validação, campo de referência e drawers de locators/policy. Os 35
-blocos representam os 32 tipos de ação; blocos web persistem somente
+serialização, validação, campo de referência e drawers de locators/policy. Os 36
+blocos representam os 33 tipos de ação; blocos web persistem somente
 `locatorId` e cardinalidade, nunca uma receita ou seletor bruto.
 
 O workspace exportado preserva a disposição visual. A execução usa apenas o

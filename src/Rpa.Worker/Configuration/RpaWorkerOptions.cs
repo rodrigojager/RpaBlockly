@@ -25,6 +25,10 @@ public sealed class RpaWorkerOptions
 
     public int RetryDelaySeconds { get; set; } = 60;
 
+    public int OperationalHeartbeatSeconds { get; set; } = 30;
+
+    public string GlobalExecutionLockName { get; set; } = "Rpa.Worker.PollingGlobal";
+
     public WorkerStorageOptions Storage { get; set; } = new();
 
     public WorkerTableOptions Tables { get; set; } = new();
@@ -96,6 +100,8 @@ public sealed class WorkerTableOptions
     public string Artifacts { get; set; } = "Artifact";
 
     public string Events { get; set; } = "ExecutionEvent";
+
+    public string Workers { get; set; } = "WorkerState";
 }
 
 public sealed class RpaDefinitionOptions
@@ -113,6 +119,14 @@ public sealed class RpaDefinitionOptions
     public string? SafeValidationBoundaryActionId { get; set; }
 
     public List<string> IrreversibleActionIds { get; set; } = [];
+
+    public List<string> AuthenticationAttemptActionIds { get; set; } = [];
+
+    public List<string> AuthenticationFailureActionIds { get; set; } = [];
+
+    public List<string> MfaAttemptActionIds { get; set; } = [];
+
+    public List<string> MfaFailureActionIds { get; set; } = [];
 
     public List<OutputMappingOptions> Outputs { get; set; } = [];
 

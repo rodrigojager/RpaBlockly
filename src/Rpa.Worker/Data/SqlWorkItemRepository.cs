@@ -19,6 +19,7 @@ public sealed class SqlWorkItemRepository(
     private readonly string _outputs = Quote(options.Tables.Schema, options.Tables.Outputs);
     private readonly string _artifacts = Quote(options.Tables.Schema, options.Tables.Artifacts);
     private readonly string _events = Quote(options.Tables.Schema, options.Tables.Events);
+    private readonly string _workers = Quote(options.Tables.Schema, options.Tables.Workers);
 
     public async Task<RpaWorkItem?> ClaimNextAsync(CancellationToken cancellationToken)
     {
@@ -41,12 +42,39 @@ public sealed class SqlWorkItemRepository(
             ", ",
             enabledCodes.Select((_, index) => $"@rpa{index}"));
         var sql = $"""
+            DECLARE @Recovered TABLE (WorkItemId uniqueidentifier NOT NULL);
+
+            UPDATE {_workItems}
+               SET Status = CASE WHEN AttemptCount < MaxAttempts THEN N'Retry' ELSE N'Failed' END,
+                   AvailableAtUtc = CASE WHEN AttemptCount < MaxAttempts
+                       THEN DATEADD(SECOND, @retryDelaySeconds, SYSUTCDATETIME())
+                       ELSE AvailableAtUtc END,
+                   LeaseOwner = NULL,
+                   LeaseExpiresAtUtc = NULL,
+                   ErrorType = N'LEASE_EXPIRADO',
+                   ErrorMessage = N'A execução anterior perdeu o heartbeat e foi recuperada automaticamente.',
+                   UpdatedAtUtc = SYSUTCDATETIME()
+            OUTPUT inserted.WorkItemId INTO @Recovered(WorkItemId)
+             WHERE Status = N'Running'
+               AND LeaseExpiresAtUtc < SYSUTCDATETIME();
+
+            UPDATE execution
+               SET Status = N'Failed',
+                   ErrorType = N'LEASE_EXPIRADO',
+                   ErrorMessage = N'A execução perdeu o heartbeat.',
+                   CompletedAtUtc = SYSUTCDATETIME()
+              FROM {_executions} AS execution
+              INNER JOIN @Recovered AS recovered
+                      ON recovered.WorkItemId = execution.WorkItemId
+             WHERE execution.Status = N'Running';
+
             ;WITH Candidate AS
             (
                 SELECT TOP (1) *
                 FROM {_workItems} WITH (UPDLOCK, READPAST, ROWLOCK)
                 WHERE Status IN (N'Pending', N'Retry')
                   AND AvailableAtUtc <= SYSUTCDATETIME()
+                  AND AttemptCount < MaxAttempts
                   AND (LeaseExpiresAtUtc IS NULL OR LeaseExpiresAtUtc < SYSUTCDATETIME())
                   AND RpaCode IN ({codeParameters})
                 ORDER BY Priority DESC, CreatedAtUtc, WorkItemId
@@ -70,6 +98,7 @@ public sealed class SqlWorkItemRepository(
         await using var command = new SqlCommand(sql, connection, (SqlTransaction)transaction);
         command.Parameters.AddWithValue("@workerId", _options.WorkerId);
         command.Parameters.AddWithValue("@leaseSeconds", _options.LeaseSeconds);
+        command.Parameters.AddWithValue("@retryDelaySeconds", _options.RetryDelaySeconds);
         for (var index = 0; index < enabledCodes.Length; index++)
         {
             command.Parameters.AddWithValue($"@rpa{index}", enabledCodes[index]);
@@ -237,14 +266,14 @@ public sealed class SqlWorkItemRepository(
     public async Task FailAsync(
         string executionId,
         RpaWorkItem workItem,
-        Exception exception,
-        bool allowRetry,
+        WorkerFailureDecision decision,
         CancellationToken cancellationToken)
     {
-        var shouldRetry = allowRetry && workItem.AttemptCount < workItem.MaxAttempts;
+        var shouldRetry = decision.Retry &&
+            (decision.PreserveAttempt || workItem.AttemptCount < workItem.MaxAttempts);
         var status = shouldRetry ? "Retry" : "Failed";
-        var errorType = exception.GetType().Name;
-        var errorMessage = Limit(exception.Message, 2000);
+        var errorType = Limit(decision.ErrorCode, 200);
+        var errorMessage = Limit(decision.Message, 2000);
         var sql = $"""
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
@@ -258,11 +287,17 @@ public sealed class SqlWorkItemRepository(
                    END,
                    LeaseOwner = NULL,
                    LeaseExpiresAtUtc = NULL,
+                   AttemptCount = CASE
+                       WHEN @preserveAttempt = 1 AND AttemptCount > 0 THEN AttemptCount - 1
+                       ELSE AttemptCount END,
                    ErrorType = @errorType,
                    ErrorMessage = @errorMessage,
                    UpdatedAtUtc = SYSUTCDATETIME()
              WHERE WorkItemId = @workItemId
                AND LeaseOwner = @workerId;
+
+            IF @@ROWCOUNT <> 1
+                THROW 51000, 'O item não pertence mais a este worker.', 1;
 
             UPDATE {_executions}
                SET Status = N'Failed',
@@ -279,6 +314,7 @@ public sealed class SqlWorkItemRepository(
             {
                 command.Parameters.AddWithValue("@status", status);
                 command.Parameters.AddWithValue("@shouldRetry", shouldRetry);
+                command.Parameters.AddWithValue("@preserveAttempt", decision.PreserveAttempt);
                 command.Parameters.AddWithValue("@retryDelaySeconds", _options.RetryDelaySeconds);
                 command.Parameters.AddWithValue("@errorType", errorType);
                 command.Parameters.AddWithValue("@errorMessage", errorMessage);
@@ -287,6 +323,90 @@ public sealed class SqlWorkItemRepository(
                 command.Parameters.AddWithValue("@executionId", executionId);
             },
             cancellationToken);
+    }
+
+    public async Task ValidateSchemaAsync(CancellationToken cancellationToken)
+    {
+        var sql = $"""
+            SELECT MissingName
+            FROM (VALUES
+                (N'{_workItems}', CASE WHEN OBJECT_ID(N'{_workItems}', N'U') IS NULL THEN 1 ELSE 0 END),
+                (N'{_executions}', CASE WHEN OBJECT_ID(N'{_executions}', N'U') IS NULL THEN 1 ELSE 0 END),
+                (N'{_outputs}', CASE WHEN OBJECT_ID(N'{_outputs}', N'U') IS NULL THEN 1 ELSE 0 END),
+                (N'{_artifacts}', CASE WHEN OBJECT_ID(N'{_artifacts}', N'U') IS NULL THEN 1 ELSE 0 END),
+                (N'{_events}', CASE WHEN OBJECT_ID(N'{_events}', N'U') IS NULL THEN 1 ELSE 0 END),
+                (N'{_workers}', CASE WHEN OBJECT_ID(N'{_workers}', N'U') IS NULL THEN 1 ELSE 0 END)
+            ) required(MissingName, Missing)
+            WHERE Missing = 1;
+            """;
+        var missing = new List<string>();
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new SqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) missing.Add(reader.GetString(0));
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                "O banco não possui as tabelas exigidas pelo worker: " + string.Join(", ", missing) + ".");
+    }
+
+    public Task RecordWorkerHeartbeatAsync(
+        WorkerOperationalHeartbeat heartbeat,
+        CancellationToken cancellationToken)
+    {
+        var sql = $"""
+            MERGE {_workers} WITH (HOLDLOCK) AS target
+            USING (SELECT @instanceId AS InstanceId) AS source
+               ON target.InstanceId = source.InstanceId
+            WHEN MATCHED THEN UPDATE SET
+                WorkerId=@workerId, HostName=@hostName, ProcessId=@processId,
+                Status=@status, Ready=@ready, AcceptingClaims=@acceptingClaims,
+                ExecutionEnabled=@executionEnabled, LeadershipAcquired=@leadershipAcquired,
+                PollingHealthy=@pollingHealthy, ActiveExecutions=@activeExecutions,
+                MaximumParallelism=@maximumParallelism, AvailableExecutionSlots=@availableSlots,
+                LeadershipHeartbeatAtUtc=@leadershipHeartbeat, PollingHeartbeatAtUtc=@pollingHeartbeat,
+                LastPollingSuccessAtUtc=@lastPollingSuccess, NextPollingAtUtc=@nextPolling,
+                LastFailureAtUtc=@lastFailure, LastFailureType=@lastFailureType,
+                Finalized=@finalized, FinalizedAtUtc=CASE WHEN @finalized=1 THEN SYSUTCDATETIME() ELSE NULL END,
+                UpdatedAtUtc=SYSUTCDATETIME()
+            WHEN NOT MATCHED THEN INSERT
+                (InstanceId, WorkerId, HostName, ProcessId, Status, Ready, AcceptingClaims,
+                 ExecutionEnabled, LeadershipAcquired, PollingHealthy, ActiveExecutions,
+                 MaximumParallelism, AvailableExecutionSlots, StartedAtUtc,
+                 LeadershipHeartbeatAtUtc, PollingHeartbeatAtUtc, LastPollingSuccessAtUtc,
+                 NextPollingAtUtc, LastFailureAtUtc, LastFailureType, Finalized,
+                 FinalizedAtUtc, UpdatedAtUtc)
+            VALUES
+                (@instanceId,@workerId,@hostName,@processId,@status,@ready,@acceptingClaims,
+                 @executionEnabled,@leadershipAcquired,@pollingHealthy,@activeExecutions,
+                 @maximumParallelism,@availableSlots,@startedAt,@leadershipHeartbeat,
+                 @pollingHeartbeat,@lastPollingSuccess,@nextPolling,@lastFailure,@lastFailureType,
+                 @finalized,CASE WHEN @finalized=1 THEN SYSUTCDATETIME() ELSE NULL END,SYSUTCDATETIME());
+            """;
+        return ExecuteAsync(sql, command =>
+        {
+            command.Parameters.AddWithValue("@instanceId", heartbeat.InstanceId);
+            command.Parameters.AddWithValue("@workerId", heartbeat.WorkerId);
+            command.Parameters.AddWithValue("@hostName", heartbeat.HostName);
+            command.Parameters.AddWithValue("@processId", heartbeat.ProcessId);
+            command.Parameters.AddWithValue("@status", heartbeat.Status);
+            command.Parameters.AddWithValue("@ready", heartbeat.Ready);
+            command.Parameters.AddWithValue("@acceptingClaims", heartbeat.AcceptingClaims);
+            command.Parameters.AddWithValue("@executionEnabled", heartbeat.ExecutionEnabled);
+            command.Parameters.AddWithValue("@leadershipAcquired", heartbeat.LeadershipAcquired);
+            command.Parameters.AddWithValue("@pollingHealthy", heartbeat.PollingHealthy);
+            command.Parameters.AddWithValue("@activeExecutions", heartbeat.ActiveExecutions);
+            command.Parameters.AddWithValue("@maximumParallelism", heartbeat.MaximumParallelism);
+            command.Parameters.AddWithValue("@availableSlots", heartbeat.AvailableExecutionSlots);
+            command.Parameters.AddWithValue("@startedAt", heartbeat.StartedAtUtc);
+            command.Parameters.AddWithValue("@leadershipHeartbeat", DbValue(heartbeat.LeadershipHeartbeatAtUtc));
+            command.Parameters.AddWithValue("@pollingHeartbeat", DbValue(heartbeat.PollingHeartbeatAtUtc));
+            command.Parameters.AddWithValue("@lastPollingSuccess", DbValue(heartbeat.LastPollingSuccessAtUtc));
+            command.Parameters.AddWithValue("@nextPolling", DbValue(heartbeat.NextPollingAtUtc));
+            command.Parameters.AddWithValue("@lastFailure", DbValue(heartbeat.LastFailureAtUtc));
+            command.Parameters.AddWithValue("@lastFailureType", DbValue(heartbeat.LastFailureType));
+            command.Parameters.AddWithValue("@finalized", heartbeat.Finalized);
+        }, cancellationToken);
     }
 
     public async Task SaveOutputsAsync(

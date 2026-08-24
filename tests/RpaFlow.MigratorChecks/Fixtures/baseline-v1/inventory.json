@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baselineCommit": "03b74fe2197ad7651f4ba05ec5819efa9787f194",
-  "actionCount": 32,
+  "actionCount": 33,
   "actionCoverage": [
     {
       "actionType": "captureTimestamp",
@@ -27,6 +27,11 @@
       "actionType": "closePage",
       "family": "navigation",
       "fixture": "navigation.json"
+    },
+    {
+      "actionType": "completeAuthenticationAttempt",
+      "family": "data-artifact",
+      "fixture": "data-artifact.json"
     },
     {
       "actionType": "download",

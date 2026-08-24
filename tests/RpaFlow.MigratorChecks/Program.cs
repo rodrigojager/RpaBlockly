@@ -72,7 +72,7 @@ var migratedTypes = Enumerate(catalogMigration.Documents.Flow.Actions)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 Check(
     migratedTypes.SetEquals(FlowActionCatalog.SupportedTypes),
-    "a fixture agregada cobre mecanicamente os 32 tipos do catálogo");
+    "a fixture agregada cobre mecanicamente os 33 tipos do catálogo");
 
 ValidateVersionedBaseline(repositoryRoot);
 
@@ -379,7 +379,7 @@ static void WriteBaselineFixtures(string repositoryRoot)
     }
 
     WriteJson(
-        Path.Combine(fixtureDirectory, "aggregate-32.json"),
+        Path.Combine(fixtureDirectory, "aggregate-33.json"),
         CreateCatalogFixture());
     var actionToFamily = families
         .SelectMany(pair => pair.Value.Select(actionType => new
@@ -451,7 +451,7 @@ static void ValidateVersionedBaseline(string repositoryRoot)
 
     Check(
         coveredTypes.SetEquals(FlowActionCatalog.SupportedTypes),
-        "goldens V1 sanitizados por família cobrem os 32 tipos e migram para pacote válido");
+        "goldens V1 sanitizados por família cobrem os 33 tipos e migram para pacote válido");
 }
 
 static IReadOnlyDictionary<string, string[]> ActionFamilies() =>
@@ -471,8 +471,8 @@ static IReadOnlyDictionary<string, string[]> ActionFamilies() =>
         ["data-artifact"] =
         [
             "fail", "transformPath", "captureTimestamp", "waitForOneTimeCode",
-            "setVariable", "readElement", "readElements", "download", "screenshot",
-            "safeFinalConfirmation"
+            "completeAuthenticationAttempt", "setVariable", "readElement",
+            "readElements", "download", "screenshot", "safeFinalConfirmation"
         ],
         ["control"] = ["if", "repeat", "forEach", "runSubflow"]
     };

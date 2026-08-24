@@ -32,7 +32,7 @@ e testes concordam.
 - cobertura V1/V2 do migrador quando aplicável;
 - ausência de acesso direto a `Page.Locator` fora do compilador.
 
-Execute `tools/Run-Checks.ps1`. A suíte falha se os 32 tipos do catálogo e os
+Execute `tools/Run-Checks.ps1`. A suíte falha se os 33 tipos do catálogo e os
 blocos/handlers deixarem de coincidir ou se os tipos TypeScript estiverem defasados.
 
 Mudança incompatível não reutiliza uma versão de schema existente: crie nova

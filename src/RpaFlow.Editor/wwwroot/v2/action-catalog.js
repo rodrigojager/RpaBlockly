@@ -19,6 +19,7 @@ export const actionCatalog = [
   entry("transformPath", "rpa_transform_path", "Transformar caminho", "Dados e controle", []),
   entry("captureTimestamp", "rpa_capture_timestamp", "Capturar instante", "Dados e controle", []),
   entry("waitForOneTimeCode", "rpa_wait_one_time_code", "Aguardar código de uso único", "Esperas", []),
+  entry("completeAuthenticationAttempt", "rpa_complete_authentication_attempt", "Concluir tentativa de autenticação", "Dados e controle", []),
   entry("setVariable", "rpa_set_variable", "Definir variável", "Dados e controle", []),
   entry("readElement", "rpa_read_element", "Ler elemento", "Leitura", ["target"]),
   entry("readElements", "rpa_read_elements", "Ler elementos", "Leitura", ["target"]),

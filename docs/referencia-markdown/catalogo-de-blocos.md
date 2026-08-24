@@ -1,6 +1,6 @@
 # Catálogo de blocos V2
 
-O catálogo compilado possui 32 tipos de ação e 35 blocos. `download` e `if` têm
+O catálogo compilado possui 33 tipos de ação e 36 blocos. `download` e `if` têm
 duas variantes visuais; `rpa_subflow_definition` não é uma ação.
 
 | Bloco | Ação | Locators | Observação |
@@ -25,6 +25,7 @@ duas variantes visuais; `rpa_subflow_definition` não é uma ação.
 | `rpa_transform_path` | `transformPath` | — | Transforma caminho e grava `output`. |
 | `rpa_capture_timestamp` | `captureTimestamp` | — | Instante UTC em `runtime.*`. |
 | `rpa_wait_one_time_code` | `waitForOneTimeCode` | — | Provider, janela e polling obrigatórios. |
+| `rpa_complete_authentication_attempt` | `completeAuthenticationAttempt` | — | Marcador idempotente que libera somente a cerca de retry do login. |
 | `rpa_set_variable` | `setVariable` | — | Valor em `runtime.*`. |
 | `rpa_read_element` | `readElement` | target | value/text/checked/attribute. |
 | `rpa_read_elements` | `readElements` | target many | Coleção limitada em `runtime.*`. |

@@ -93,6 +93,7 @@
             "typeAcrossInputs", "clickAndSwitchPage", "upload", "waitStable",
             "preserveOrFill", "select2", "fillMaskedCurrency", "fail",
             "transformPath", "captureTimestamp", "waitForOneTimeCode",
+            "completeAuthenticationAttempt",
             "setVariable", "readElement", "readElements", "switchPage",
             "closePage", "download", "screenshot", "safeFinalConfirmation",
             "if", "repeat", "forEach", "runSubflow"

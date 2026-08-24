@@ -11,12 +11,13 @@ var expectedTypes = new HashSet<string>(
     "setChecked", "pressKey", "typeSequentially", "typeAcrossInputs",
     "clickAndSwitchPage", "upload", "waitStable", "preserveOrFill", "select2",
     "fillMaskedCurrency", "fail", "transformPath", "captureTimestamp",
-    "waitForOneTimeCode", "setVariable", "readElement", "readElements",
+    "waitForOneTimeCode", "completeAuthenticationAttempt", "setVariable",
+    "readElement", "readElements",
     "switchPage", "closePage", "download", "screenshot",
     "safeFinalConfirmation", "if", "repeat", "forEach", "runSubflow"
 ], StringComparer.OrdinalIgnoreCase);
 Check(expectedTypes.SetEquals(FlowActionCatalog.SupportedTypes),
-    "a matriz V2 cobre exatamente os 32 tipos V1");
+    "a matriz V2 cobre exatamente os 33 tipos do catálogo");
 
 foreach (var schema in new[]
          {

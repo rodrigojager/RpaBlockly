@@ -11,6 +11,11 @@ Baseline: commit `03b74fe2197ad7651f4ba05ec5819efa9787f194`.
 - worker com claim individual e paralelismo independente;
 - editor com persistência UTF-8 estrita, temporário e backup.
 
+O catálogo operacional atual acrescenta o marcador idempotente
+`completeAuthenticationAttempt` para a cerca de repetição do login. Por isso, a
+verificação de compatibilidade exercita 33 tipos de ação e o editor atual possui
+36 blocos, sem alterar a semântica dos 32 tipos do commit de baseline.
+
 ## Fonte versionada do inventário
 
 O inventário executável fica em
@@ -20,7 +25,7 @@ V1 e registra os checks observáveis do baseline. Assim, a documentação não m
 uma segunda lista manual sujeita a divergência.
 
 As fixtures `navigation.json`, `form.json`, `data-artifact.json`, `control.json` e
-`aggregate-32.json` são sanitizadas, validadas como V1 e migradas para um pacote
+`aggregate-33.json` são sanitizadas, validadas como V1 e migradas para um pacote
 V2 válido em todo check. Para atualizar deliberadamente esse baseline:
 
 ```powershell

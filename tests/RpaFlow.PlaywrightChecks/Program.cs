@@ -1177,7 +1177,7 @@ static async Task CheckV2FlowExecutorAsync(
     if (!supported.SetEquals(FlowActionCatalog.SupportedTypes))
     {
         throw new InvalidOperationException(
-            "Os handlers V2 não cobrem exatamente os 32 tipos do catálogo.");
+            "Os handlers V2 não cobrem exatamente os 33 tipos do catálogo.");
     }
 
 

@@ -33,6 +33,12 @@ public static class RpaWorkerOptionsValidator
         RequireRange(options.HeartbeatSeconds, 5, 3600, "HeartbeatSeconds", errors);
         RequireRange(options.CaseTimeoutMinutes, 1, 1440, "CaseTimeoutMinutes", errors);
         RequireRange(options.RetryDelaySeconds, 1, 86400, "RetryDelaySeconds", errors);
+        RequireRange(
+            options.OperationalHeartbeatSeconds,
+            5,
+            3600,
+            "OperationalHeartbeatSeconds",
+            errors);
         if (options.HeartbeatSeconds >= options.LeaseSeconds)
         {
             errors.Add("HeartbeatSeconds deve ser menor que LeaseSeconds.");
@@ -43,12 +49,19 @@ public static class RpaWorkerOptionsValidator
             errors.Add("WorkerId é obrigatório.");
         }
 
+        if (string.IsNullOrWhiteSpace(options.GlobalExecutionLockName) ||
+            options.GlobalExecutionLockName.Length > 255)
+        {
+            errors.Add("GlobalExecutionLockName deve possuir entre 1 e 255 caracteres.");
+        }
+
         ValidateSqlIdentifier(options.Tables.Schema, "Tables.Schema", errors);
         ValidateSqlIdentifier(options.Tables.WorkItems, "Tables.WorkItems", errors);
         ValidateSqlIdentifier(options.Tables.Executions, "Tables.Executions", errors);
         ValidateSqlIdentifier(options.Tables.Outputs, "Tables.Outputs", errors);
         ValidateSqlIdentifier(options.Tables.Artifacts, "Tables.Artifacts", errors);
         ValidateSqlIdentifier(options.Tables.Events, "Tables.Events", errors);
+        ValidateSqlIdentifier(options.Tables.Workers, "Tables.Workers", errors);
         if (options.EmailReader is null)
         {
             errors.Add("EmailReader é obrigatório.");
@@ -153,6 +166,28 @@ public static class RpaWorkerOptionsValidator
                         $"Definitions.{code}.IrreversibleActionIds referencia a ação inexistente '{actionId}'.");
                 }
             }
+
+
+            ValidateConfiguredActionIds(
+                code,
+                nameof(definition.AuthenticationAttemptActionIds),
+                definition.AuthenticationAttemptActionIds,
+                knownIds);
+            ValidateConfiguredActionIds(
+                code,
+                nameof(definition.AuthenticationFailureActionIds),
+                definition.AuthenticationFailureActionIds,
+                knownIds);
+            ValidateConfiguredActionIds(
+                code,
+                nameof(definition.MfaAttemptActionIds),
+                definition.MfaAttemptActionIds,
+                knownIds);
+            ValidateConfiguredActionIds(
+                code,
+                nameof(definition.MfaFailureActionIds),
+                definition.MfaFailureActionIds,
+                knownIds);
 
             ValidateSafeValidationBoundary(code, definition, actions);
 
@@ -353,6 +388,15 @@ public static class RpaWorkerOptionsValidator
                 $"A definição '{code}' usa código de uso único por e-mail e exige " +
                 "RpaWorker:MaxParallelism igual a 1 para não correlacionar mensagens entre casos.");
         }
+
+        if (definition.ClaimEnabled &&
+            aliases.Count > 0 &&
+            !definition.MfaAttemptActionIds.Any(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            throw new InvalidOperationException(
+                $"A definição '{code}' usa código de uso único e precisa declarar " +
+                "MfaAttemptActionIds para impedir repetição automática do MFA.");
+        }
     }
 
     private static void ValidateSensitiveMappings(
@@ -372,6 +416,22 @@ public static class RpaWorkerOptionsValidator
                 throw new InvalidOperationException(
                     $"Definitions.{code}.{mapping.Kind}.{mapping.Name}.Source não pode mapear " +
                     $"'{mapping.Source}', pois contém o código temporário de '{sensitiveTarget}'.");
+            }
+        }
+    }
+
+    private static void ValidateConfiguredActionIds(
+        string code,
+        string property,
+        IEnumerable<string> configuredActionIds,
+        IReadOnlySet<string> knownIds)
+    {
+        foreach (var actionId in configuredActionIds)
+        {
+            if (string.IsNullOrWhiteSpace(actionId) || !knownIds.Contains(actionId.Trim()))
+            {
+                throw new InvalidOperationException(
+                    $"Definitions.{code}.{property} referencia a ação inexistente '{actionId}'.");
             }
         }
     }

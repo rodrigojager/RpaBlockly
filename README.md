@@ -63,7 +63,7 @@ Git e adiciona o projeto à solução. O package store inicial permanece com o I
 `rpa-template`; altere `Runtime.RpaId` e `rpa.editor.json` juntos se quiser outro
 ID e publique o pacote sob esse ID.
 
-No editor, os 35 blocos cobrem os 32 tipos de ação. O pacote é aberto por revisão;
+No editor, os 36 blocos cobrem os 33 tipos de ação. O pacote é aberto por revisão;
 salvar publica os três documentos atomicamente. Conflito de revisão nunca
 sobrescreve alterações silenciosamente.
 
@@ -144,9 +144,14 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj -- --validate-only
 Migrations em ordem:
 
 1. `database/sqlserver/001_create_worker_schema.sql` — fila e histórico;
-2. `003_create_rpa_package_store.sql` — revisões e documentos do pacote;
-3. `004_add_execution_package_revision.sql` — revisão/hash na execução;
-4. `005_add_locator_diagnostics.sql` — diagnóstico do resolver.
+2. `database/sqlserver/003_worker_resilience.sql` — liderança, heartbeat operacional e recuperação de leases;
+3. `003_create_rpa_package_store.sql` — revisões e documentos do pacote;
+4. `004_add_execution_package_revision.sql` — revisão/hash na execução;
+5. `005_add_locator_diagnostics.sql` — diagnóstico do resolver.
+
+Antes de habilitar claims, confira `RpaWorker.Tables`, configure cada definição,
+informe o limite seguro e os IDs irreversíveis, mantenha
+`ExecutionMode=SafeValidation` e defina `Enabled=true` por último.
 
 `002_enqueue_example.sql` é apenas uma carga inofensiva de exemplo. Providers de
 pacote suportados pelo worker: `File` e `SqlServer`. A conexão e credenciais de

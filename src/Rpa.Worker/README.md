@@ -1,10 +1,14 @@
 # Worker genérico
 
-Worker SQL Server para executar qualquer definição desta base. Ele gerencia polling, claim atômico, lease, heartbeat, timeout, retry, histórico, eventos, outputs, artefatos e storage state por `SessionKey`. Cada caso carrega um snapshot imutável do pacote V2 antes da primeira ação e registra revisão e hash usados.
+Worker SQL Server para executar qualquer definição desta base. Ele gerencia polling resiliente, claim atômico, lease, heartbeat, timeout, retry, liderança recuperável, health checks, histórico, eventos, outputs, artefatos e storage state por `SessionKey`. Cada caso carrega um snapshot imutável do pacote V2 antes da primeira ação e registra revisão e hash usados.
 
 O worker também inclui um `IOneTimeCodeProvider` para Outlook/Microsoft 365. A implementação consulta e-mails pelo Microsoft Graph; ela não depende do Outlook aberto e não altera as mensagens.
 
 O fluxo Blockly nunca consulta a fila. Ele recebe um `FlowExecutionRequest` já isolado e devolve `runtime`.
+
+O host HTTP expõe `/health/live` e `/health/ready` e pode ser publicado no IIS ou executado como serviço do Windows. Uma falha transitória de banco deixa a prontidão degradada e é repetida sem encerrar o processo. A trava global usa `sp_getapplock` por sessão e é readquirida com backoff.
+
+Para autenticação, configure por definição os IDs de tentativa e de rejeição. O bloco genérico `completeAuthenticationAttempt` não faz login: ele marca que o roteiro comprovou sucesso e libera apenas a cerca de retry de login. A cerca de MFA continua independente.
 
 ## Configurar
 

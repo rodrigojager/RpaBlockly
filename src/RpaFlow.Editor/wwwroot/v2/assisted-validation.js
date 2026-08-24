@@ -61,7 +61,7 @@ export function initializeAssistedValidation({
   function renderBoundaries() {
     const selected = boundary.value;
     boundary.replaceChildren();
-    const actions = leafActions(documents().flow);
+    const actions = executableActions(documents().flow);
     for (const action of actions) {
       const option = document.createElement("option");
       option.value = action.id;
@@ -293,7 +293,7 @@ export function initializeAssistedValidation({
   return { open, renderBoundaries };
 }
 
-function leafActions(flow) {
+function executableActions(flow) {
   const result = [];
   let position = 0;
   const visit = (actions, prefix) => {

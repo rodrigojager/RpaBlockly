@@ -30,8 +30,7 @@ public interface IWorkItemExecutionRepository
     Task FailAsync(
         string executionId,
         RpaWorkItem workItem,
-        Exception exception,
-        bool allowRetry,
+        WorkerFailureDecision decision,
         CancellationToken cancellationToken);
 
     Task SaveOutputsAsync(

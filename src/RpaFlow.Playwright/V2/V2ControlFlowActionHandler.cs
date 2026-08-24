@@ -10,7 +10,7 @@ internal sealed class V2ControlFlowActionHandler : IV2FlowActionHandler
     public IReadOnlySet<string> SupportedTypes { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "if", "repeat", "forEach", "runSubflow"
+            "completeAuthenticationAttempt", "if", "repeat", "forEach", "runSubflow"
         };
 
     public async Task ExecuteAsync(
@@ -20,6 +20,9 @@ internal sealed class V2ControlFlowActionHandler : IV2FlowActionHandler
     {
         switch (action.Type.ToLowerInvariant())
         {
+            case "completeauthenticationattempt":
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
             case "if":
                 var result = await V2ConditionEvaluator.EvaluateAsync(
                     action.Condition!,

@@ -52,6 +52,17 @@
       "ElseActions": []
     },
     {
+      "Id": "catalogo-completeauthenticationattempt",
+      "Type": "completeAuthenticationAttempt",
+      "Name": "completeAuthenticationAttempt",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
       "Id": "catalogo-setvariable",
       "Type": "setVariable",
       "Name": "setVariable",

@@ -41,7 +41,7 @@ try
     {
         await WaitForEditorAsync(editorUrl, editor);
         await CheckAssistedExecutionApiAsync(editorUrl);
-        await CheckBrowserRoundTripAsync(editorUrl, testRoot);
+        await CheckBrowserRoundTripAsync(editorUrl, testRoot, repositoryRoot);
         await CheckAssistedCancellationApiAsync(editorUrl);
         await CheckAssistedFailureApiAsync(editorUrl);
         await CheckAtomicPackageApiAsync(editorUrl);
@@ -146,7 +146,10 @@ static async Task PrepareProjectAsync(string repositoryRoot, string testRoot)
         utf8);
 }
 
-static async Task CheckBrowserRoundTripAsync(string editorUrl, string testRoot)
+static async Task CheckBrowserRoundTripAsync(
+    string editorUrl,
+    string testRoot,
+    string repositoryRoot)
 {
     using var playwright = await Playwright.CreateAsync();
     await using var browser = await playwright.Chromium.LaunchAsync(
@@ -192,13 +195,46 @@ static async Task CheckBrowserRoundTripAsync(string editorUrl, string testRoot)
         V2JsonSerializer.Serialize(roundTrip) == V2JsonSerializer.Serialize(snapshot.Flow),
         "abrir e exportar preserva a semântica do fluxo V2");
 
+    var authenticationMarker = V2JsonSerializer.Deserialize<FlowDefinition>(
+        await File.ReadAllTextAsync(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "RpaFlow.EditorRoundTrip",
+            "Fixtures",
+            "complete-authentication-attempt.valid.json")),
+        "fixture do marcador de autenticação");
+    var authenticationMarkerPackageJson = JsonSerializer.Serialize(
+        new
+        {
+            flow = authenticationMarker,
+            locators = snapshot.Locators,
+            policy = snapshot.Policy
+        },
+        V2JsonSerializer.WriteOptions);
+    var authenticationMarkerRoundTripJson = await page.EvaluateAsync<string>(
+        """
+        json => {
+          const value = JSON.parse(json);
+          return JSON.stringify(window.RpaFlowEditorTesting.roundTrip(
+            value.flow, value.locators, value.policy));
+        }
+        """,
+        authenticationMarkerPackageJson);
+    var authenticationMarkerRoundTrip = V2JsonSerializer.Deserialize<FlowDefinition>(
+        authenticationMarkerRoundTripJson,
+        "round-trip do marcador de autenticação");
+    Check(
+        V2JsonSerializer.Serialize(authenticationMarkerRoundTrip) ==
+        V2JsonSerializer.Serialize(authenticationMarker),
+        "o editor V2 preserva o marcador de conclusão da tentativa de autenticação");
+
     var blocksJson = await page.EvaluateAsync<string>(
         "() => JSON.stringify(window.RpaFlowEditorTesting.instantiateAllBlocks())");
     var blocks = JsonSerializer.Deserialize<BlockInspection[]>(
         blocksJson,
         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-    Check(blocks.Length == 35 && blocks.Select(item => item.Type).Distinct().Count() == 35,
-        "a toolbox V2 instancia os 35 blocos do baseline");
+    Check(blocks.Length == 36 && blocks.Select(item => item.Type).Distinct().Count() == 36,
+        "a toolbox V2 instancia os 36 blocos do catálogo");
     Check(blocks.SelectMany(item => item.Fields).All(field =>
         !field.Contains("SELECTOR", StringComparison.OrdinalIgnoreCase) &&
         !field.Equals("SCOPE", StringComparison.OrdinalIgnoreCase)),
@@ -1596,12 +1632,12 @@ file sealed class RecorderWorkerRepository : IWorkItemExecutionRepository
     public Task FailAsync(
         string executionId,
         RpaWorkItem workItem,
-        Exception exception,
-        bool allowRetry,
+        WorkerFailureDecision decision,
         CancellationToken cancellationToken)
     {
-        Failure = exception;
-        Status = allowRetry && workItem.AttemptCount < workItem.MaxAttempts
+        Failure = new InvalidOperationException(decision.Message);
+        Status = decision.Retry &&
+                 (decision.PreserveAttempt || workItem.AttemptCount < workItem.MaxAttempts)
             ? "Retry"
             : "Failed";
         return Task.CompletedTask;

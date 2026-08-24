@@ -15,6 +15,7 @@ Tabelas padrão:
 | `rpa.ExecutionOutput` | outputs nomeados extraídos de `runtime.*`. |
 | `rpa.Artifact` | caminho, tamanho e SHA-256 de arquivo existente. |
 | `rpa.ExecutionEvent` | eventos de runtime e resolução de locator. |
+| `rpa.WorkerState` | heartbeat operacional, liderança, polling, capacidade e encerramento. |
 | `rpa.RpaPackageRevision` | metadados imutáveis de cada revisão. |
 | `rpa.RpaPackageDocument` | os três JSONs de uma revisão. |
 | `rpa.RpaPackageCurrent` | ponteiro atual por RPA. |
@@ -39,7 +40,9 @@ policy solicita write-back overlay.
 
 ## Migrations
 
-Execute `001`, `003`, `004` e `005` em ordem, com SQLCMD e os mesmos nomes de
+Execute `001_create_worker_schema.sql`, `003_worker_resilience.sql`,
+`003_create_rpa_package_store.sql`, `004_add_execution_package_revision.sql` e
+`005_add_locator_diagnostics.sql` em ordem, com SQLCMD e os mesmos nomes de
 schema/tabelas configurados no worker. `002` apenas insere exemplo.
 
 ## Retry e isolamento
@@ -47,6 +50,23 @@ schema/tabelas configurados no worker. `002` apenas insere exemplo.
 Falhas transitórias podem ser marcadas retryable. O guard existente registra
 efeito irreversível concluído e impede retry automático depois desse ponto. Uma
 publicação concorrente não muda a revisão de uma execução já iniciada.
+
+Uma trava global por sessão SQL impede duas instâncias de consumir a mesma
+implantação. Se a conexão ou a trava cair, os claims são suspensos, as execuções
+da sessão são canceladas de forma controlada e o host tenta readquirir a liderança
+com backoff. Falhas de banco no polling degradam a prontidão, mas não encerram o
+processo. Leases vencidos são recuperados automaticamente no ciclo seguinte.
+
+`/health/live` confirma que o processo HTTP responde. `/health/ready` também
+exige validação, liderança e polling recentes; `acceptingClaims` informa
+separadamente se existe vaga imediata. A tabela configurada em `Tables.Workers`
+recebe o heartbeat operacional persistente.
+
+Quando uma ação declarada em `AuthenticationAttemptActionIds` começa, uma falha
+anterior ao marcador `completeAuthenticationAttempt` não repete o login
+automaticamente. Depois do marcador, uma instabilidade transitória pode consumir
+a próxima tentativa. MFA permanece cercado separadamente por
+`MfaAttemptActionIds`.
 
 ## Segredos
 
