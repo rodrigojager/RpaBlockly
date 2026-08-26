@@ -18,6 +18,7 @@ import {
 import { EncryptedSecretStore } from "../security/secret-store.js";
 import {
   isRecorderUiRefresh,
+  type RecorderAccessNotice,
   type RecorderRequest,
   type RecorderResponse,
   type RecorderTarget
@@ -27,11 +28,10 @@ import { hydrateUploads, UploadStore } from "../uploads/upload-store.js";
 const evidenceStore = new EvidenceStore();
 const secretStore = new EncryptedSecretStore();
 const uploadStore = new UploadStore();
-const recorderHttpOrigins = ["http://*/*", "https://*/*"];
-const recorderScreenshotOrigins = ["<all_urls>"];
 const slideshowObjectUrls: string[] = [];
 const timelineObjectUrls: string[] = [];
 const downloadObjectUrls: string[] = [];
+const continuousHostOrigins = ["<all_urls>"];
 let evidence: EvidenceAsset[] = [];
 let evidenceIndex = 0;
 let exportCancelled = false;
@@ -59,6 +59,7 @@ const pageTarget = element<HTMLDivElement>("page-target");
 const pageTargetIcon = element<HTMLSpanElement>("page-target-icon");
 const pageTargetTitle = element<HTMLElement>("page-target-title");
 const pageTargetDetail = element<HTMLElement>("page-target-detail");
+const restoreAccessButton = element<HTMLButtonElement>("restore-access");
 const secretToggle = element<HTMLInputElement>("capture-secrets");
 const secretOptions = element<HTMLDivElement>("secret-options");
 const simpleSecretOptions = element<HTMLDivElement>("simple-secret-options");
@@ -71,6 +72,7 @@ const exportProgress = element<HTMLProgressElement>("export-progress");
 const exportMessage = element<HTMLParagraphElement>("export-message");
 
 element<HTMLButtonElement>("start").addEventListener("click", () => void start().catch(showError));
+restoreAccessButton.addEventListener("click", () => void restoreBroadAccess().catch(showError));
 element<HTMLButtonElement>("pause").addEventListener("click", () => void invokeAndRender({ type: "RECORDER_PAUSE" }));
 element<HTMLButtonElement>("resume").addEventListener("click", () => void invokeAndRender({ type: "RECORDER_RESUME" }));
 element<HTMLButtonElement>("cancel").addEventListener("click", () => void cancel());
@@ -127,39 +129,29 @@ async function start(): Promise<void> {
     setStatus("Confirme o aviso de privacidade antes de iniciar.", true);
     return;
   }
-  if (currentTarget === undefined) {
-    await connectToActiveTab();
-    return;
-  }
-  await refreshActiveTarget();
-  const target = currentTarget;
-  if (target === undefined) {
-    setStatus("A aba ativa mudou. Clique novamente em Conectar à página.", true);
-    return;
-  }
   startInProgress = true;
   syncControls();
   const startButton = element<HTMLButtonElement>("start");
   startButton.textContent = "Iniciando…";
   startButton.setAttribute("aria-busy", "true");
-  setStatus("Preparando a gravação com navegação entre páginas HTTP(S)…");
-  let temporaryOrigins: string[] = [];
-  let sessionStarted = false;
+  setStatus("Solicitando acesso contínuo às páginas HTTP(S)…");
   try {
-    const captureScreenshots = element<HTMLInputElement>("capture-screenshots").checked;
-    const requestedOriginValues = captureScreenshots
-      ? recorderScreenshotOrigins
-      : recorderHttpOrigins;
-    const requestedOrigins = { origins: [...requestedOriginValues] };
-    const alreadyGranted = await chrome.permissions.contains(requestedOrigins);
-    const granted = alreadyGranted
-      ? true
-      : await chrome.permissions.request(requestedOrigins);
+    const granted = await chrome.permissions.request({ origins: continuousHostOrigins });
     if (!granted) {
-      setStatus("A autorização para gravar a navegação entre páginas HTTP(S) não foi concedida.", true);
+      setStatus(
+        "O Recorder precisa do acesso amplo para acompanhar mudanças de site sem interromper a gravação.",
+        true
+      );
       return;
     }
-    temporaryOrigins = alreadyGranted ? [] : [...requestedOriginValues];
+    await refreshActiveTarget();
+    const target = currentTarget;
+    if (target === undefined) {
+      setStatus("Abra uma página HTTP(S) em uma aba normal e tente iniciar novamente.", true);
+      return;
+    }
+    setStatus("Ativando a gravação contínua na página escolhida…");
+    const captureScreenshots = element<HTMLInputElement>("capture-screenshots").checked;
     const captureSecrets = secretToggle.checked;
     let recipientOptions: Pick<RecorderOptions, "recipientKeyId" | "recipientPublicKeyPem"> = {};
     if (captureSecrets && element<HTMLInputElement>("secret-mode-simple").checked) {
@@ -193,44 +185,31 @@ async function start(): Promise<void> {
       name: element<HTMLInputElement>("session-name").value.trim() || "Nova gravação",
       tabId: target.tabId,
       origin: target.origin,
-      options,
-      temporaryOrigins
+      options
     });
-    sessionStarted = true;
     await render(response.checkpoint);
   } finally {
-    if (!sessionStarted && temporaryOrigins.length > 0) {
-      await chrome.permissions.remove({ origins: temporaryOrigins }).catch(() => false);
-    }
     startInProgress = false;
     startButton.removeAttribute("aria-busy");
     syncControls();
   }
 }
 
-async function connectToActiveTab(): Promise<void> {
-  startInProgress = true;
-  syncControls();
-  const startButton = element<HTMLButtonElement>("start");
-  startButton.textContent = "Conectando…";
-  startButton.setAttribute("aria-busy", "true");
-  setStatus("O Chrome precisa autorizar a identificação da aba ativa.");
+async function restoreBroadAccess(): Promise<void> {
+  restoreAccessButton.disabled = true;
+  setStatus("Solicitando novamente o acesso contínuo às páginas HTTP(S)…");
   try {
-    const granted = await chrome.permissions.request({ permissions: ["tabs"] });
+    const granted = await chrome.permissions.request({ origins: continuousHostOrigins });
     if (!granted) {
-      setStatus("Sem essa autorização, o Recorder não consegue identificar a página ativa.", true);
+      setStatus("O acesso não foi concedido; a sessão continua pausada para não perder ações.", true);
       return;
     }
+    const response = await send({ type: "RECORDER_RECONNECT" });
+    await render(response.checkpoint);
     await refreshActiveTarget();
-    if (currentTarget === undefined) {
-      setStatus("O Chrome ainda não informou uma aba HTTP(S) ativa.", true);
-      return;
-    }
-    setStatus("Página identificada. Clique em Iniciar para começar a gravação.");
+    setStatus("Acesso restaurado. Clique em Retomar quando estiver pronto para continuar.");
   } finally {
-    startInProgress = false;
-    startButton.removeAttribute("aria-busy");
-    syncControls();
+    restoreAccessButton.disabled = false;
   }
 }
 
@@ -309,6 +288,7 @@ async function invokeAndRender(request: RecorderRequest): Promise<void> {
   try {
     const response = await send(request);
     await render(response.checkpoint);
+    await refreshActiveTarget();
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Operação indisponível.", true);
   }
@@ -341,12 +321,6 @@ async function render(checkpoint: RecorderCheckpoint | undefined): Promise<void>
     return;
   }
   const packagePreview = generated!;
-  setPageTarget(
-    "ready",
-    "Navegação HTTP(S) autorizada para esta sessão",
-    pageLabel(checkpoint.events.at(-1)?.url ?? checkpoint.origin),
-    "✓"
-  );
   updateRecordingFeedback(checkpoint, packagePreview.intents);
   renderEvidenceCaptureStatus(checkpoint, loadedEvidence.length);
   renderIssues(packagePreview.issues);
@@ -532,12 +506,18 @@ function scheduleCheckpointRender(checkpoint: RecorderCheckpoint): void {
 async function refreshRecorderUi(): Promise<void> {
   const response = await send({ type: "RECORDER_GET_STATE" });
   await render(response.checkpoint);
-  if (response.checkpoint === undefined) await refreshActiveTarget();
+  await refreshActiveTarget();
 }
 
 async function refreshActiveTarget(): Promise<void> {
   if (currentCheckpoint !== undefined) {
     targetChecking = false;
+    const response = await send({ type: "RECORDER_GET_TARGET" });
+    if (response.accessNotice !== undefined) {
+      renderAccessNotice(response.accessNotice, currentCheckpoint.state);
+      syncControls();
+      return;
+    }
     setPageTarget(
       "ready",
       "Navegação HTTP(S) autorizada para esta sessão",
@@ -574,7 +554,7 @@ async function refreshActiveTarget(): Promise<void> {
           : "O Chrome ainda não liberou os dados desta aba",
         tab?.id === undefined
           ? "Abra um site HTTP(S) em uma aba normal do navegador."
-          : "Clique em Conectar à página e autorize o acesso opcional às informações da aba.",
+          : "Clique em Iniciar e autorize o acesso às páginas HTTP(S).",
         "!"
       );
       return;
@@ -613,6 +593,27 @@ async function refreshActiveTarget(): Promise<void> {
   }
 }
 
+function renderAccessNotice(
+  notice: RecorderAccessNotice,
+  state: RecorderCheckpoint["state"]
+): void {
+  setPageTarget(
+    "blocked",
+    "Acesso amplo precisa ser concedido novamente",
+    `${pageLabel(notice.url)} — ${accessRecoveryInstruction()}`,
+    "!"
+  );
+  restoreAccessButton.hidden = false;
+  setStatus(
+    `${state === "recording" ? "A gravação foi interrompida" : "A sessão está pausada"} para não perder ações. ${accessRecoveryInstruction()}`,
+    true
+  );
+}
+
+function accessRecoveryInstruction(): string {
+  return "Clique em Restabelecer acesso amplo; depois retome a sessão.";
+}
+
 function setPageTarget(
   state: "checking" | "ready" | "blocked",
   title: string,
@@ -623,6 +624,7 @@ function setPageTarget(
   pageTargetTitle.textContent = title;
   pageTargetDetail.textContent = detail;
   pageTargetIcon.textContent = icon;
+  restoreAccessButton.hidden = true;
 }
 
 function syncControls(): void {
@@ -632,9 +634,7 @@ function syncControls(): void {
     currentCheckpoint === undefined && !targetChecking && !startInProgress
   );
   if (!startInProgress) {
-    element<HTMLButtonElement>("start").textContent = currentTarget === undefined
-      ? "Conectar à página"
-      : "Iniciar";
+    element<HTMLButtonElement>("start").textContent = "Iniciar";
   }
   setEnabled("pause", state === "recording");
   setEnabled("resume", state === "paused");
@@ -677,8 +677,14 @@ function friendlyIntentTitle(intent: NormalizedIntent, events: RawCaptureEvent[]
       return quotedTarget === undefined
         ? "Abrir uma nova página"
         : `Abrir nova página por ${quotedTarget}`;
+    case "switchPage":
+      return `Trocar para ${pageLabel(intent.url)}`;
+    case "closePage":
+      return "Fechar a página atual";
     case "upload":
       return quotedTarget === undefined ? "Selecionar um arquivo" : `Selecionar arquivo em ${quotedTarget}`;
+    case "download":
+      return quotedTarget === undefined ? "Baixar um arquivo" : `Baixar arquivo por ${quotedTarget}`;
   }
 }
 

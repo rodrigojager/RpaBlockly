@@ -74,7 +74,7 @@ internal static class RecorderExtensionLifecycle
                 "O side panel empacotado não abriu com os controles de consentimento.");
         }
         await extensionPage.WaitForFunctionAsync(
-            "() => document.querySelector('#page-target')?.getAttribute('data-state') === 'blocked' && document.querySelector('#start')?.disabled === false && document.querySelector('#start')?.textContent === 'Conectar à página'");
+            "() => document.querySelector('#page-target')?.getAttribute('data-state') === 'blocked' && document.querySelector('#start')?.disabled === false && document.querySelector('#start')?.textContent === 'Iniciar'");
         await probe.BringToFrontAsync();
         await extensionPage.EvaluateAsync(
             """

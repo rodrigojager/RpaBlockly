@@ -7,7 +7,7 @@ script autônomo de replay.
 
 ## Instalar
 
-1. obtenha `rpablockly-recorder-1.0.0-rc.6.zip` e o arquivo `.sha256` da mesma release;
+1. obtenha `rpablockly-recorder-1.0.0-rc.9.zip` e o arquivo `.sha256` da mesma release;
 2. confira o SHA-256 antes de descompactar;
 3. abra `chrome://extensions`, ative o modo do desenvolvedor e escolha
    **Carregar sem compactação**;
@@ -17,7 +17,7 @@ script autônomo de replay.
 No PowerShell, a verificação do arquivo é:
 
 ```powershell
-(Get-FileHash .\rpablockly-recorder-1.0.0-rc.6.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+(Get-FileHash .\rpablockly-recorder-1.0.0-rc.9.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
 O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
@@ -27,18 +27,26 @@ O valor deve coincidir com o conteúdo do `.sha256` distribuído na release.
 1. informe um nome claro para a gravação;
 2. escolha se deseja evidências visuais e conteúdo de uploads;
 3. leia e aceite o aviso de privacidade;
-4. clique em **Iniciar** e autorize o acesso temporário solicitado; com
-   evidências visuais, o Chrome mostra uma autorização ampla porque sua API de
-   screenshot exige `<all_urls>`, embora o Recorder só aceite páginas HTTP(S);
+4. abra a página a gravar e clique em **Iniciar**; no primeiro uso, aceite o aviso
+   nativo do Chrome que concede acesso às páginas HTTP(S). Esse acesso permanece
+   entre sites e sessões até ser revogado nas configurações da extensão;
 5. navegue normalmente, usando cliques, campos, checkbox, radio, select, upload,
-   SPA, outros sites, novas páginas e iframes acessíveis;
+   atalhos, SPA, downloads e novas páginas. A captura acompanha mudanças de
+   origem sem novo clique. Se o acesso tiver sido revogado, a sessão será pausada
+   e o painel exibirá **Restabelecer acesso amplo**;
 6. use **Pausar** se precisar fazer algo que não deve entrar no roteiro;
 7. escolha **Revisar e baixar**, resolva as pendências e confira a timeline;
 8. remova evidências desnecessárias e conclua o download.
 
 A sessão só é apagada automaticamente depois que o Chrome confirma o download.
-Cancelar remove explicitamente a sessão local. O acesso concedido pela sessão é
-retirado nos dois casos e também quando a gravação termina com falha.
+Cancelar remove explicitamente os dados da sessão local. A autorização de sites
+continua até a pessoa revogá-la em `chrome://extensions`, desativar ou desinstalar
+a extensão.
+
+Quando uma ação não possui representação executável no catálogo V2, ela aparece
+em **Pendências** e bloqueia a finalização até uma decisão explícita. O Recorder
+informa a ampliação ou o novo bloco necessário; confirmar omissão é sempre uma
+decisão visível da pessoa, nunca um descarte silencioso.
 
 ## Senhas, uploads e evidências
 
@@ -79,4 +87,5 @@ segredos e anexos devem alimentar as referências exibidas pelo importador. Não
 edite o ZIP manualmente: qualquer alteração invalida a integridade.
 
 Consulte também [privacidade](privacidade.md) e
-[solução de problemas](troubleshooting.md).
+[solução de problemas](troubleshooting.md). A lista de ações cobertas e decisões
+pendentes está em [cobertura de interações](cobertura-interacoes.md).

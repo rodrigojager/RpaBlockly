@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8"));
 const expectedPermissions = ["activeTab", "scripting", "storage", "downloads", "sidePanel"];
+const expectedOptionalHostPermissions = ["<all_urls>"];
 const forbiddenPermissions = ["debugger", "webRequest", "nativeMessaging", "cookies", "tabs"];
 if (JSON.stringify(manifest.permissions) !== JSON.stringify(expectedPermissions)) {
   throw new Error("O manifest não contém exatamente as permissões mínimas aprovadas.");
@@ -12,14 +13,14 @@ if (JSON.stringify(manifest.permissions) !== JSON.stringify(expectedPermissions)
 if (forbiddenPermissions.some((permission) => manifest.permissions.includes(permission))) {
   throw new Error("O manifest contém uma permissão bloqueada pelo threat model.");
 }
-if (JSON.stringify(manifest.optional_permissions) !== JSON.stringify(["tabs"])) {
-  throw new Error("O manifest deve declarar somente tabs como permissão opcional.");
+if ((manifest.optional_permissions ?? []).length !== 0) {
+  throw new Error("O manifest não deve declarar permissões de API opcionais.");
 }
 if ((manifest.host_permissions ?? []).length !== 0) {
-  throw new Error("Acesso permanente a hosts não é permitido.");
+  throw new Error("Acesso a hosts deve depender da autorização explícita do usuário.");
 }
-if (JSON.stringify(manifest.optional_host_permissions) !== JSON.stringify(["<all_urls>"])) {
-  throw new Error("A captura visual deve declarar somente <all_urls> como host opcional.");
+if (JSON.stringify(manifest.optional_host_permissions) !== JSON.stringify(expectedOptionalHostPermissions)) {
+  throw new Error("O manifest deve oferecer <all_urls> como acesso opcional persistente.");
 }
 if (manifest.minimum_chrome_version !== "116" || manifest.manifest_version !== 3) {
   throw new Error("A extensão deve usar MV3 e Chrome 116 como versão mínima.");

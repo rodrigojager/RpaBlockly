@@ -14,13 +14,16 @@ export const CAPTURABLE_ACTION_TYPES = [
   "setChecked",
   "pressKey",
   "clickAndSwitchPage",
-  "upload"
+  "switchPage",
+  "closePage",
+  "upload",
+  "download"
 ] as const satisfies ReadonlyArray<Action["type"]>;
 
 export type CapturableActionType = typeof CAPTURABLE_ACTION_TYPES[number];
 export type RawEventType =
   | "click" | "input" | "change" | "submit" | "keydown" | "select"
-  | "navigation" | "tab" | "popup" | "upload" | "unsupported";
+  | "navigation" | "tab" | "popup" | "closePage" | "upload" | "download" | "unsupported";
 
 export interface CandidateObservation {
   key: "testId" | "role" | "label" | "stableAttribute" | "placeholder" |

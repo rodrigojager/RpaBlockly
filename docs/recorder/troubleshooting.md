@@ -8,29 +8,37 @@ Páginas internas como `chrome://` e `file://` não são graváveis.
 
 ## Nenhum passo aparece
 
-Inicie uma sessão, aceite o aviso de privacidade e conceda o acesso temporário
-solicitado. Quando evidências visuais estão ligadas, o Chrome solicita
-`<all_urls>` porque `captureVisibleTab` exige essa permissão; o Recorder continua
-limitado a HTTP(S) e retira a concessão criada pela sessão ao terminar.
-Eventos sintéticos enviados pela própria página são ignorados. Em iframe de outra
-origem HTTP(S), a autorização da sessão permite a captura sem uma nova pendência.
+Abra a página HTTP(S), clique no ícone do Recorder nessa própria aba, aceite o
+aviso de privacidade e inicie. Aceite o pedido nativo de acesso às páginas
+HTTP(S); ele permite injetar o capturador e gerar evidências ao atravessar sites
+sem novo clique. Se a autorização tiver sido revogada, use **Restabelecer acesso
+amplo** e depois **Retomar**.
+Eventos sintéticos enviados pela própria página são ignorados. Um iframe sem uma
+cadeia validável de locators vira pendência explícita.
+
+## Acesso amplo precisa ser concedido novamente
+
+Esse aviso aparece quando o Chrome revoga a autorização ou impede a injeção. A
+sessão é pausada imediatamente para não perder ações em silêncio. Clique em
+**Restabelecer acesso amplo**, aceite o aviso do Chrome e só então use
+**Retomar**. Uma simples mudança entre sites não deve mostrar esse aviso na RC 9.
 
 ## Há passos duplicados ou ausentes
 
 Pause e retome a sessão para forçar a leitura do checkpoint. Digitação contínua,
-`change` final e submit causal são coalescidos. Widgets customizados, shadow root
-fechado e alvos ambíguos podem ser omitidos com issue bloqueante; revise a lista
-de pendências em vez de editar o JSON.
+`change` final e submit causal são coalescidos em ações executáveis. Widgets
+customizados, shadow root fechado, alvos ambíguos e ações sem bloco aparecem como
+pendências bloqueantes. A descrição informa se é defeito de locator, ampliação de
+bloco existente ou candidato a bloco novo.
 
 ## Screenshot ou upload não entra no ZIP
 
 Confira as opções da sessão e o indicador **Evidências visuais** no topo do
 painel. Ele informa quantas imagens foram realmente salvas e mostra se a falha
-ocorreu na preparação, captura, processamento ou gravação local. Em builds
-anteriores ao RC 6, o Chrome recusava `captureVisibleTab` porque a extensão não
-solicitava literalmente `<all_urls>`, e essa falha era silenciosa. Recarregue a
-extensão atualizada, inicie uma nova sessão com **Capturar evidências visuais**
-marcado e aceite a nova autorização. Screenshots obedecem rate limit e quantidade máxima.
+ocorreu na preparação, captura, processamento ou gravação local. Na RC 9, aceite
+o pedido amplo de páginas HTTP(S). Recarregue a extensão atualizada e inicie uma nova sessão com
+**Capturar evidências visuais** marcado. Screenshots obedecem rate limit e
+quantidade máxima.
 Uploads grandes, tipos bloqueados ou não consentidos preservam somente metadados.
 O caminho local exibido pelo navegador nunca é uma entrada válida do RPA.
 

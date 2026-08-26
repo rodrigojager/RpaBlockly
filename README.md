@@ -81,6 +81,12 @@ revisa localmente e exporta um único `.rpablockly.zip`. O pacote interno já us
 os contratos oficiais da V2 e pode ser importado pelo wizard do editor sem edição
 manual de JSON.
 
+A RC 9 solicita no primeiro **Iniciar** acesso opcional e persistente a todas as
+páginas HTTP(S). Depois do consentimento nativo do Chrome, timeline e evidências
+continuam entre origens sem novo clique. A extensão pausa a sessão se esse acesso
+for revogado, e toda ação observada sem bloco executável vira pendência bloqueante
+com a necessidade de catálogo descrita para decisão.
+
 ```powershell
 npm ci --ignore-scripts --prefix src/RpaFlow.Recorder.Extension
 npm run check --prefix src/RpaFlow.Recorder.Extension

@@ -84,6 +84,42 @@ test("submit causal por clique ou Enter não duplica a ação", () => {
   assert.deepEqual(result.intents.map((intent) => intent.type), ["click", "pressKey"]);
 });
 
+test("atalhos, teclas sem input e digitação com input usam pressKey sem duplicar texto", () => {
+  const result = normalizeEvents([
+    rawEvent(1, "keydown", { targetKey: "shortcut", key: "Control+Shift+K" }),
+    rawEvent(2, "keydown", { targetKey: "custom", key: "x" }),
+    rawEvent(3, "keydown", { targetKey: "text", key: "R" }),
+    rawEvent(4, "input", { targetKey: "text", value: "R" })
+  ]);
+  assert.deepEqual(result.intents.map((intent) => intent.type), ["pressKey", "pressKey", "fill"]);
+  assert.deepEqual(result.intents.slice(0, 2).map((intent) => intent.value), ["Control+Shift+K", "x"]);
+});
+
+test("troca e fechamento manual de página usam blocos V2 existentes", () => {
+  const result = normalizeEvents([
+    rawEvent(1, "tab", {
+      target: undefined,
+      targetKey: undefined,
+      url: "https://fixture.test/outra"
+    }),
+    rawEvent(2, "closePage", { target: undefined, targetKey: undefined })
+  ]);
+  assert.deepEqual(result.intents.map((intent) => intent.type), ["switchPage", "closePage"]);
+  assert.equal(result.intents[0]?.value, "https://fixture.test/outra");
+});
+
+test("download causal converte o clique no bloco download existente", () => {
+  const click = rawEvent(1, "click", { targetKey: "download-link" });
+  const download = rawEvent(2, "download", {
+    target: undefined,
+    targetKey: undefined,
+    causalEventId: click.id
+  });
+  const result = normalizeEvents([click, download]);
+  assert.deepEqual(result.intents.map((intent) => intent.type), ["download"]);
+  assert.equal(result.intents[0]?.eventIds.includes(download.id), true);
+});
+
 test("navegação inicial, SPA causal e popup são normalizados sem replay inventado", () => {
   const navigation = rawEvent(1, "navigation", {
     target: undefined,

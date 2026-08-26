@@ -8,6 +8,15 @@ em `chrome.storage.session`. Normalização, autoria de locators e geração pro
 os três documentos oficiais da V2. O bundle ordena entradas, fixa o timestamp do
 ZIP e calcula SHA-256 por arquivo.
 
+O consentimento amplo e a continuidade entre origens estão representados no
+[diagrama de captura do Recorder](../diagramas/recorder-captura.drawio).
+`optional_host_permissions` contém somente HTTP(S), e o side panel solicita essas
+origens diretamente no gesto **Iniciar**. O service worker confirma a concessão
+antes de criar o checkpoint. Mudanças de origem são reinjetadas automaticamente;
+falha de acesso pausa a sessão e fica em um aviso operacional separado do bundle.
+Ao carregar uma sessão da RC 7, o service worker remove os antigos eventos
+artificiais de reconexão e seus IDs de issue.
+
 No editor, o ZIP é tratado como não confiável: a inspeção ocorre sem extração,
 antes da desserialização, com limites de tamanho, razão de compressão, caminhos,
 tipo de entrada e integridade. `inspect` e `validate` não publicam. `apply` exige
@@ -94,9 +103,14 @@ Uma mudança de ação gravável deve manter juntos:
 - importador, Blockly e handler do runtime;
 - fixtures unitárias, contrato cruzado e E2E.
 
-Não adicione código remoto, permissão permanente ampla, `eval`, senha, chave de
+Não adicione código remoto, host obrigatório sem consentimento, `eval`, senha, chave de
 recuperação ou chave privada em checkpoint, HTML de página no slideshow ou
 seletor de negócio no fluxo.
+
+Antes de acrescentar uma ação ao Recorder, consulte
+[cobertura de interações](cobertura-interacoes.md). Se não houver bloco V2, o
+evento deve gerar pendência bloqueante com a proposta de contrato. A criação do
+bloco exige decisão explícita e sincronização completa Blockly–JSON–C#.
 
 ## Produzir a release
 

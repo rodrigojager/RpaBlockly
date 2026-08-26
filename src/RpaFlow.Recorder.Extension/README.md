@@ -45,11 +45,16 @@ O release compila duas vezes e exige igualdade byte a byte. O ZIP vai para
 4. Selecione a pasta `src/RpaFlow.Recorder.Extension/build`.
 5. Fixe a extensão e clique no ícone para abrir o side panel.
 
-Ao iniciar uma sessão sem evidências, o Chrome solicita acesso temporário às
-páginas HTTP(S). Com evidências visuais, solicita `<all_urls>` como permissão
-opcional porque `captureVisibleTab` exige esse padrão literalmente. O Recorder
-continua limitado por código a páginas HTTP(S), registra a concessão da sessão e
-a retira ao concluir, excluir ou falhar. Não existe acesso permanente a hosts.
+No primeiro **Iniciar**, o Chrome solicita acesso opcional a todas as páginas
+HTTP(S). Depois da autorização, timeline e evidências atravessam mudanças de
+origem sem novo clique. A concessão permanece até ser revogada em
+`chrome://extensions`; finalizar uma sessão não a remove. Se o acesso falhar, o
+Recorder pausa a sessão e oferece **Restabelecer acesso amplo** em vez de fingir
+que continuou capturando.
+
+Ações com representação existente são normalizadas para o catálogo V2. Uma ação
+observada sem representação executável entra como pendência bloqueante, com a
+proposta de contrato necessária; ela nunca é silenciosamente descartada.
 Senhas ficam desligadas por padrão.
 No modo recomendado, a pessoa escolhe uma senha e recebe uma chave de recuperação
 cifrada; no modo avançado, o opt-in aceita um key ID e uma chave pública RSA/SPKI
@@ -64,10 +69,10 @@ npm run recover:key -- --package .\chave-recorder.txt --output .\chave-privada.p
 ## Diagnóstico local
 
 - **O side panel não abre:** confirme Chrome 116+ e recarregue a extensão.
-- **A página não grava:** aceite a permissão da origem e não use páginas internas
-  como `chrome://` ou `file://`.
-- **Iframe não aparece:** conceda acesso à origem do frame; uma cadeia que não
-  possa ser validada vira pendência, nunca seletor presumido.
+- **A página não grava:** confirme o acesso amplo no aviso do Chrome e não use
+  páginas internas como `chrome://` ou `file://`.
+- **Iframe não aparece:** um frame cuja cadeia não possa ser validada vira pendência; nunca é
+  transformado em seletor presumido.
 - **Download não conclui:** a sessão é preservada em estado pausado para nova
   tentativa. Ela só é limpa após confirmação do Chrome ou exclusão explícita.
 - **Service worker suspenso:** feche e reabra o side panel; o checkpoint em

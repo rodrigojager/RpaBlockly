@@ -6,7 +6,7 @@
 - valores digitados, segredos e uploads;
 - screenshots e comentários;
 - senha, chave de recuperação e chave privada do destinatário;
-- permissões temporárias de host;
+- concessão opcional e persistente a hosts HTTP(S);
 - staging do importador.
 
 ## Fronteiras de confiança
@@ -26,7 +26,10 @@
 | Segredo aparece em texto claro | captura opt-in, criptografia imediata, máscara e busca automatizada. |
 | Senha fraca protege a recuperação | mínimo de 12 caracteres com letras e números, PBKDF2-HMAC-SHA-256 com salt e 600.000 iterações e sugestão aleatória. |
 | Material de recuperação fica no estado | senha e chave de recuperação permanecem somente no painel; cópia confirmada antes da gravação; nenhuma delas entra em checkpoint ou bundle. |
-| Permissão excessiva | nenhum host permanente; `<all_urls>` é opcional, solicitado somente por gesto quando screenshots estão ligados, limitado por código a HTTP(S), rastreado por sessão e retirado ao terminar. |
+| Permissão ampla é concedida sem contexto | hosts HTTP(S) ficam em `optional_host_permissions`; `permissions.request` ocorre diretamente no gesto **Iniciar** e a sessão depende da confirmação. |
+| Permissão ampla é usada fora da gravação | injeção programática limitada às abas rastreadas por sessão ativa ou pausada; páginas não HTTP(S) são rejeitadas. |
+| Perda de acesso oculta ações | falha de injeção pausa a sessão e mostra recuperação explícita; nenhum falso evento de catálogo é criado. |
+| Interação sem bloco desaparece | evento `unsupported` cria issue bloqueante com motivo e só pode ser omitido por confirmação visível. |
 | Suspensão duplica passos | checkpoint em `storage.session` e IDs determinísticos. |
 | ZIP adulterado | integridade por entrada antes do JSON. |
 | Zip Slip/Bomb/symlink | inspeção sem extração, limites e rejeição de paths/tipos. |
@@ -51,8 +54,9 @@ falha em segredo, integridade, path, limite ou CAS bloqueia o release.
 - uma origem autorizada pode mudar de comportamento depois da gravação;
 - a segurança da senha, da chave de recuperação, da chave privada recuperada e
   dos canais de compartilhamento é responsabilidade dos participantes;
-- permissões opcionais concedidas pelo usuário permanecem administráveis no
-  Chrome até serem revogadas.
+- a concessão opcional a todos os hosts HTTP(S) permanece administrável no Chrome
+  até ser revogada e permite ler ou alterar páginas visitadas, embora o Recorder
+  restrinja sua própria coleta ao contrato documentado.
 
 Esses riscos são mitigados por revisão visual, mappings explícitos, package
 revisionado, política conservadora `strict` e instruções de retenção. Nenhum deles

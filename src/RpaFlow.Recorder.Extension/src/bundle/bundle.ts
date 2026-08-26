@@ -97,8 +97,8 @@ export async function buildBundle(input: BundleBuildInput): Promise<BuiltBundle>
     bundleVersion: 1,
     bundleId: input.bundleId,
     createdAtUtc: input.createdAtUtc,
-    recorderVersion: "1.0.0-rc.6",
-    generatorVersion: "1.0.0-rc.6",
+    recorderVersion: "1.0.0-rc.9",
+    generatorVersion: "1.0.0-rc.9",
     rpaPackageRoot: "package",
     schemas: {
       flow: 2, locators: 1, policy: 1, session: 1, evidence: 1, issues: 1, integrity: 1

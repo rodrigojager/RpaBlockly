@@ -43,7 +43,7 @@ test("side panel mantém contratos mínimos de acessibilidade", async () => {
   assert.match(css, /prefers-reduced-motion/u);
 });
 
-test("permissão opcional é solicitada no gesto do painel, não no service worker", async () => {
+test("autorização ampla é opcional, explícita e persistente", async () => {
   const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8")) as {
     permissions: string[];
     optional_permissions?: string[];
@@ -51,13 +51,17 @@ test("permissão opcional é solicitada no gesto do painel, não no service work
   };
   const sidepanel = await readFile(join(root, "src", "sidepanel", "sidepanel.ts"), "utf8");
   const serviceWorker = await readFile(join(root, "src", "background", "service-worker.ts"), "utf8");
-  assert.deepEqual(manifest.optional_permissions, ["tabs"]);
+  assert.deepEqual(manifest.optional_permissions, undefined);
   assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"]);
   assert.ok(!manifest.permissions.includes("tabs"));
-  assert.match(sidepanel, /chrome\.permissions\.request\(\{ permissions: \["tabs"\] \}\)/u);
-  assert.match(sidepanel, /chrome\.permissions\.request\(requestedOrigins\)/u);
-  assert.match(sidepanel, /captureScreenshots[\s\S]+recorderScreenshotOrigins/u);
+  assert.ok(manifest.permissions.includes("activeTab"));
+  assert.match(sidepanel, /chrome\.permissions\.request\(\{ origins: continuousHostOrigins \}\)/u);
   assert.doesNotMatch(serviceWorker, /chrome\.permissions\.request/u);
+  assert.match(serviceWorker, /chrome\.permissions\.contains\(\{ origins: continuousHostOrigins \}\)/u);
+  assert.match(serviceWorker, /chrome\.permissions\.onRemoved\.addListener/u);
+  assert.match(serviceWorker, /Restabeleça o acesso amplo antes de retomar/u);
+  assert.match(serviceWorker, /reconnectRecordingToInvokedTab\(tab\)/u);
+  assert.match(serviceWorker, /chrome\.scripting\.executeScript/u);
 });
 
 test("painel acompanha a gravação ao vivo e mantém a aba escolhida", async () => {
@@ -68,15 +72,18 @@ test("painel acompanha a gravação ao vivo e mantém a aba escolhida", async ()
   assert.match(sidepanel, /chrome\.storage\.onChanged\.addListener/u);
   assert.match(sidepanel, /scheduleCheckpointRender/u);
   assert.match(sidepanel, /friendlyIntentTitle/u);
-  assert.match(messages, /type: "RECORDER_START";[\s\S]+temporaryOrigins: string\[\]/u);
+  assert.doesNotMatch(messages, /temporaryOrigins/u);
   assert.match(serviceWorker, /chrome\.tabs\.get\(request\.tabId\)/u);
   assert.match(messages, /"RECORDER_GET_TARGET"/u);
   assert.match(serviceWorker, /rememberRecorderTarget\(tab\)/u);
   assert.match(serviceWorker, /chrome\.sidePanel\.open\(\{ tabId: tab\.id \}\)/u);
   assert.match(serviceWorker, /openPanelOnActionClick: false/u);
   assert.match(sidepanel, /lastFocusedWindow: true/u);
-  assert.match(sidepanel, /"http:\/\/\*\/\*", "https:\/\/\*\/\*"/u);
-  assert.match(serviceWorker, /releaseTemporaryPermissions/u);
+  assert.match(messages, /interface RecorderAccessNotice/u);
+  assert.match(serviceWorker, /saveRecorderAccessNotice/u);
+  assert.match(sidepanel, /Acesso amplo precisa ser concedido novamente/u);
+  assert.doesNotMatch(serviceWorker, /unsupportedReason: originReconnect/u);
+  assert.match(serviceWorker, /cleanupLegacyTemporaryPermissions/u);
   assert.match(bundle, /origins: sessionOrigins\(input\.checkpoint\)/u);
   assert.match(serviceWorker, /RPABLOCKLY_RECORDER_REFRESH/u);
 });

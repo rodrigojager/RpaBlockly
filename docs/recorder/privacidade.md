@@ -10,8 +10,8 @@ Evidências visuais e conteúdo de upload dependem de opções explícitas.
 ## Dados que não são coletados
 
 A extensão não lê cookies, local storage, session storage, headers, tráfego de
-rede, HTML completo, histórico geral do navegador nem conteúdo de outras origens
-sem permissão. Parâmetros de URL com nomes sensíveis são removidos. Valores de
+rede, HTML completo nem histórico geral do navegador. Parâmetros de URL com nomes
+sensíveis são removidos. Valores de
 senha não entram em eventos, amostras, logs ou checkpoints.
 
 ## Segredos
@@ -38,18 +38,18 @@ organização. Remova evidências e uploads que não sejam necessários.
 
 ## Permissões do Chrome
 
-As permissões permanentes são limitadas a `activeTab`, `scripting`, `storage`,
-`downloads` e `sidePanel`. Quando o Chrome não expõe a URL pelo `activeTab`, o
-painel solicita `tabs` como permissão opcional para identificar a aba ativa. O
-código consulta somente essa aba. Sem evidências visuais, o gesto de iniciar
-solicita acesso às páginas `http://` e `https://` para atravessar origens. Com
-evidências, o painel solicita `<all_urls>` como permissão opcional porque a API
-`captureVisibleTab` do Chrome exige literalmente `<all_urls>` ou `activeTab`;
-`activeTab` não cobre a sessão depois de navegações. O Recorder continua
-rejeitando páginas fora de HTTP(S). A concessão feita pela sessão é registrada no
-estado local e retirada ao concluir, excluir ou encerrar com falha. Uma concessão
-que já existia antes da sessão não é removida. Não existe acesso permanente a
-hosts.
+As permissões de API são `activeTab`, `scripting`, `storage`, `downloads` e
+`sidePanel`. A origem especial `<all_urls>` é opcional: o Recorder a
+solicita no primeiro **Iniciar**, dentro do gesto do usuário, e não inicia se o
+aviso nativo do Chrome for recusado. A concessão permite injetar o capturador e
+usar `captureVisibleTab` de forma contínua ao atravessar sites. Ela permanece no
+perfil entre sessões até ser revogada em `chrome://extensions`.
+
+O alcance da permissão não altera os dados coletados: o content script só é
+injetado em abas de uma sessão ativa ou pausada, aceita eventos confiáveis e
+aplica a sanitização descrita acima. O Recorder rejeita páginas fora de HTTP(S).
+Se o acesso for perdido, a sessão é pausada e o painel mostra uma recuperação
+explícita; não há continuidade aparente com eventos ausentes.
 
 Incidentes ou suspeitas devem incluir versão da extensão, horário, origem afetada
 e hash do bundle, nunca senhas, chaves de recuperação ou chaves privadas.

@@ -8,8 +8,6 @@ import type {
   RawCaptureEvent
 } from "../core/types.js";
 
-const semanticKeys = new Set(["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp", "Space"]);
-
 export function normalizeEvents(source: ReadonlyArray<RawCaptureEvent>): NormalizationResult {
   const events = [...source]
     .filter((event) => event.trusted)
@@ -47,7 +45,9 @@ export function normalizeEvents(source: ReadonlyArray<RawCaptureEvent>): Normali
         }
         break;
       case "keydown":
-        if (event.key !== undefined && semanticKeys.has(event.key)) {
+        if (event.key === undefined) {
+          issues.push(unsupportedIssue(event, "A tecla usada não pôde ser identificada."));
+        } else if (!isPlainTextKey(event.key) || !hasFollowingValueEvent(event, events)) {
           appendTargetIntent(normalizedEvent, "pressKey", `Pressionar ${event.key}`, intents, issues, event.key);
         }
         break;
@@ -56,9 +56,18 @@ export function normalizeEvents(source: ReadonlyArray<RawCaptureEvent>): Normali
           appendIntent(normalizedEvent, "navigate", "Navegar", intents, { value: sanitized.url });
         }
         break;
-      case "popup":
       case "tab":
+        if (event.causalEventId === undefined) {
+          appendIntent(normalizedEvent, "switchPage", "Trocar para outra aba", intents, { value: sanitized.url });
+        } else {
+          associatePopup(normalizedEvent, events, intents, issues);
+        }
+        break;
+      case "popup":
         associatePopup(normalizedEvent, events, intents, issues);
+        break;
+      case "closePage":
+        appendIntent(normalizedEvent, "closePage", "Fechar página", intents, {});
         break;
       case "upload":
         if (event.upload === undefined) {
@@ -66,6 +75,9 @@ export function normalizeEvents(source: ReadonlyArray<RawCaptureEvent>): Normali
         } else {
           appendTargetIntent(normalizedEvent, "upload", "Selecionar arquivo", intents, issues);
         }
+        break;
+      case "download":
+        associateDownload(normalizedEvent, intents, issues);
         break;
       case "unsupported":
         issues.push(unsupportedIssue(event, event.unsupportedReason ?? "Interação não suportada."));
@@ -204,6 +216,41 @@ function associatePopup(
   causal.eventIds.push(popup.id);
 }
 
+function associateDownload(
+  download: RawCaptureEvent,
+  intents: NormalizedIntent[],
+  issues: RecorderIssue[]
+): void {
+  if (download.causalEventId === undefined) {
+    appendTargetIntent(download, "download", "Baixar arquivo", intents, issues);
+    return;
+  }
+  const causal = intents.find((intent) => intent.eventIds.includes(download.causalEventId!));
+  if (causal?.type !== "click") {
+    issues.push(unsupportedIssue(
+      download,
+      "O download foi detectado, mas não foi possível provar qual clique o iniciou. É necessária revisão explícita."
+    ));
+    return;
+  }
+  causal.type = "download";
+  causal.name = "Baixar arquivo";
+  causal.eventIds.push(download.id);
+}
+
+function isPlainTextKey(key: string): boolean {
+  return [...key].length === 1;
+}
+
+function hasFollowingValueEvent(keydown: RawCaptureEvent, events: RawCaptureEvent[]): boolean {
+  return events.some((candidate) =>
+    (candidate.type === "input" || candidate.type === "change" || candidate.type === "select") &&
+    candidate.sequence > keydown.sequence &&
+    candidate.tabId === keydown.tabId && candidate.frameId === keydown.frameId &&
+    candidate.targetKey === keydown.targetKey &&
+    candidate.elapsedMs - keydown.elapsedMs <= 1_000);
+}
+
 function hasRecentSubmitTrigger(submit: RawCaptureEvent, events: RawCaptureEvent[]): boolean {
   return events.some((candidate) =>
     (candidate.type === "click" ||
@@ -216,7 +263,7 @@ function unsupportedIssue(event: RawCaptureEvent, detail: string): RecorderIssue
   return createIssue(
     event.unsupportedCode ?? "UNSUPPORTED_INTERACTION",
     "blocking",
-    "Interação não suportada pelo catálogo V2",
+    "Ação observada sem representação executável no catálogo V2",
     detail,
     { eventId: event.id, omittedFromFlow: true }
   );
@@ -227,6 +274,9 @@ function actionName(type: CapturableActionType): string {
     case "fill": return "Preencher campo";
     case "selectOption": return "Selecionar opção";
     case "setChecked": return "Alterar marcação";
+    case "switchPage": return "Trocar para outra aba";
+    case "closePage": return "Fechar página";
+    case "download": return "Baixar arquivo";
     default: return type;
   }
 }

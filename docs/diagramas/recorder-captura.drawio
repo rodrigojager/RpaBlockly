@@ -1,0 +1,47 @@
+<mxfile host="app.diagrams.net" modified="2026-08-26T00:00:00.000Z" agent="RpaBlockly V2" version="24.7.17">
+  <diagram id="recorder-captura" name="Captura do Recorder">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="Pessoa aceita privacidade e clica em Iniciar" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dbeafe;strokeColor=#2563eb;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="180" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="Chrome solicita e persiste acesso opcional a HTTP(S)" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ccfbf1;strokeColor=#0f766e;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="180" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="Iniciar cria checkpoint e navegação inicial" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fef3c7;strokeColor=#d97706;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="180" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="Injetar e confirmar content script no frame principal" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ede9fe;strokeColor=#7c3aed;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="180" width="250" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="Timeline e screenshot aparecem" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="180" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="A injeção na origem atual funcionou?" style="rhombus;whiteSpace=wrap;html=0;fillColor=#ffe4e6;strokeColor=#be123c;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="340" width="210" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="8" value="Continuar capturando, inclusive após mudança de origem" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="870" y="360" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="Pausar sessão e mostrar aviso operacional fora do bundle" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fee2e2;strokeColor=#dc2626;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="530" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="Restabelecer acesso amplo e retomar explicitamente" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ccfbf1;strokeColor=#0f766e;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="530" width="290" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="2" target="3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="3" target="4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="4" target="5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="5" target="6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="24" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="6" target="7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="25" value="sim" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="7" target="8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="26" value="não" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="7" target="9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="27" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="9" target="10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="28" value="reconectar" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="10" target="5"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1005" y="470" /></Array></mxGeometry></mxCell>
+        <mxCell id="29" value="próximo evento" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;" edge="1" parent="1" source="8" target="6"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="980" y="300" /></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

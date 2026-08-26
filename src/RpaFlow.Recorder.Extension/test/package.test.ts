@@ -84,3 +84,26 @@ test("upload gera um data path válido sem caminho local do navegador", async ()
     /^attachments\.recorded\.file_001_/u);
   assert.doesNotMatch(JSON.stringify(generated), /fakepath/iu);
 });
+
+test("troca de aba e download geram contratos V2 executáveis", () => {
+  const click = rawEvent(2, "click", { targetKey: "download-link" });
+  const generated = generatePackage("Navegação entre páginas", [
+    rawEvent(1, "tab", {
+      target: undefined,
+      targetKey: undefined,
+      url: "https://fixture.test/outra"
+    }),
+    click,
+    rawEvent(3, "download", {
+      target: undefined,
+      targetKey: undefined,
+      causalEventId: click.id
+    })
+  ]);
+  validateGeneratedPackage(generated);
+  assert.equal(generated.flow.actions[0]?.type, "switchPage");
+  assert.equal(generated.flow.actions[0]?.property, "url");
+  assert.equal(generated.flow.actions[0]?.comparison, "exact");
+  assert.equal(generated.flow.actions[1]?.type, "download");
+  assert.equal(generated.flow.actions[1]?.downloadMode, "click");
+});

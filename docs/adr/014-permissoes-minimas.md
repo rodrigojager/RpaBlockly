@@ -1,37 +1,57 @@
-# ADR-014 — Permissões mínimas
+# ADR-014 — Acesso contínuo por consentimento explícito
 
 Estado: Aceita
 
 ## Contexto
 
-Uma extensão de gravação observa páginas potencialmente sensíveis. Permissão
-permanente e ampla seria incompatível com consentimento informado.
+Uma gravação pode atravessar várias origens HTTP(S). A concessão `activeTab` é
+revogada quando a aba navega para outra origem; exigir um novo clique nesse ponto
+cria uma janela em que ações deixam de ser observadas. A continuidade do roteiro
+tem prioridade, desde que o Chrome apresente consentimento explícito e a pessoa
+possa revogá-lo.
 
 ## Decisão
 
-Declarar apenas `activeTab`, `scripting`, `storage`, `downloads` e `sidePanel`.
-Não usar `debugger`, `webRequest`, `nativeMessaging` nem hosts permanentes.
-Declarar `<all_urls>` somente em `optional_host_permissions`: o painel o solicita
-por gesto apenas quando screenshots estão ligados, pois `captureVisibleTab` não
-aceita os padrões separados de HTTP e HTTPS como substituto. Sem screenshots, a
-sessão solicita somente HTTP(S). Toda concessão criada pela sessão é retirada ao
-concluir, excluir ou falhar, e o Recorder rejeita alvos fora de HTTP(S).
+Manter `activeTab`, `scripting`, `storage`, `downloads` e `sidePanel` como
+permissões de API. Declarar `<all_urls>` em `optional_host_permissions`, pois o
+Chrome exige `activeTab` ou `<all_urls>` para `captureVisibleTab`. O primeiro clique em **Iniciar** chama
+`chrome.permissions.request` diretamente e a sessão só começa se o usuário
+aceitar o aviso nativo do Chrome.
+
+A concessão permanece no perfil entre origens e sessões até ser revogada nas
+configurações da extensão. Ela não é removida ao concluir ou cancelar uma
+gravação. O Recorder continua rejeitando páginas fora de HTTP(S), não lê cookies,
+headers, tráfego de rede ou armazenamento da página e só injeta o capturador em
+abas pertencentes a uma sessão ativa ou pausada.
+
+Se a injeção falhar, a sessão é pausada imediatamente para não aparentar uma
+captura completa. O painel oferece **Restabelecer acesso amplo**; a retomada da
+gravação continua sendo uma decisão explícita.
 
 ## Alternativas recusadas
 
-- Acesso permanente a todos os sites: privilégio excessivo.
-- Depender apenas de `activeTab`: deixa de funcionar depois da navegação da aba.
-- Native messaging: cria companion app fora do escopo.
+- Somente `activeTab`: interrompe a captura em toda mudança de origem.
+- Hosts obrigatórios no manifesto: pede o privilégio durante a instalação, fora
+  do contexto da ação **Iniciar**.
+- `debugger`, `webRequest` ou native messaging: ampliam poder sem necessidade
+  para os eventos DOM e de navegação suportados.
 
 ## Consequências
 
-Frames cross-origin sem permissão geram issue explícita. O usuário controla o
-alcance de cada sessão.
+O Chrome informa que a extensão poderá ler e alterar dados nos sites visitados.
+Esse alcance é necessário para injeção programática contínua, mas aumenta o
+impacto potencial de uma vulnerabilidade; CSP sem código remoto, catálogo
+fechado, `isTrusted`, sanitização e testes de manifesto permanecem bloqueantes.
+Frames cross-origin ainda podem gerar pendência quando não for possível construir
+uma cadeia executável de frame locators, apesar de o script estar autorizado.
 
 ## Rollback
 
-Revogar a permissão de host ou desinstalar a extensão.
+Revogar **Acesso ao site** em `chrome://extensions`, desativar ou desinstalar a
+extensão. Uma sessão em andamento é pausada quando a perda de acesso é detectada.
 
 ## Testes e evidências
 
-Lint do manifest, testes de solicitação por gesto e fixture cross-origin.
+Lint do manifesto, teste da solicitação opcional, instalação limpa com perfil
+novo, navegação entre duas origens sem novo clique, screenshots nas duas origens
+e simulação de revogação com pausa segura.

@@ -119,6 +119,11 @@ function toAction(
       : { ready: { locatorId: intent.readyLocatorId, cardinality: "single" as const } })
   };
   if (intent.type === "selectOption") action.optionMode = "value";
+  if (intent.type === "switchPage") {
+    action.property = "url";
+    action.comparison = "exact";
+  }
+  if (intent.type === "download") action.downloadMode = "click";
   if (intent.type === "upload" && intent.upload !== undefined) {
     const key = `file_${String(index + 1).padStart(3, "0")}_${slug(intent.upload.name, "arquivo")}`;
     const path = `attachments.recorded.${key}`;

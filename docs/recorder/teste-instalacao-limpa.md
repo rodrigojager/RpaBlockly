@@ -8,9 +8,9 @@ registrado em [relatorio-instalacao-limpa.md](relatorio-instalacao-limpa.md).
 ## Identificação do candidato
 
 - RpaBlockly: `2.0.0-rc.1`;
-- Recorder: `1.0.0-rc.6`;
+- Recorder: `1.0.0-rc.9`;
 - checksum esperado: consultar
-  `src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.6.zip.sha256`;
+  `src/RpaFlow.Recorder.Extension/release/rpablockly-recorder-1.0.0-rc.9.zip.sha256`;
 - estado obrigatório antes do teste: `release candidate`, REC-140 pendente.
 
 ## Pré-requisitos da pessoa avaliadora
@@ -49,7 +49,7 @@ execução anterior.
 1. compare o hash do ZIP com o `.sha256`:
 
    ```powershell
-   (Get-FileHash .\rpablockly-recorder-1.0.0-rc.6.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+   (Get-FileHash .\rpablockly-recorder-1.0.0-rc.9.zip -Algorithm SHA256).Hash.ToLowerInvariant()
    ```
 
 2. descompacte o ZIP em uma pasta vazia;
@@ -77,9 +77,12 @@ escuta somente em loopback e informa `Modo: DOM original para execução strict`
 3. mantenha **Capturar evidências visuais** ligada;
 4. mantenha captura de segredos desligada;
 5. mantenha inclusão dos bytes de uploads desligada;
-6. aceite o aviso e inicie a gravação, concedendo acesso apenas a
-   `http://127.0.0.1:5178/*`;
+6. aceite o aviso e inicie a gravação; confirme que o Chrome pede acesso às
+   páginas HTTP(S), aceite-o e verifique que a primeira etapa surge imediatamente
+   na timeline;
 7. na fixture, nesta ordem:
+   - troque a URL para `http://localhost:5178/index.html`, sem clicar novamente
+     no ícone, e confirme que a nova navegação e uma evidência aparecem;
    - preencha **Nome completo** com `Maria da Silva`;
    - selecione **São Paulo**;
    - marque **Aceito os termos**;
@@ -96,7 +99,8 @@ escuta somente em loopback e informa `Modo: DOM original para execução strict`
 11. escolha **Revisar e baixar**, confira a timeline, remova uma evidência e
     conclua um único download `.rpablockly.zip`.
 
-Falha, duplicação, perda da sessão, permissão ampla ou passo ausente reprova a
+Falha, duplicação, perda da sessão, pedido de permissão diferente do documentado
+ou passo ausente reprova a
 etapa. Não edite o ZIP.
 
 ## 4. Verificar privacidade e estrutura do bundle

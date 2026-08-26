@@ -13,6 +13,7 @@ Comece pelo [README da raiz](../README.md). A documentação operacional da V2 �
 - [manual do cliente do Recorder](recorder/manual-cliente.md);
 - [manual do desenvolvedor do Recorder](recorder/manual-desenvolvedor.md);
 - [privacidade do Recorder](recorder/privacidade.md);
+- [cobertura de interações do Recorder](recorder/cobertura-interacoes.md);
 - [troubleshooting do Recorder](recorder/troubleshooting.md);
 - [aceite em instalação limpa](recorder/teste-instalacao-limpa.md);
 - [relatório do aceite humano REC-140](recorder/relatorio-instalacao-limpa.md);

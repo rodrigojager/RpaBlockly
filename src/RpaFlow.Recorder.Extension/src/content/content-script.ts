@@ -27,13 +27,33 @@ function initialize(): void {
   let localSequence = 0;
   let lastTrustedEventId: string | undefined;
   let lastTrustedAt = Number.NEGATIVE_INFINITY;
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   const targets = new Map<string, Element>();
+  const pressedModifiers = new Map<string, { usedInChord: boolean }>();
+  const reportedUnsupportedKinds = new Set<string>();
   const overlayNodes: HTMLElement[] = [];
   const startedAt = performance.timeOrigin + performance.now();
 
-  const capture = async (domEvent: Event, type: RawCaptureEvent["type"]): Promise<void> => {
+  const capture = async (
+    domEvent: Event,
+    requestedType: RawCaptureEvent["type"],
+    requestedUnsupportedReason?: string
+  ): Promise<void> => {
     if (!domEvent.isTrusted) return;
-    const element = targetElement(domEvent);
+    let type = requestedType;
+    let unsupportedReason = requestedUnsupportedReason;
+    let element = targetElement(domEvent);
+    if (type === "click" && element instanceof HTMLCanvasElement) {
+      type = "unsupported";
+      unsupportedReason =
+        "Clique em canvas detectado. O catálogo V2 não possui clique por coordenadas; candidato: novo bloco clickAt.";
+    } else if (type === "click") {
+      const downloadTrigger = element?.closest("a[download],area[download]");
+      if (downloadTrigger !== null && downloadTrigger !== undefined) {
+        element = downloadTrigger;
+        type = "download";
+      }
+    }
     const target = element === undefined ? undefined : snapshotElement(element, domEvent);
     const elapsedMs = Math.max(0, Math.round(performance.timeOrigin + performance.now() - startedAt));
     const targetKey = element === undefined ? undefined : elementKey(element);
@@ -55,27 +75,77 @@ function initialize(): void {
       ...(targetKey === undefined ? {} : { targetKey }),
       ...(formFor(element) === undefined ? {} : { formKey: elementKey(formFor(element)!) })
     };
+    if (unsupportedReason !== undefined) {
+      base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+      base.unsupportedReason = unsupportedReason;
+    }
 
     let transientSecret: string | undefined;
-    if ((type === "input" || type === "change") && element instanceof HTMLInputElement) {
-      if (isSensitiveField(element)) {
-        if (options.captureSecrets) transientSecret = element.value;
+    if (type === "input" || type === "change") {
+      if (element !== undefined && isSensitiveField(element)) {
+        const value = editableValue(element);
+        if (value === undefined) {
+          base.type = "unsupported";
+          base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+          base.unsupportedReason =
+            "Um elemento marcado como sensível foi editado, mas seu valor não pôde ser lido com segurança.";
+        } else if (options.captureSecrets) {
+          transientSecret = value;
+        }
+      } else if (element instanceof HTMLInputElement) {
+        base.value = element.type === "checkbox" || element.type === "radio"
+          ? element.checked
+          : element.value;
+      } else if (element instanceof HTMLTextAreaElement) {
+        base.value = element.value;
+      } else if (element instanceof HTMLElement && element.isContentEditable) {
+        base.value = element.textContent ?? "";
       } else {
-        base.value = element.type === "checkbox" || element.type === "radio" ? element.checked : element.value;
-      }
-    } else if (type === "select" && element instanceof HTMLSelectElement) {
-      base.value = element.value;
-    } else if (type === "keydown" && domEvent instanceof KeyboardEvent) {
-      base.key = domEvent.key;
-    } else if (type === "upload" && element instanceof HTMLInputElement && element.files?.[0] !== undefined) {
-      try {
-        base.upload = await captureUpload(element.files[0], options.includeUploads);
-      } catch (error) {
         base.type = "unsupported";
         base.unsupportedCode = "UNSUPPORTED_INTERACTION";
-        base.unsupportedReason = error instanceof Error
-          ? error.message
-          : "O upload não atende à política de segurança.";
+        base.unsupportedReason =
+          "Uma edição foi detectada, mas o elemento não é input, textarea nem contenteditable. É necessária revisão do widget.";
+      }
+    } else if (type === "select" && element instanceof HTMLSelectElement) {
+      if (element.multiple) {
+        base.type = "unsupported";
+        base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+        base.unsupportedReason =
+          "Seleção múltipla detectada. O bloco selectOption V2 atual aceita um único valor; decisão necessária para ampliar o contrato.";
+      } else {
+        base.value = element.value;
+      }
+    } else if (type === "keydown" && domEvent instanceof KeyboardEvent) {
+      const key = playwrightKey(domEvent);
+      if (key === undefined) {
+        base.type = "unsupported";
+        base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+        base.unsupportedReason =
+          "Uma tecla modificadora isolada foi usada. O catálogo V2 não possui keyDown/keyUp; decisão necessária para um novo bloco.";
+      } else {
+        base.key = key;
+      }
+    } else if (type === "upload" && element instanceof HTMLInputElement) {
+      if (element.files === null || element.files.length === 0) {
+        base.type = "unsupported";
+        base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+        base.unsupportedReason =
+          "A seleção de arquivo foi limpa. O bloco upload V2 atual não representa uma lista vazia.";
+      } else if (element.files.length > 1) {
+        base.type = "unsupported";
+        base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+        base.unsupportedReason =
+          "Upload de múltiplos arquivos detectado. O bloco upload V2 atual aceita um arquivo; decisão necessária para ampliar o contrato.";
+      } else {
+        try {
+          base.upload = await captureUpload(element.files[0]!, options.includeUploads);
+        } catch (error) {
+          base.type = "unsupported";
+          base.unsupportedCode = "UNSUPPORTED_INTERACTION";
+          base.unsupportedReason = error instanceof Error
+            ? error.message
+            : "O upload não atende à política de segurança.";
+        }
       }
     }
     const request: RecorderRequest = {
@@ -85,6 +155,12 @@ function initialize(): void {
     };
     await chrome.runtime.sendMessage(request);
     transientSecret = undefined;
+  };
+
+  const captureUnsupportedOnce = (kind: string, event: Event, reason: string): void => {
+    if (reportedUnsupportedKinds.has(kind)) return;
+    reportedUnsupportedKinds.add(kind);
+    void capture(event, "unsupported", reason);
   };
 
   document.addEventListener("click", (event) => void capture(event, "click"), true);
@@ -101,7 +177,78 @@ function initialize(): void {
       : element instanceof HTMLInputElement && element.type === "file" ? "upload" : "change");
   }, true);
   document.addEventListener("submit", (event) => void capture(event, "submit"), true);
-  document.addEventListener("keydown", (event) => void capture(event, "keydown"), true);
+  document.addEventListener("keydown", (event) => {
+    if (isModifierKey(event.key)) {
+      pressedModifiers.set(event.key, { usedInChord: false });
+      return;
+    }
+    for (const state of pressedModifiers.values()) state.usedInChord = true;
+    void capture(event, "keydown");
+  }, true);
+  document.addEventListener("keyup", (event) => {
+    const modifier = pressedModifiers.get(event.key);
+    if (modifier === undefined) return;
+    pressedModifiers.delete(event.key);
+    if (!modifier.usedInChord) {
+      captureUnsupportedOnce(
+        "isolated-modifier",
+        event,
+        "Uma tecla modificadora isolada foi usada. O catálogo V2 não possui keyDown/keyUp; decisão necessária para um novo bloco."
+      );
+    }
+  }, true);
+  document.addEventListener("contextmenu", (event) => captureUnsupportedOnce(
+    "contextmenu",
+    event,
+    "Clique com o botão direito detectado. O catálogo V2 não distingue botões do mouse; candidato: ampliar click ou criar rightClick."
+  ), true);
+  document.addEventListener("dblclick", (event) => captureUnsupportedOnce(
+    "dblclick",
+    event,
+    "Clique duplo detectado. Dois cliques simples não preservam necessariamente a mesma semântica; candidato: ampliar click ou criar doubleClick."
+  ), true);
+  document.addEventListener("dragstart", (event) => captureUnsupportedOnce(
+    "drag-and-drop",
+    event,
+    "Arraste detectado. O catálogo V2 não possui origem e destino de drag-and-drop; candidato: novo bloco dragAndDrop."
+  ), true);
+  document.addEventListener("drop", (event) => captureUnsupportedOnce(
+    "drop",
+    event,
+    "Soltura de item detectada. O catálogo V2 não possui origem e destino de drag-and-drop; candidato: novo bloco dragAndDrop."
+  ), true);
+  document.addEventListener("copy", (event) => captureUnsupportedOnce(
+    "copy",
+    event,
+    "Cópia para a área de transferência detectada. O catálogo V2 não possui bloco de clipboard; decisão necessária antes de capturar esse conteúdo."
+  ), true);
+  document.addEventListener("cut", (event) => captureUnsupportedOnce(
+    "cut",
+    event,
+    "Recorte para a área de transferência detectado. O catálogo V2 não possui bloco de clipboard; decisão necessária antes de capturar esse conteúdo."
+  ), true);
+  document.addEventListener("scroll", (event) => captureUnsupportedOnce(
+    "scroll",
+    event,
+    "Rolagem manual detectada. O catálogo V2 não possui uma ação de scroll; candidato: novo bloco scroll com alvo e posição."
+  ), true);
+  document.addEventListener("pointerover", (event) => {
+    if (!(event instanceof PointerEvent) || event.pointerType !== "mouse") return;
+    const target = targetElement(event)?.closest(
+      "a,button,[aria-haspopup],[role='button'],[role='menuitem'],[role='option'],[title]"
+    );
+    if (target === null || target === undefined) return;
+    if (hoverTimer !== undefined) clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => captureUnsupportedOnce(
+      "hover",
+      event,
+      "Permanência do ponteiro sobre um controle detectada. O catálogo V2 não possui hover; candidato: novo bloco hover."
+    ), 700);
+  }, true);
+  document.addEventListener("pointerout", () => {
+    if (hoverTimer !== undefined) clearTimeout(hoverTimer);
+    hoverTimer = undefined;
+  }, true);
 
   const navigation = (): void => {
     const now = performance.now();
@@ -478,6 +625,32 @@ function isSensitiveField(element: Element): boolean {
   return element instanceof HTMLInputElement &&
     (element.type === "password" || /(?:current-password|new-password|one-time-code|cc-number|cc-csc)/iu.test(element.autocomplete)) ||
     element.hasAttribute("data-rpa-sensitive");
+}
+
+function editableValue(element: Element): string | undefined {
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return element.value;
+  if (element instanceof HTMLElement && element.isContentEditable) return element.textContent ?? "";
+  return undefined;
+}
+
+function playwrightKey(event: KeyboardEvent): string | undefined {
+  if (event.isComposing || ["Dead", "Process", "Unidentified"].includes(event.key)) return undefined;
+  const modifierKeys = new Set(["Alt", "Control", "Meta", "Shift", "AltGraph"]);
+  if (modifierKeys.has(event.key)) return undefined;
+  const key = event.key === " " ? "Space" : event.key;
+  if (event.getModifierState("AltGraph")) return key;
+  const printable = [...key].length === 1;
+  const modifiers = [
+    event.ctrlKey ? "Control" : undefined,
+    event.altKey ? "Alt" : undefined,
+    event.metaKey ? "Meta" : undefined,
+    event.shiftKey && (!printable || event.ctrlKey || event.altKey || event.metaKey) ? "Shift" : undefined
+  ].filter((value): value is string => value !== undefined);
+  return modifiers.length === 0 ? key : `${modifiers.join("+")}+${key}`;
+}
+
+function isModifierKey(key: string): boolean {
+  return ["Alt", "Control", "Meta", "Shift", "AltGraph"].includes(key);
 }
 
 function formFor(element: Element | undefined): HTMLFormElement | undefined {

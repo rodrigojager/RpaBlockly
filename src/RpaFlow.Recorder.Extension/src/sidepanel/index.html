@@ -32,6 +32,7 @@
           <small id="page-target-detail">O Recorder precisa de uma página HTTP(S) aberta.</small>
         </div>
       </div>
+      <button id="restore-access" type="button" hidden>Restabelecer acesso amplo</button>
       <label for="session-name">Nome do roteiro</label>
       <input id="session-name" maxlength="200" value="Nova gravação" autocomplete="off">
 
@@ -107,7 +108,7 @@
 
       <label class="privacy check">
         <input id="privacy-accepted" type="checkbox">
-        Entendo que, durante esta sessão, a extensão poderá observar as páginas HTTP(S) visitadas na gravação, retirará esse acesso ao concluir ou excluir a sessão e manterá senhas desligadas por padrão.
+        Entendo que o Chrome solicitará acesso amplo às páginas HTTP(S), que a autorização continuará válida entre sites e sessões até eu revogá-la nas configurações da extensão e que senhas ficam desligadas por padrão.
       </label>
 
       <div class="actions">
