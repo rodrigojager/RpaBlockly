@@ -12,8 +12,9 @@ workspace Blockly criaria um segundo runtime e poderia divergir da produção.
 
 O editor cria um `RpaPackageSnapshot` temporário a partir do rascunho e executa o
 mesmo `PlaywrightV2FlowExecutor` usado pelo host e pelo worker. A pessoa escolhe
-Chromium ou CloakBrowser e uma última ação-folha segura, inclusiva. O guard encerra
-a execução imediatamente depois dessa ação.
+SpyBrowser, Chromium ou CloakBrowser e uma última ação-folha segura, inclusiva.
+SpyBrowser é o padrão conforme ADR-022. O guard encerra a execução imediatamente
+depois dessa ação.
 
 O modo assistido é local, exige token da sessão, permite somente uma execução
 simultânea e propaga cancelamento. O snapshot desabilita promoção e write-back de

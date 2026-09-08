@@ -54,11 +54,28 @@ public static class FlowActionCatalog
             ["if"] = [],
             ["repeat"] = [],
             ["forEach"] = [],
-            ["runSubflow"] = []
+            ["runSubflow"] = [],
+            ["solveImageCaptcha"] = [FlowCapabilities.Web],
+            ["solveRecaptchaV2"] = [FlowCapabilities.Web],
+            ["solveSliderCaptcha"] = [FlowCapabilities.Web],
+            ["solveHCaptcha"] = [FlowCapabilities.Web],
+            ["solveCaptcha"] = [FlowCapabilities.Web],
+            ["waitHumanInput"] = [FlowCapabilities.Web]
         };
 
     public static IReadOnlySet<string> SupportedTypes { get; } =
         new HashSet<string>(CapabilitiesByType.Keys, StringComparer.OrdinalIgnoreCase);
+
+    public static IReadOnlySet<string> V2OnlyTypes { get; } = new HashSet<string>(
+        [
+            "solveImageCaptcha",
+            "solveRecaptchaV2",
+            "solveSliderCaptcha",
+            "solveHCaptcha",
+            "solveCaptcha",
+            "waitHumanInput"
+        ],
+        StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlySet<string> RequiredCapabilities(
         V2ActionDefinition action)

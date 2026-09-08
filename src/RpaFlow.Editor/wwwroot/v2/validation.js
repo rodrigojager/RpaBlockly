@@ -47,8 +47,12 @@ export function validatePackageLocally(flow, locators, policy) {
           use.cardinality === "many") {
         errors.push(`O papel '${role}' de '${action.id}' não aceita cardinalidade many.`);
       }
-      if (role === "options" && use.cardinality !== "many") {
+      if (role === "options" && action.type === "select2" && use.cardinality !== "many") {
         errors.push(`As opções de '${action.id}' exigem cardinalidade many.`);
+      }
+      if (role === "options" && action.type === "solveSliderCaptcha" &&
+          use.cardinality === "many") {
+        errors.push(`A peça do slider de '${action.id}' não aceita cardinalidade many.`);
       }
     }
   }

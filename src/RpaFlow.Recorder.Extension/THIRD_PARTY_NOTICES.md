@@ -40,7 +40,7 @@ empacotadas localmente; a extensão não carrega código remoto.
 | `ajv-formats` | `3.0.1` | MIT |
 | `esbuild` | `0.28.2` | MIT |
 | `fast-deep-equal` | `3.1.3` | MIT |
-| `fast-uri` | `3.1.5` | BSD-3-Clause |
+| `fast-uri` | `3.1.7` | BSD-3-Clause |
 | `fflate` | `0.8.3` | MIT |
 | `json-schema-traverse` | `1.0.0` | MIT |
 | `require-from-string` | `2.0.2` | MIT |

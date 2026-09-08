@@ -49,7 +49,23 @@ public sealed record AssistedExecutionSnapshot(
     bool CanStop,
     string? Error,
     IReadOnlyList<AssistedExecutionEvent> Events,
-    IReadOnlyList<AssistedExecutionEvidence> Evidence);
+    IReadOnlyList<AssistedExecutionEvidence> Evidence,
+    IReadOnlyList<AssistedHumanHandoff> HumanHandoffs);
+
+public sealed record AssistedHumanHandoff(
+    string RequestId,
+    string ExecutionId,
+    string ActionId,
+    string ChallengeId,
+    string? Provider,
+    string Kind,
+    string Message,
+    string State,
+    DateTimeOffset RequestedAtUtc,
+    DateTimeOffset ExpiresAtUtc,
+    bool EvidenceAvailable);
+
+public sealed record AssistedHumanHandoffDecision(string Action);
 
 public sealed record AssistedEvidenceFile(
     string Path,

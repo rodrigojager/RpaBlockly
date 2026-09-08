@@ -9,7 +9,8 @@ const colours = {
   "Dados e controle": 120,
   "Controle": 25,
   "Subfluxos": 300,
-  "Arquivos e evidências": 5
+  "Arquivos e evidências": 5,
+  "Captchas": 340
 };
 
 const roleLabels = {

@@ -17,6 +17,12 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
             "setVariable",
             "readElement",
             "readElements",
+            "solveImageCaptcha",
+            "solveRecaptchaV2",
+            "solveSliderCaptcha",
+            "solveHCaptcha",
+            "solveCaptcha",
+            "waitHumanInput",
             "safeFinalConfirmation"
         };
 
@@ -73,6 +79,13 @@ internal sealed class DataAndArtifactActionHandler : IFlowActionHandler
             case "safefinalconfirmation":
                 throw new InvalidOperationException(
                     "safeFinalConfirmation exige uma política histórica específica do sistema de destino.");
+            case "solveimagecaptcha":
+            case "solverecaptchav2":
+            case "solveslidercaptcha":
+            case "solvecaptcha":
+            case "waithumaninput":
+                throw new InvalidOperationException(
+                    $"'{action.Type}' é captcha/suporte humano e exige o runtime V2 (schema 2).");
             default:
                 throw new InvalidOperationException(
                     $"O handler de dados e artefatos não interpreta '{action.Type}'.");

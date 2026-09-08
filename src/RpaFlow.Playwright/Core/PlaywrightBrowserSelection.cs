@@ -2,6 +2,8 @@ namespace RpaFlow.Playwright;
 
 public sealed record PlaywrightBrowserSelection(string Engine, string? Channel)
 {
+    public const string DefaultValue = "spybrowser";
+
     private static readonly HashSet<string> ChromiumChannels = new(
         StringComparer.OrdinalIgnoreCase)
     {
@@ -17,6 +19,7 @@ public sealed record PlaywrightBrowserSelection(string Engine, string? Channel)
 
     public static IReadOnlyList<string> SupportedValues { get; } =
     [
+        DefaultValue,
         "chromium",
         "firefox",
         "webkit",
@@ -65,6 +68,7 @@ public sealed record PlaywrightBrowserSelection(string Engine, string? Channel)
             "chromium" => new("chromium", null),
             "firefox" => new("firefox", null),
             "webkit" => new("webkit", null),
+            "spybrowser" => new("spybrowser", null),
             "cloakbrowser" => new("cloakbrowser", null),
             _ when ChromiumChannels.Contains(normalized) =>
                 new("chromium", normalized),

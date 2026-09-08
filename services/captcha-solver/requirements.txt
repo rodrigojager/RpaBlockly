@@ -1,0 +1,8 @@
+# Dependências diretas; requirements.lock fixa também a resolução transitiva.
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+onnxruntime==1.23.2
+numpy==2.2.6
+Pillow==11.3.0
+faster-whisper==1.2.1
+httpx==0.28.1

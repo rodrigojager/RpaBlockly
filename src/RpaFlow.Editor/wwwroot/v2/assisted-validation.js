@@ -1,7 +1,9 @@
 import {
   assistedEvidence,
+  assistedHumanHandoffEvidence,
   getAssistedExecution,
   getLatestAssistedExecution,
+  respondAssistedHumanHandoff,
   startAssistedExecution,
   stopAssistedExecution
 } from "./api.js";
@@ -28,8 +30,12 @@ export function initializeAssistedValidation({
   const gallery = document.getElementById("assisted-evidence-gallery");
   const progressCount = document.getElementById("assisted-progress-count");
   const evidenceCount = document.getElementById("assisted-evidence-count");
+  const handoffList = document.getElementById("assisted-handoff-list");
+  const handoffCount = document.getElementById("assisted-handoff-count");
   const actionCards = new Map();
   const evidenceCards = new Map();
+  const handoffCards = new Map();
+  const handoffEvidenceUrls = new Map();
   let executionId = null;
   let afterSequence = 0;
   let pollTimer = null;
@@ -148,13 +154,24 @@ export function initializeAssistedValidation({
       renderEvent(event);
     }
     for (const evidence of snapshot.evidence ?? []) renderEvidence(evidence);
+    for (const handoff of snapshot.humanHandoffs ?? []) renderHandoff(handoff);
     progressCount.textContent = `${snapshot.executedActions ?? 0} ` +
       `${snapshot.executedActions === 1 ? "etapa" : "etapas"}`;
     evidenceCount.textContent = `${evidenceCards.size} ` +
       `${evidenceCards.size === 1 ? "captura" : "capturas"}`;
+    const pendingHandoffs = (snapshot.humanHandoffs ?? [])
+      .filter(item => item.state?.toLowerCase() === "pending");
+    handoffCount.textContent = `${pendingHandoffs.length} ` +
+      `${pendingHandoffs.length === 1 ? "pendente" : "pendentes"}`;
     setRunning(snapshot.canStop === true);
     const status = statusText(snapshot);
     setStatus(snapshot.status, status.title, status.detail);
+    if (pendingHandoffs.length > 0) {
+      setStatus(
+        "running",
+        "Intervenção humana necessária",
+        "Resolva o desafio no navegador da execução e confirme a retomada abaixo.");
+    }
     if (terminalStatuses.has(snapshot.status)) {
       window.clearTimeout(pollTimer);
       pollTimer = null;
@@ -261,6 +278,99 @@ export function initializeAssistedValidation({
     }
   }
 
+  function renderHandoff(handoff) {
+    let card = handoffCards.get(handoff.requestId);
+    if (!card) {
+      if (handoffList.querySelector(".assisted-empty")) handoffList.replaceChildren();
+      card = document.createElement("article");
+      card.className = "assisted-handoff-card";
+
+      const preview = document.createElement("div");
+      preview.className = "assisted-handoff-preview";
+      preview.textContent = handoff.evidenceAvailable
+        ? "Carregando captura…"
+        : "Captura indisponível";
+
+      const body = document.createElement("div");
+      body.className = "assisted-handoff-body";
+      const heading = document.createElement("div");
+      heading.className = "assisted-handoff-heading";
+      const name = document.createElement("strong");
+      name.textContent = `${handoff.provider ?? "captcha"} · ${handoff.kind}`;
+      const status = document.createElement("span");
+      status.dataset.handoffStatus = "";
+      heading.append(name, status);
+      const message = document.createElement("p");
+      message.textContent = handoff.message;
+      const meta = document.createElement("small");
+      meta.textContent = `Ação ${handoff.actionId} · expira ${formatDate(handoff.expiresAtUtc)}`;
+      const actions = document.createElement("div");
+      actions.className = "assisted-handoff-actions";
+      const continueButton = document.createElement("button");
+      continueButton.type = "button";
+      continueButton.dataset.handoffAction = "continue";
+      continueButton.textContent = "Confirmar e retomar";
+      continueButton.addEventListener("click", () => {
+        void respondToHandoff(handoff.requestId, "continue");
+      });
+      const rejectButton = document.createElement("button");
+      rejectButton.type = "button";
+      rejectButton.className = "danger";
+      rejectButton.dataset.handoffAction = "reject";
+      rejectButton.textContent = "Rejeitar retomada";
+      rejectButton.addEventListener("click", () => {
+        void respondToHandoff(handoff.requestId, "reject");
+      });
+      actions.append(continueButton, rejectButton);
+      body.append(heading, message, meta, actions);
+      card.append(preview, body);
+      handoffList.prepend(card);
+      handoffCards.set(handoff.requestId, card);
+      if (handoff.evidenceAvailable) void renderHandoffEvidence(handoff, preview);
+    }
+
+    const stateName = handoff.state?.toLowerCase() ?? "pending";
+    card.dataset.state = stateName;
+    card.querySelector("[data-handoff-status]").textContent = handoffStateLabel(stateName);
+    const pending = stateName === "pending";
+    for (const button of card.querySelectorAll("[data-handoff-action]")) {
+      button.disabled = !pending;
+    }
+  }
+
+  async function renderHandoffEvidence(handoff, preview) {
+    if (!executionId || handoffEvidenceUrls.has(handoff.requestId)) return;
+    try {
+      const blob = await assistedHumanHandoffEvidence(executionId, handoff.requestId);
+      const objectUrl = URL.createObjectURL(blob);
+      handoffEvidenceUrls.set(handoff.requestId, objectUrl);
+      const image = document.createElement("img");
+      image.src = objectUrl;
+      image.alt = `Captura para intervenção em ${handoff.kind}`;
+      image.addEventListener("click", () => window.open(objectUrl, "_blank", "noopener"));
+      preview.replaceWith(image);
+    } catch {
+      preview.textContent = "A captura não está mais disponível.";
+    }
+  }
+
+  async function respondToHandoff(requestId, action) {
+    if (!executionId) return;
+    const card = handoffCards.get(requestId);
+    for (const button of card?.querySelectorAll("button") ?? []) button.disabled = true;
+    try {
+      const snapshot = await respondAssistedHumanHandoff(executionId, requestId, action);
+      renderSnapshot(snapshot);
+      schedulePoll(0);
+      onMessage(action === "continue"
+        ? "Retomada confirmada para a execução assistida."
+        : "Retomada rejeitada; a execução encerrará com falha.");
+    } catch (error) {
+      onMessage(error.message, true);
+      schedulePoll(0);
+    }
+  }
+
   function resetResults() {
     afterSequence = 0;
     actionCards.clear();
@@ -269,10 +379,15 @@ export function initializeAssistedValidation({
       if (image?.src.startsWith("blob:")) URL.revokeObjectURL(image.src);
     }
     evidenceCards.clear();
+    for (const objectUrl of handoffEvidenceUrls.values()) URL.revokeObjectURL(objectUrl);
+    handoffEvidenceUrls.clear();
+    handoffCards.clear();
     timeline.innerHTML = '<li class="assisted-empty">Preparando a primeira etapa…</li>';
     gallery.innerHTML = '<p class="assisted-empty">Aguardando a primeira captura…</p>';
+    handoffList.innerHTML = '<p class="assisted-empty">Nenhuma intervenção solicitada.</p>';
     progressCount.textContent = "0 etapas";
     evidenceCount.textContent = "0 capturas";
+    handoffCount.textContent = "0 pendentes";
   }
 
   function setRunning(running) {
@@ -291,6 +406,24 @@ export function initializeAssistedValidation({
   }
 
   return { open, renderBoundaries };
+}
+
+function handoffStateLabel(state) {
+  switch (state) {
+    case "pending": return "Aguardando operador";
+    case "continuing": return "Retomando";
+    case "rejecting": return "Rejeitando";
+    case "acknowledged": return "Retomada confirmada";
+    case "rejected": return "Rejeitada";
+    case "expired": return "Expirada";
+    case "cancelled": return "Cancelada";
+    default: return state;
+  }
+}
+
+function formatDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "em horário desconhecido" : date.toLocaleString("pt-BR");
 }
 
 function executableActions(flow) {
@@ -342,5 +475,9 @@ function statusText(snapshot) {
 }
 
 function browserName(value) {
-  return value === "cloakbrowser" ? "CloakBrowser" : "Chromium Playwright";
+  switch (value) {
+    case "spybrowser": return "SpyBrowser";
+    case "cloakbrowser": return "CloakBrowser";
+    default: return "Chromium Playwright";
+  }
 }

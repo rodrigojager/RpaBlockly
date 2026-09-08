@@ -6,6 +6,9 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repositoryRoot
 try {
+    pwsh -NoProfile -File tests/Launcher.Checks.ps1
+    if ($LASTEXITCODE -ne 0) { throw 'O check do launcher local falhou.' }
+
     dotnet build RpaBlockly.slnx --configuration Release --no-restore
     if ($LASTEXITCODE -ne 0) { throw 'A compilação da solução falhou.' }
 

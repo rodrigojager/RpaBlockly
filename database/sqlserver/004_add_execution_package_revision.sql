@@ -17,14 +17,18 @@ IF NOT EXISTS
     SELECT 1
     FROM sys.check_constraints
     WHERE name = N'CK_Rpa_Execution_PackageIdentity'
+      AND parent_object_id = OBJECT_ID(N'[$(RpaSchema)].[$(ExecutionsTable)]')
 )
 BEGIN
-    ALTER TABLE [$(RpaSchema)].[$(ExecutionsTable)]
+    EXEC(N'ALTER TABLE [$(RpaSchema)].[$(ExecutionsTable)]
         ADD CONSTRAINT CK_Rpa_Execution_PackageIdentity CHECK
         (
             (RpaPackageOrigin IS NULL AND RpaPackageRevision IS NULL AND RpaPackageHash IS NULL)
             OR
-            (RpaPackageOrigin IS NOT NULL AND LEN(RpaPackageRevision) = 64
+            (RpaPackageOrigin IS NOT NULL
+             AND RpaPackageRevision IS NOT NULL
+             AND RpaPackageHash IS NOT NULL
+             AND LEN(RpaPackageRevision) = 64
              AND LEN(RpaPackageHash) = 64)
-        );
+        );');
 END;

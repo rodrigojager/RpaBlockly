@@ -11,7 +11,8 @@ public sealed record RpaWorkItem(
     int MaxAttempts,
     string InputJson,
     string ConfigurationJson,
-    string AttachmentsJson);
+    string AttachmentsJson,
+    Guid LeaseToken = default);
 
 public sealed record MaterializedOutput(
     string Name,

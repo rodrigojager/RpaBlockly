@@ -1,0 +1,27 @@
+name: rpablockly-cloudflare-sidecar
+
+services:
+  byparr:
+    profiles: ["byparr"]
+    image: "${BYPARR_IMAGE:-ghcr.io/thephaseless/byparr@sha256:874f719518f617d03a60e03411fc5d090647e1a877041e81f8dc965927c7deb6}"
+    ports:
+      - "127.0.0.1:${CLOUDFLARE_SIDECAR_PORT:-8191}:8191"
+    environment:
+      LOG_LEVEL: warning
+    shm_size: 2gb
+    restart: unless-stopped
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+
+  flaresolverr:
+    profiles: ["flaresolverr"]
+    image: "${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}"
+    ports:
+      - "127.0.0.1:${CLOUDFLARE_SIDECAR_PORT:-8191}:8191"
+    environment:
+      LOG_LEVEL: warning
+      LOG_HTML: "false"
+    shm_size: 2gb
+    restart: unless-stopped
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]

@@ -62,12 +62,6 @@ public static class RpaPackageValidator
                 $"{path} não aceita cardinalidade many.");
         }
 
-        if (role == "options" && use.Cardinality != LocatorCardinality.Many)
-        {
-            throw new InvalidOperationException(
-                $"{path} deve usar cardinalidade many.");
-        }
-
     }
 
     private static void ValidateFingerprintReferences(LocatorDefinition locator)

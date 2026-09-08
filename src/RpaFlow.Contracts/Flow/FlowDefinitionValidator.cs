@@ -84,7 +84,13 @@ public static class FlowDefinitionValidator
         "unique", "fail", "overwrite"
     };
 
-    public static void Validate(FlowDefinition definition)
+    public static void Validate(FlowDefinition definition) =>
+        Validate(definition, allowV2OnlyActions: false);
+
+    public static void ValidateForV2Migration(FlowDefinition definition) =>
+        Validate(definition, allowV2OnlyActions: true);
+
+    private static void Validate(FlowDefinition definition, bool allowV2OnlyActions)
     {
         ArgumentNullException.ThrowIfNull(definition);
         var errors = new List<string>();
@@ -116,6 +122,7 @@ public static class FlowDefinitionValidator
             "actions",
             isMainSequence: true,
             depth: 0,
+            allowV2OnlyActions,
             identifiers,
             safeFinalLocations,
             ref structuralCount,
@@ -145,6 +152,7 @@ public static class FlowDefinitionValidator
                 $"subflows.{name}",
                 isMainSequence: false,
                 depth: 0,
+                allowV2OnlyActions,
                 identifiers,
                 safeFinalLocations,
                 ref structuralCount,
@@ -176,6 +184,7 @@ public static class FlowDefinitionValidator
         string path,
         bool isMainSequence,
         int depth,
+        bool allowV2OnlyActions,
         ISet<string> identifiers,
         ICollection<(string Path, bool IsAllowed)> safeFinalLocations,
         ref int structuralCount,
@@ -232,6 +241,14 @@ public static class FlowDefinitionValidator
                 continue;
             }
 
+            if (!allowV2OnlyActions && FlowActionCatalog.V2OnlyTypes.Contains(action.Type))
+            {
+                errors.Add(
+                    $"{prefix}.type '{action.Type}' exige o runtime V2; " +
+                    "no schema 1, use apenas a migração V1 para V2.");
+                continue;
+            }
+
             if (action.Type.Equals(
                 "safeFinalConfirmation",
                 StringComparison.OrdinalIgnoreCase))
@@ -243,6 +260,7 @@ public static class FlowDefinitionValidator
                 action,
                 prefix,
                 depth,
+                allowV2OnlyActions,
                 identifiers,
                 safeFinalLocations,
                 ref structuralCount,
@@ -254,6 +272,7 @@ public static class FlowDefinitionValidator
         FlowActionDefinition action,
         string prefix,
         int depth,
+        bool allowV2OnlyActions,
         ISet<string> identifiers,
         ICollection<(string Path, bool IsAllowed)> safeFinalLocations,
         ref int structuralCount,
@@ -422,6 +441,7 @@ public static class FlowDefinitionValidator
                     $"{prefix}.actions",
                     isMainSequence: false,
                     depth + 1,
+                    allowV2OnlyActions,
                     identifiers,
                     safeFinalLocations,
                     ref structuralCount,
@@ -431,6 +451,7 @@ public static class FlowDefinitionValidator
                     $"{prefix}.elseActions",
                     isMainSequence: false,
                     depth + 1,
+                    allowV2OnlyActions,
                     identifiers,
                     safeFinalLocations,
                     ref structuralCount,
@@ -456,6 +477,7 @@ public static class FlowDefinitionValidator
                     $"{prefix}.actions",
                     isMainSequence: false,
                     depth + 1,
+                    allowV2OnlyActions,
                     identifiers,
                     safeFinalLocations,
                     ref structuralCount,
@@ -490,6 +512,7 @@ public static class FlowDefinitionValidator
                     $"{prefix}.actions",
                     isMainSequence: false,
                     depth + 1,
+                    allowV2OnlyActions,
                     identifiers,
                     safeFinalLocations,
                     ref structuralCount,

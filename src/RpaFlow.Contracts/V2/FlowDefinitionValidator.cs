@@ -333,6 +333,25 @@ public static partial class FlowDefinitionValidator
         FlowActionDefinition action,
         string path)
     {
+        if (action.Captcha is not null)
+        {
+            if (!CaptchaConfigurationActionTypes.Contains(action.Type))
+            {
+                throw new InvalidOperationException(
+                    $"{path}.captcha não é suportado pela ação '{action.Type}'.");
+            }
+            ValidateCaptchaOptions(action.Captcha, $"{path}.captcha");
+            if (action.Captcha.AllowCloudflareSidecar &&
+                !string.Equals(
+                    action.Captcha.Kind,
+                    "cloudflareChallenge",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"{path}.captcha.allowCloudflareSidecar exige kind=cloudflareChallenge.");
+            }
+        }
+
         if (action.Target is not null &&
             !ManyTargetTypes.Contains(action.Type) &&
             action.Target.Cardinality == LocatorCardinality.Many)
@@ -432,6 +451,24 @@ public static partial class FlowDefinitionValidator
                 break;
             case "screenshot":
                 ValidateArtifactDestination(action, path);
+                break;
+            case "solveimagecaptcha":
+                RequireLocator(action.Target, $"{path}.target");
+                RequireLocator(action.Trigger, $"{path}.trigger");
+                break;
+            case "solveslidercaptcha":
+                RequireLocator(action.Target, $"{path}.target");
+                RequireLocator(action.Trigger, $"{path}.trigger");
+                RequireLocator(action.Options, $"{path}.options");
+                if (action.Options!.Cardinality == LocatorCardinality.Many)
+                {
+                    throw new InvalidOperationException(
+                        $"{path}.options não aceita cardinalidade many para a peça do slider.");
+                }
+                break;
+            case "solverecaptchav2":
+            case "solvecaptcha":
+            case "waithumaninput":
                 break;
             case "safefinalconfirmation":
                 ValidateArtifactDestination(action, path);
@@ -623,6 +660,87 @@ public static partial class FlowDefinitionValidator
                 break;
         }
     }
+
+    private static void ValidateCaptchaOptions(FlowCaptchaOptionsDefinition? captcha, string path)
+    {
+        if (captcha is null)
+        {
+            return;
+        }
+
+        if (captcha.Kind is not null && !CaptchaKinds.Contains(captcha.Kind))
+        {
+            throw new InvalidOperationException(
+                $"{path}.kind deve ser imageText, slider, recaptchaV2, recaptchaV3, " +
+                "recaptchaEnterprise, hCaptcha, turnstile, cloudflareChallenge, " +
+                "arkoseFunCaptcha, geeTest, awsWaf ou friendlyCaptcha.");
+        }
+
+        if (captcha.SolverPolicy is not null && !CaptchaSolverPolicies.Contains(captcha.SolverPolicy))
+        {
+            throw new InvalidOperationException(
+                $"{path}.solverPolicy deve ser localOnly, preferLocal ou serviceOnly.");
+        }
+
+        if (captcha.VerificationMode is not null &&
+            !CaptchaVerificationModes.Contains(captcha.VerificationMode))
+        {
+            throw new InvalidOperationException(
+                $"{path}.verificationMode deve ser none, answerProduced ou solveAndVerify.");
+        }
+
+        if (captcha.MaxAttempts is < 1 or > 10)
+        {
+            throw new InvalidOperationException(
+                $"{path}.maxAttempts deve estar entre 1 e 10.");
+        }
+
+        if (captcha.MinMatchScore is < 0 or > 1)
+        {
+            throw new InvalidOperationException(
+                $"{path}.minMatchScore deve estar entre 0 e 1.");
+        }
+
+        if (captcha.ExpectedLength is < 1 or > 64)
+        {
+            throw new InvalidOperationException(
+                $"{path}.expectedLength deve estar entre 1 e 64.");
+        }
+
+        if (captcha.ResultOutput is not null && !DataPath.IsRuntimeOutput(captcha.ResultOutput))
+        {
+            throw new InvalidOperationException(
+                $"{path}.resultOutput deve apontar para runtime.*.");
+        }
+    }
+
+    private static readonly IReadOnlySet<string> CaptchaKinds =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "imageText", "slider", "recaptchaV2", "recaptchaV3",
+            "recaptchaEnterprise", "hCaptcha", "turnstile", "cloudflareChallenge",
+            "arkoseFunCaptcha", "geeTest", "awsWaf", "friendlyCaptcha"
+        };
+
+    private static readonly IReadOnlySet<string> CaptchaConfigurationActionTypes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "navigate", "click", "clickIfVisible", "clickAndSwitchPage", "pressKey",
+            "solveImageCaptcha", "solveSliderCaptcha", "solveRecaptchaV2",
+            "solveHCaptcha", "solveCaptcha", "waitHumanInput"
+        };
+
+    private static readonly IReadOnlySet<string> CaptchaSolverPolicies =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "localOnly", "preferLocal", "serviceOnly"
+        };
+
+    private static readonly IReadOnlySet<string> CaptchaVerificationModes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "none", "answerProduced", "solveAndVerify"
+        };
 
     private static void ValidateCondition(FlowConditionDefinition? condition, string path)
     {

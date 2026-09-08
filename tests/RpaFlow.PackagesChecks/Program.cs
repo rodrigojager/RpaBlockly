@@ -4,6 +4,12 @@ using RpaFlow.Contracts.V2;
 using RpaFlow.Packages;
 
 var documents = CreateDocuments("Botão Enviar");
+Check(
+    new PackageRevision(new string('a', 64)).Value == new string('A', 64),
+    "revisões SHA-256 são normalizadas para caixa alta");
+ExpectInvalid(
+    () => RpaPackageStoreRules.ValidateRpaId(new string('a', 201)),
+    "ID de RPA acima do limite SQL é rejeitado antes da persistência");
 var validation = RpaPackageValidator.Validate(documents);
 Check(validation.Warnings.Count == 0, "o pacote mínimo não possui warnings");
 var oversizedFlow = CreateDocuments("Botão Enviar");
@@ -445,7 +451,8 @@ static void ExpectInvalid(Action action, string description)
     {
         action();
     }
-    catch (InvalidOperationException)
+    catch (Exception exception) when (
+        exception is InvalidOperationException or ArgumentException)
     {
         Console.WriteLine($"OK: {description}.");
         return;

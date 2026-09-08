@@ -18,11 +18,52 @@ public static class LocatorActions
         this ILocator locator,
         string value,
         string description,
+        PlaywrightRuntimeOptions options,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await EnsureSingleVisibleAsync(locator, description);
-        await locator.FillAsync(value);
+        await locator.FillWithRuntimeAsync(value, options, cancellationToken);
+    }
+
+    internal static async Task FillWithRuntimeAsync(
+        this ILocator locator,
+        string value,
+        PlaywrightRuntimeOptions options,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var operation = locator.FillAsync(value, new LocatorFillOptions
+        {
+            Timeout = options.ActionTimeoutSeconds * 1_000
+        });
+        try
+        {
+            await operation.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Fechar o contexto interrompe a chamada Playwright, que não recebe token.
+            try
+            {
+                await locator.Page.Context.CloseAsync();
+            }
+            catch
+            {
+                // O cancelamento original permanece como causa autoritativa.
+            }
+
+            try
+            {
+                await operation;
+            }
+            catch
+            {
+                // A chamada foi encerrada pelo fechamento do contexto.
+            }
+            throw;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public static async Task EnsureSingleVisibleAsync(ILocator locator, string description)

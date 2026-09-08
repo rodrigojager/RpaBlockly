@@ -62,7 +62,8 @@ public sealed class V2FlowActionHandlerRegistry
             new V2NavigationActionHandler(),
             new V2FormActionHandler(),
             new V2DataAndArtifactActionHandler(),
-            new V2ControlFlowActionHandler()
+            new V2ControlFlowActionHandler(),
+            new V2CaptchaActionHandler()
         ]);
         var missing = RpaFlow.Contracts.FlowActionCatalog.SupportedTypes
             .Except(registry._handlers.Keys, StringComparer.OrdinalIgnoreCase)
@@ -168,6 +169,10 @@ public sealed class V2FlowActionExecutionScope
 
 public sealed class V2FlowActionStep : IRpaStep
 {
+    private static readonly IReadOnlySet<string> AutoCaptchaTriggerTypes =
+        new HashSet<string>(
+            ["navigate", "click", "clickIfVisible", "clickAndSwitchPage", "pressKey"],
+            StringComparer.OrdinalIgnoreCase);
     private readonly FlowActionDefinition _action;
     private readonly IReadOnlyDictionary<string, List<FlowActionDefinition>> _subflows;
     private readonly ILocatorResolver _locatorResolver;
@@ -219,6 +224,43 @@ public sealed class V2FlowActionStep : IRpaStep
                     $"O guard retornou uma diretiva desconhecida para a ação '{_action.Id}'.");
             }
 
+            if (directive == FlowActionExecutionDirective.Continue &&
+                context.Options.Captcha?.AutoSolveEnabled == true &&
+                AutoCaptchaTriggerTypes.Contains(_action.Type))
+            {
+                var automaticAction = new FlowActionDefinition
+                {
+                    Id = AutomaticCaptchaActionId(_action.Id),
+                    Type = "solveCaptcha",
+                    Name = $"Captcha automático após {_action.Name}",
+                    Optional = true,
+                    TimeoutMs = _action.TimeoutMs,
+                    Captcha = _action.Captcha,
+                    Ready = _action.Ready,
+                    Success = _action.Success
+                };
+                var automaticScope = new V2FlowActionExecutionScope(
+                    context,
+                    _subflows,
+                    _subflowDepth,
+                    _locatorResolver,
+                    _handlers,
+                    FlowActionIdentity.From(automaticAction));
+                try
+                {
+                    await _handlers.ExecuteAsync(
+                        automaticAction,
+                        automaticScope,
+                        cancellationToken);
+                }
+                catch (Exception exception) when (
+                    exception is CaptchaException or PlaywrightException or TimeoutException)
+                {
+                    Console.WriteLine(
+                        $"  Captcha automático opcional não concluído: {exception.Message}");
+                }
+            }
+
             await context.ObserveAsync(
                 CreateEvent("actionCompleted", context, stopwatch.ElapsedMilliseconds),
                 cancellationToken);
@@ -264,6 +306,13 @@ public sealed class V2FlowActionStep : IRpaStep
                 cancellationToken);
             throw classified;
         }
+    }
+
+    private static string AutomaticCaptchaActionId(string actionId)
+    {
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(actionId)));
+        return $"captcha-auto-{hash[..16].ToLowerInvariant()}";
     }
 
     private async Task CaptureStepEvidenceAsync(

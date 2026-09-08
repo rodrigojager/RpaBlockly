@@ -14,7 +14,7 @@ public sealed class AssistedExecutionService : IAsyncDisposable
 {
     private const int MaximumRetainedExecutions = 10;
     private static readonly HashSet<string> SupportedBrowsers = new(
-        ["chromium", "cloakbrowser"],
+        [PlaywrightBrowserSelection.DefaultValue, "chromium", "cloakbrowser"],
         StringComparer.OrdinalIgnoreCase);
     private readonly EditorPaths _paths;
     private readonly PackageEditorService _packages;
@@ -44,7 +44,7 @@ public sealed class AssistedExecutionService : IAsyncDisposable
         if (!SupportedBrowsers.Contains(request.Browser.Trim()))
         {
             throw new InvalidOperationException(
-                "O navegador assistido deve ser 'chromium' ou 'cloakbrowser'.");
+                "O navegador assistido deve ser 'spybrowser', 'chromium' ou 'cloakbrowser'.");
         }
 
         var opened = await _packages.OpenAsync(cancellationToken);
@@ -128,6 +128,32 @@ public sealed class AssistedExecutionService : IAsyncDisposable
     public AssistedEvidenceFile GetEvidence(string executionId, string evidenceId) =>
         GetSession(executionId).GetEvidence(evidenceId);
 
+    public AssistedExecutionSnapshot RespondToHumanHandoff(
+        string executionId,
+        string requestId,
+        AssistedHumanHandoffDecision decision)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+        var session = GetSession(executionId);
+        AssistedHumanHandoffStore.Respond(
+            session.OutputRoot,
+            session.ExecutionId,
+            requestId,
+            decision.Action);
+        return session.Snapshot();
+    }
+
+    public AssistedEvidenceFile GetHumanHandoffEvidence(
+        string executionId,
+        string requestId)
+    {
+        var session = GetSession(executionId);
+        return AssistedHumanHandoffStore.GetEvidence(
+            session.OutputRoot,
+            session.ExecutionId,
+            requestId);
+    }
+
     public async ValueTask DisposeAsync()
     {
         AssistedExecutionSession[] sessions;
@@ -183,7 +209,9 @@ public sealed class AssistedExecutionService : IAsyncDisposable
                 MaximumArtifactBytes: 50 * 1024 * 1024,
                 MaximumArtifactFilesPerExecution: 250,
                 ArtifactRetentionDays: 7,
-                CaptureScreenshotsAfterActions: request.CaptureScreenshots);
+                CaptureScreenshotsAfterActions: request.CaptureScreenshots,
+                Captcha: ReadCaptcha(GetNode(runtime, "Captcha") as JsonObject),
+                SpyBrowserHumanize: ReadBool(runtime, "SpyBrowserHumanize", true));
             var executionRequest = new FlowExecutionRequest(
                 session.ExecutionId,
                 CloneObject(configuration, "Input"),
@@ -341,6 +369,73 @@ public sealed class AssistedExecutionService : IAsyncDisposable
         }
         return array.Select(item => item!.GetValue<string>()).ToArray();
     }
+
+    private static bool ReadBool(JsonObject owner, string name, bool fallback) =>
+        GetNode(owner, name)?.GetValue<bool>() ?? fallback;
+
+    private static double ReadDouble(
+        JsonObject owner,
+        string name,
+        double fallback,
+        double minimum,
+        double maximum)
+    {
+        var value = GetNode(owner, name)?.GetValue<double>() ?? fallback;
+        if (!double.IsFinite(value) || value < minimum || value > maximum)
+        {
+            throw new InvalidOperationException(
+                $"Runtime.{name} deve ficar entre {minimum} e {maximum}.");
+        }
+        return value;
+    }
+
+    private static CaptchaOptions? ReadCaptcha(JsonObject? node) =>
+        node is null
+            ? null
+            : new CaptchaOptions(
+                ServiceUrl: ReadOptionalString(node, "ServiceUrl"),
+                ServiceApiKey: ReadOptionalString(node, "ServiceApiKey"),
+                OcrModelPath: ReadOptionalString(node, "OcrModelPath"),
+                ServiceTimeoutSeconds: ReadInt(node, "ServiceTimeoutSeconds", 60, 5, 600),
+                RecaptchaMaxAttempts: ReadInt(node, "RecaptchaMaxAttempts", 3, 1, 10),
+                HCaptchaMaxAttempts: ReadInt(node, "HCaptchaMaxAttempts", 3, 1, 10),
+                HumanHandoffTimeoutSeconds:
+                    ReadInt(node, "HumanHandoffTimeoutSeconds", 900, 10, 86_400),
+                HumanHandoffPollSeconds:
+                    ReadInt(node, "HumanHandoffPollSeconds", 2, 1, 60),
+                DeadlineSeconds: ReadInt(node, "DeadlineSeconds", 90, 1, 600),
+                ServiceRetryAttempts: ReadInt(node, "ServiceRetryAttempts", 2, 1, 5),
+                ServiceRetryBackoffMs:
+                    ReadInt(node, "ServiceRetryBackoffMs", 250, 0, 10_000),
+                MaximumServiceResponseBytes:
+                    ReadInt(node, "MaximumServiceResponseBytes", 1024 * 1024, 1024, 16 * 1024 * 1024),
+                MaximumImagePixels:
+                    ReadInt(node, "MaximumImagePixels", 16_000_000, 1, 16_000_000),
+                SliderMinimumScore:
+                    ReadDouble(node, "SliderMinimumScore", 0.65, 0, 1),
+                LocalOnly: ReadBool(node, "LocalOnly", true),
+                AutoSolveEnabled: ReadBool(node, "AutoSolveEnabled", false),
+                AllowVlmFallback: ReadBool(node, "AllowVlmFallback", false),
+                SamePageWaitSeconds: ReadInt(node, "SamePageWaitSeconds", 30, 1, 600),
+                CloudflareSidecarEnabled:
+                    ReadBool(node, "CloudflareSidecarEnabled", false),
+                CloudflareSidecarProvider:
+                    ReadOptionalString(node, "CloudflareSidecarProvider") ?? "byparr",
+                CloudflareSidecarUrl:
+                    ReadOptionalString(node, "CloudflareSidecarUrl"),
+                CloudflareSidecarApiKey:
+                    ReadOptionalString(node, "CloudflareSidecarApiKey"),
+                CloudflareSidecarTimeoutSeconds:
+                    ReadInt(node, "CloudflareSidecarTimeoutSeconds", 60, 5, 600),
+                CloudflareSidecarMaximumResponseBytes:
+                    ReadInt(
+                        node,
+                        "CloudflareSidecarMaximumResponseBytes",
+                        1024 * 1024,
+                        1024,
+                        16 * 1024 * 1024),
+                CloudflareSidecarAllowedHosts:
+                    ReadStringList(node, "CloudflareSidecarAllowedHosts"));
 
     private static bool IsHeadlessTestMode() =>
         Environment.GetEnvironmentVariable("RPABLOCKLY_ASSISTED_HEADLESS") == "1";
@@ -553,6 +648,9 @@ internal sealed class AssistedExecutionSession : IDisposable
                 _evidence.Values
                     .OrderBy(item => item.Public.CapturedAtUtc)
                     .Select(item => item.Public)
+                    .ToArray(),
+                AssistedHumanHandoffStore.Read(OutputRoot, ExecutionId)
+                    .Select(item => item.Public)
                     .ToArray());
         }
     }
@@ -631,4 +729,289 @@ internal sealed class AssistedExecutionSession : IDisposable
     }
 
     private sealed record StoredEvidence(string Path, AssistedExecutionEvidence Public);
+}
+
+internal static class AssistedHumanHandoffStore
+{
+    private const string RequestFileName = "human-handoff.request.json";
+    private const string ResponseFileName = "human-handoff.response.json";
+    private const int MaximumDocumentBytes = 64 * 1024;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
+
+    public static IReadOnlyList<StoredHumanHandoff> Read(
+        string outputRoot,
+        string executionId)
+    {
+        var executionRoot = Path.Combine(
+            Path.GetFullPath(outputRoot),
+            "human-handoff",
+            executionId);
+        if (!Directory.Exists(executionRoot))
+        {
+            return [];
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(
+                    executionRoot,
+                    RequestFileName,
+                    SearchOption.AllDirectories)
+                .Select(path => TryRead(path, outputRoot, executionId))
+                .Where(item => item is not null)
+                .Select(item => item!)
+                .OrderBy(item => item.Public.RequestedAtUtc)
+                .ToArray();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    public static void Respond(
+        string outputRoot,
+        string executionId,
+        string requestId,
+        string action)
+    {
+        if (!action.Equals("continue", StringComparison.OrdinalIgnoreCase) &&
+            !action.Equals("reject", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("A decisão deve ser 'continue' ou 'reject'.");
+        }
+
+        var stored = Find(outputRoot, executionId, requestId);
+        if (!stored.Public.State.Equals("Pending", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"A solicitação já está no estado {stored.Public.State}.");
+        }
+        if (stored.Public.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+        {
+            throw new InvalidOperationException("A solicitação de intervenção humana expirou.");
+        }
+
+        var response = new HumanHandoffResponseDocument(
+            2,
+            stored.Public.RequestId,
+            stored.Public.ExecutionId,
+            stored.Public.ActionId,
+            stored.Public.ChallengeId,
+            action.ToLowerInvariant(),
+            DateTimeOffset.UtcNow);
+        WriteAtomically(
+            Path.Combine(Path.GetDirectoryName(stored.RequestPath)!, ResponseFileName),
+            response);
+    }
+
+    public static AssistedEvidenceFile GetEvidence(
+        string outputRoot,
+        string executionId,
+        string requestId)
+    {
+        var stored = Find(outputRoot, executionId, requestId);
+        if (stored.EvidencePath is null || !File.Exists(stored.EvidencePath))
+        {
+            throw new KeyNotFoundException("A captura do handoff não está disponível.");
+        }
+
+        var extension = Path.GetExtension(stored.EvidencePath);
+        return new AssistedEvidenceFile(
+            stored.EvidencePath,
+            Path.GetFileName(stored.EvidencePath),
+            extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                ? "image/png"
+                : "image/jpeg");
+    }
+
+    private static StoredHumanHandoff Find(
+        string outputRoot,
+        string executionId,
+        string requestId) =>
+        Read(outputRoot, executionId)
+            .FirstOrDefault(item => item.Public.RequestId.Equals(
+                requestId,
+                StringComparison.Ordinal))
+        ?? throw new KeyNotFoundException("Solicitação de intervenção humana não encontrada.");
+
+    private static StoredHumanHandoff? TryRead(
+        string requestPath,
+        string outputRoot,
+        string executionId)
+    {
+        try
+        {
+            var info = new FileInfo(requestPath);
+            if (info.Length <= 0 || info.Length > MaximumDocumentBytes)
+            {
+                return null;
+            }
+            var document = JsonSerializer.Deserialize<HumanHandoffRequestDocument>(
+                File.ReadAllText(requestPath),
+                JsonOptions);
+            if (document is null ||
+                document.ContractVersion != 2 ||
+                string.IsNullOrWhiteSpace(document.RequestId) ||
+                !string.Equals(document.ExecutionId, executionId, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(document.ActionId) ||
+                string.IsNullOrWhiteSpace(document.ChallengeId) ||
+                string.IsNullOrWhiteSpace(document.Kind) ||
+                string.IsNullOrWhiteSpace(document.Message) ||
+                string.IsNullOrWhiteSpace(document.State))
+            {
+                return null;
+            }
+
+            var state = document.State;
+            if (state.Equals("Pending", StringComparison.OrdinalIgnoreCase) &&
+                document.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+            {
+                state = "Expired";
+            }
+            else if (state.Equals("Pending", StringComparison.OrdinalIgnoreCase) &&
+                TryReadMatchingResponse(requestPath, document) is { } response)
+            {
+                state = response.Action.Equals("continue", StringComparison.OrdinalIgnoreCase)
+                    ? "Continuing"
+                    : "Rejecting";
+            }
+            var evidencePath = ResolveEvidence(
+                outputRoot,
+                document.EvidenceReferences ?? []);
+            return new StoredHumanHandoff(
+                requestPath,
+                evidencePath,
+                new AssistedHumanHandoff(
+                    document.RequestId,
+                    document.ExecutionId,
+                    document.ActionId,
+                    document.ChallengeId,
+                    document.Provider,
+                    document.Kind,
+                    document.Message,
+                    state,
+                    document.RequestedAtUtc,
+                    document.ExpiresAtUtc,
+                    evidencePath is not null));
+        }
+        catch (Exception exception) when (exception is JsonException or IOException or
+                                               UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static HumanHandoffResponseDocument? TryReadMatchingResponse(
+        string requestPath,
+        HumanHandoffRequestDocument request)
+    {
+        var responsePath = Path.Combine(
+            Path.GetDirectoryName(requestPath)!,
+            ResponseFileName);
+        try
+        {
+            if (!File.Exists(responsePath))
+            {
+                return null;
+            }
+            var info = new FileInfo(responsePath);
+            if (info.Length <= 0 || info.Length > MaximumDocumentBytes)
+            {
+                return null;
+            }
+            var response = JsonSerializer.Deserialize<HumanHandoffResponseDocument>(
+                File.ReadAllText(responsePath),
+                JsonOptions);
+            return response is not null &&
+                response.ContractVersion == request.ContractVersion &&
+                response.RequestId.Equals(request.RequestId, StringComparison.Ordinal) &&
+                response.ExecutionId.Equals(request.ExecutionId, StringComparison.Ordinal) &&
+                response.ActionId.Equals(request.ActionId, StringComparison.Ordinal) &&
+                response.ChallengeId.Equals(request.ChallengeId, StringComparison.Ordinal) &&
+                response.RespondedAtUtc >= request.RequestedAtUtc &&
+                response.RespondedAtUtc <= request.ExpiresAtUtc &&
+                (response.Action.Equals("continue", StringComparison.OrdinalIgnoreCase) ||
+                 response.Action.Equals("reject", StringComparison.OrdinalIgnoreCase))
+                    ? response
+                    : null;
+        }
+        catch (Exception exception) when (exception is JsonException or IOException or
+                                                UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ResolveEvidence(
+        string outputRoot,
+        IReadOnlyList<string> references)
+    {
+        var root = Path.GetFullPath(outputRoot);
+        foreach (var reference in references)
+        {
+            var candidate = Path.GetFullPath(Path.Combine(root, reference));
+            var relative = Path.GetRelativePath(root, candidate);
+            if (Path.IsPathRooted(relative) ||
+                relative.Equals("..", StringComparison.Ordinal) ||
+                relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+                !File.Exists(candidate))
+            {
+                continue;
+            }
+            var extension = Path.GetExtension(candidate);
+            if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static void WriteAtomically<T>(string path, T value)
+    {
+        var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(value, JsonOptions));
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temporaryPath);
+        }
+    }
+
+    internal sealed record StoredHumanHandoff(
+        string RequestPath,
+        string? EvidencePath,
+        AssistedHumanHandoff Public);
+
+    private sealed record HumanHandoffRequestDocument(
+        int ContractVersion,
+        string RequestId,
+        string ExecutionId,
+        string ActionId,
+        string ChallengeId,
+        string? Provider,
+        string Kind,
+        string Message,
+        string State,
+        DateTimeOffset RequestedAtUtc,
+        DateTimeOffset ExpiresAtUtc,
+        IReadOnlyList<string>? EvidenceReferences);
+
+    private sealed record HumanHandoffResponseDocument(
+        int ContractVersion,
+        string RequestId,
+        string ExecutionId,
+        string ActionId,
+        string ChallengeId,
+        string Action,
+        DateTimeOffset RespondedAtUtc);
 }

@@ -48,7 +48,7 @@ var request = new FlowExecutionRequest(
     CloneObject(configuration["Attachments"]));
 var options = new PlaywrightRuntimeOptions(
     runtime["Headless"]?.GetValue<bool>() ?? true,
-    runtime["Browser"]?.GetValue<string>() ?? "chromium",
+    runtime["Browser"]?.GetValue<string>() ?? PlaywrightBrowserSelection.DefaultValue,
     runtime["ActionTimeoutSeconds"]?.GetValue<int>() ?? 30,
     runtime["UploadTimeoutSeconds"]?.GetValue<int>() ?? 90,
     runtime["OutputDirectory"]?.GetValue<string>() ?? "artifacts",
@@ -70,7 +70,9 @@ var options = new PlaywrightRuntimeOptions(
     MaximumArtifactFilesPerExecution:
         runtime["MaximumArtifactFilesPerExecution"]?.GetValue<int>() ?? 100,
     ArtifactRetentionDays:
-        runtime["ArtifactRetentionDays"]?.GetValue<int>() ?? 30);
+        runtime["ArtifactRetentionDays"]?.GetValue<int>() ?? 30,
+    Captcha: ReadCaptcha(runtime["Captcha"]?.AsObject()),
+    SpyBrowserHumanize: runtime["SpyBrowserHumanize"]?.GetValue<bool>() ?? true);
 PlaywrightRuntimeOptionsValidator.Validate(options);
 
 if (args.Contains("--validate-only", StringComparer.OrdinalIgnoreCase))
@@ -93,6 +95,45 @@ Console.WriteLine(result.Output.ToJsonString(new() { WriteIndented = true }));
 
 static JsonObject CloneObject(JsonNode? node) =>
     node?.DeepClone() as JsonObject ?? new JsonObject();
+
+static CaptchaOptions? ReadCaptcha(JsonObject? node) =>
+    node is null
+        ? null
+        : new CaptchaOptions(
+            ServiceUrl: node["ServiceUrl"]?.GetValue<string>(),
+            ServiceApiKey: node["ServiceApiKey"]?.GetValue<string>(),
+            OcrModelPath: node["OcrModelPath"]?.GetValue<string>(),
+            ServiceTimeoutSeconds: node["ServiceTimeoutSeconds"]?.GetValue<int>() ?? 60,
+            RecaptchaMaxAttempts: node["RecaptchaMaxAttempts"]?.GetValue<int>() ?? 3,
+            HCaptchaMaxAttempts: node["HCaptchaMaxAttempts"]?.GetValue<int>() ?? 3,
+            HumanHandoffTimeoutSeconds:
+                node["HumanHandoffTimeoutSeconds"]?.GetValue<int>() ?? 900,
+            HumanHandoffPollSeconds:
+                node["HumanHandoffPollSeconds"]?.GetValue<int>() ?? 2,
+            DeadlineSeconds: node["DeadlineSeconds"]?.GetValue<int>() ?? 90,
+            ServiceRetryAttempts: node["ServiceRetryAttempts"]?.GetValue<int>() ?? 2,
+            ServiceRetryBackoffMs: node["ServiceRetryBackoffMs"]?.GetValue<int>() ?? 250,
+            MaximumServiceResponseBytes:
+                node["MaximumServiceResponseBytes"]?.GetValue<int>() ?? 1024 * 1024,
+            MaximumImagePixels: node["MaximumImagePixels"]?.GetValue<int>() ?? 16_000_000,
+            SliderMinimumScore: node["SliderMinimumScore"]?.GetValue<double>() ?? 0.65,
+            LocalOnly: node["LocalOnly"]?.GetValue<bool>() ?? true,
+            AutoSolveEnabled: node["AutoSolveEnabled"]?.GetValue<bool>() ?? false,
+            AllowVlmFallback: node["AllowVlmFallback"]?.GetValue<bool>() ?? false,
+            SamePageWaitSeconds: node["SamePageWaitSeconds"]?.GetValue<int>() ?? 30,
+            CloudflareSidecarEnabled:
+                node["CloudflareSidecarEnabled"]?.GetValue<bool>() ?? false,
+            CloudflareSidecarProvider:
+                node["CloudflareSidecarProvider"]?.GetValue<string>() ?? "byparr",
+            CloudflareSidecarUrl: node["CloudflareSidecarUrl"]?.GetValue<string>(),
+            CloudflareSidecarApiKey: node["CloudflareSidecarApiKey"]?.GetValue<string>(),
+            CloudflareSidecarTimeoutSeconds:
+                node["CloudflareSidecarTimeoutSeconds"]?.GetValue<int>() ?? 60,
+            CloudflareSidecarMaximumResponseBytes:
+                node["CloudflareSidecarMaximumResponseBytes"]?.GetValue<int>() ?? 1024 * 1024,
+            CloudflareSidecarAllowedHosts: ReadStringList(
+                node["CloudflareSidecarAllowedHosts"],
+                "Runtime.Captcha.CloudflareSidecarAllowedHosts"));
 
 static IReadOnlyList<string>? ReadStringList(JsonNode? node, string path)
 {

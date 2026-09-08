@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "id": "ddddocr-common-old-1.4.11",
+      "version": "1.4.11-common-old",
+      "publishedFile": "common.onnx",
+      "source": {
+        "package": "ddddocr",
+        "packageVersion": "1.4.11",
+        "artifactUrl": "https://files.pythonhosted.org/packages/7a/df/163bac993532034d9bce70353b6e870c7abecd2b1cd1cee5232aef75a4fe/ddddocr-1.4.11-py3-none-any.whl",
+        "artifactSha256": "E75D369C0D2132352B7D91D1BA968C02A7425D16B004A66616E87DA1B5A0556C",
+        "artifactSizeBytes": 75865550,
+        "innerPath": "ddddocr/common_old.onnx"
+      },
+      "modelSha256": "B1D5E1344954355B10B40632062B8A9DEF06BCC33229FB667274662BF31DCF3F",
+      "modelSizeBytes": 13606198,
+      "charset": {
+        "path": "src/RpaFlow.Playwright/V2/Captcha/ocr-charset.json",
+        "sha256": "342D871C34FD467420CD39B58A4624B505DA53114E77A69B43B48B8A3EE1B24D",
+        "classes": 8210,
+        "blankIndex": 0
+      },
+      "tensors": {
+        "inputName": "input1",
+        "inputType": "float32",
+        "inputShape": [1, 1, 64, -1],
+        "outputName": "output",
+        "outputType": "int64",
+        "outputShape": [1, -1]
+      },
+      "preprocessing": {
+        "channels": 1,
+        "targetHeight": 64,
+        "widthMode": "truncate-preserve-aspect",
+        "resizeReference": "Pillow LANCZOS",
+        "normalization": "(value/255-0.5)/0.5",
+        "ctcBlankIndex": 0
+      },
+      "license": {
+        "spdx": "MIT",
+        "source": "https://github.com/sml2h3/ddddocr/blob/master/LICENSE"
+      }
+    }
+  ]
+}

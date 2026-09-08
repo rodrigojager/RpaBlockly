@@ -140,6 +140,53 @@ public sealed class FlowActionDefinition
     public string? IndexVariable { get; set; }
 
     public string? Subflow { get; set; }
+
+    /// <summary>
+    /// Opções tipadas das ações de captcha (P01). Não reutiliza Options,
+    /// que permanece reservado ao locator de papel "options".
+    /// </summary>
+    public FlowCaptchaOptionsDefinition? Captcha { get; set; }
+}
+
+/// <summary>
+/// Opções tipadas das ações de captcha. resultOutput recebe o resultado
+/// estruturado (estado, provedor, tentativas, motivo), sem quebrar o
+/// output textual histórico de solveImageCaptcha.
+/// </summary>
+public sealed class FlowCaptchaOptionsDefinition
+{
+    /// <summary>Identificador da receita de locators do desafio.</summary>
+    public string? RecipeId { get; set; }
+
+    /// <summary>Modalidade esperada; restringe a detecção automática.</summary>
+    public string? Kind { get; set; }
+
+    /// <summary>localOnly, preferLocal ou serviceOnly.</summary>
+    public string? SolverPolicy { get; set; }
+
+    /// <summary>Tentativas por desafio dentro do orçamento total.</summary>
+    public int? MaxAttempts { get; set; }
+
+    /// <summary>Destino runtime.* do resultado estruturado CaptchaSolveResult.</summary>
+    public string? ResultOutput { get; set; }
+
+    /// <summary>none, answerProduced ou solveAndVerify.</summary>
+    public string? VerificationMode { get; set; }
+
+    /// <summary>Score mínimo de casamento do slider (0..1) para autorizar o arraste.</summary>
+    public double? MinMatchScore { get; set; }
+
+    /// <summary>Comprimento esperado da resposta OCR, quando a receita o conhece.</summary>
+    public int? ExpectedLength { get; set; }
+
+    /// <summary>Autoriza uma única interação documentada no widget detectado.</summary>
+    public bool AllowInteractiveClick { get; set; }
+
+    /// <summary>
+    /// Autoriza o fallback Cloudflare isolado e o reload necessário para validar
+    /// o clearance na sessão Playwright original.
+    /// </summary>
+    public bool AllowCloudflareSidecar { get; set; }
 }
 
 public sealed class FlowConditionDefinition

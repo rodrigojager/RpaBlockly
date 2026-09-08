@@ -207,8 +207,9 @@
           <label>
             Navegador
             <select id="assisted-browser">
-              <option value="cloakbrowser">CloakBrowser</option>
+              <option value="spybrowser">SpyBrowser (padrão)</option>
               <option value="chromium">Chromium Playwright</option>
+              <option value="cloakbrowser">CloakBrowser</option>
             </select>
           </label>
           <label>
@@ -257,6 +258,19 @@
             </div>
             <div id="assisted-evidence-gallery" class="assisted-evidence-gallery">
               <p class="assisted-empty">As telas sanitizadas aparecerão aqui.</p>
+            </div>
+          </article>
+
+          <article class="assisted-panel assisted-handoffs-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Intervenção humana</p>
+                <h3>Desafios aguardando decisão</h3>
+              </div>
+              <span id="assisted-handoff-count" class="assisted-count">0 pendentes</span>
+            </div>
+            <div id="assisted-handoff-list" class="assisted-handoff-list">
+              <p class="assisted-empty">Nenhuma intervenção solicitada.</p>
             </div>
           </article>
         </section>

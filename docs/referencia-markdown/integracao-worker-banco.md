@@ -38,12 +38,22 @@ Providers: `File` e `SqlServer`. `Revision` nula resolve a atual; preenchida fix
 um SHA-256. `Overlay` opcional possui origem distinta e é usado somente quando a
 policy solicita write-back overlay.
 
+`OriginName` é o alias usado para escolher o registro (`source`, `overlay` etc.).
+Na auditoria, `RpaPackageOrigin`/`PackageOrigin` guardam o tipo efetivo do provider
+(`file`, `sqlserver`), sempre junto da revisão e do hash executados.
+
 ## Migrations
 
 Execute `001_create_worker_schema.sql`, `003_worker_resilience.sql`,
 `003_create_rpa_package_store.sql`, `004_add_execution_package_revision.sql` e
-`005_add_locator_diagnostics.sql` em ordem, com SQLCMD e os mesmos nomes de
-schema/tabelas configurados no worker. `002` apenas insere exemplo.
+`005_add_locator_diagnostics.sql` e `006_add_work_item_lease_fencing.sql` em ordem,
+com SQLCMD e os mesmos nomes de schema/tabelas configurados no worker. `002`
+apenas insere exemplo.
+
+`006` é uma barreira de compatibilidade operacional. Pare os Workers antigos,
+aplique a migration e só então inicie a versão que envia `LeaseToken`; a
+constraint nova rejeita claims ou conclusões de binários que usam apenas
+`LeaseOwner`. O provider de pacote SQL usa o mesmo `Tables.Schema` da fila.
 
 ## Retry e isolamento
 
@@ -55,7 +65,17 @@ Uma trava global por sessão SQL impede duas instâncias de consumir a mesma
 implantação. Se a conexão ou a trava cair, os claims são suspensos, as execuções
 da sessão são canceladas de forma controlada e o host tenta readquirir a liderança
 com backoff. Falhas de banco no polling degradam a prontidão, mas não encerram o
-processo. Leases vencidos são recuperados automaticamente no ciclo seguinte.
+processo. Leases vencidos são recuperados automaticamente no ciclo seguinte
+somente quando o histórico persistido permite repetição e o `RpaCode` pertence
+às definições habilitadas para claim nesse Worker. Assim, uma instância não
+recupera RPAs cujas cercas de autenticação e irreversibilidade desconhece. Cada
+execução persiste o snapshot dessas cercas em `RecoveryPolicyJson`; alterações
+posteriores na definição ou no pacote não reinterpretam o histórico. Execuções
+legadas sem snapshot conhecido são bloqueadas conservadoramente. Início de login
+sem o marcador de conclusão, tentativa de MFA, handoff humano pendente ou efeito
+irreversível concluído encerram o item com a razão definitiva correspondente.
+Cada claim recebe um `LeaseToken` novo; heartbeat e gravações terminais exigem
+esse token, impedindo que uma execução antiga grave depois de um reclaim.
 
 `/health/live` confirma que o processo HTTP responde. `/health/ready` também
 exige validação, liderança e polling recentes; `acceptingClaims` informa

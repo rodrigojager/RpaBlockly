@@ -14,10 +14,15 @@ var expectedTypes = new HashSet<string>(
     "waitForOneTimeCode", "completeAuthenticationAttempt", "setVariable",
     "readElement", "readElements",
     "switchPage", "closePage", "download", "screenshot",
-    "safeFinalConfirmation", "if", "repeat", "forEach", "runSubflow"
+    "safeFinalConfirmation", "if", "repeat", "forEach", "runSubflow",
+    "solveImageCaptcha", "solveRecaptchaV2", "solveSliderCaptcha",
+    "solveHCaptcha", "solveCaptcha", "waitHumanInput"
 ], StringComparer.OrdinalIgnoreCase);
 Check(expectedTypes.SetEquals(FlowActionCatalog.SupportedTypes),
-    "a matriz V2 cobre exatamente os 33 tipos do catálogo");
+    "a matriz V2 cobre exatamente os 39 tipos do catálogo");
+Check(FlowActionCatalog.V2OnlyTypes.SetEquals(
+        ["solveImageCaptcha", "solveRecaptchaV2", "solveSliderCaptcha", "solveHCaptcha", "solveCaptcha", "waitHumanInput"]),
+    "o catálogo identifica exatamente as seis ações exclusivas do runtime V2");
 
 foreach (var schema in new[]
          {
@@ -231,6 +236,64 @@ invalidWait.Actions[0].State = "ready";
 ExpectInvalid(
     () => V2.FlowDefinitionValidator.Validate(invalidWait),
     "wait rejeita estado fora do contrato");
+
+var unsupportedCaptchaOwner = V2.V2JsonSerializer.Deserialize<V2.FlowDefinition>(flowJson, "flow");
+unsupportedCaptchaOwner.Actions[0].Type = "fill";
+unsupportedCaptchaOwner.Actions[0].Value = JsonSerializer.SerializeToElement("valor");
+unsupportedCaptchaOwner.Actions[0].Captcha = new V2.FlowCaptchaOptionsDefinition
+{
+    Kind = "imageText"
+};
+ExpectInvalid(
+    () => V2.FlowDefinitionValidator.Validate(unsupportedCaptchaOwner),
+    "configuração automática de captcha é rejeitada em ação que não a executa");
+
+var invalidSlider = V2.V2JsonSerializer.Deserialize<V2.FlowDefinition>(flowJson, "flow");
+invalidSlider.Actions[0].Type = "solveSliderCaptcha";
+invalidSlider.Actions[0].Trigger = new V2.LocatorUseDefinition
+{
+    LocatorId = "background",
+    Cardinality = V2.LocatorCardinality.Single
+};
+invalidSlider.Actions[0].Options = new V2.LocatorUseDefinition
+{
+    LocatorId = "piece",
+    Cardinality = V2.LocatorCardinality.Many
+};
+ExpectInvalid(
+    () => V2.FlowDefinitionValidator.Validate(invalidSlider),
+    "peça do slider rejeita cardinalidade many");
+
+var validAutomaticCaptcha = new V2.FlowDefinition
+{
+    Name = "Captcha automático válido",
+    Actions =
+    [
+        new V2.FlowActionDefinition
+        {
+            Id = "navigate-captcha",
+            Type = "navigate",
+            Name = "Abrir com auto captcha",
+            Value = JsonSerializer.SerializeToElement("https://sistema.exemplo/"),
+            Captcha = new V2.FlowCaptchaOptionsDefinition { Kind = "turnstile" }
+        }
+    ]
+};
+V2.FlowDefinitionValidator.Validate(validAutomaticCaptcha);
+Check(true, "navigate aceita configuração automática e kind canônico turnstile");
+
+validAutomaticCaptcha.Actions[0].Captcha = new V2.FlowCaptchaOptionsDefinition
+{
+    Kind = "cloudflareChallenge",
+    AllowCloudflareSidecar = true
+};
+V2.FlowDefinitionValidator.Validate(validAutomaticCaptcha);
+Check(true, "sidecar exige opt-in explícito para Cloudflare Managed Challenge");
+
+validAutomaticCaptcha.Actions[0].Captcha!.Kind = "turnstile";
+ExpectInvalid(
+    () => V2.FlowDefinitionValidator.Validate(validAutomaticCaptcha),
+    "sidecar Cloudflare é rejeitado para widget Turnstile");
 
 var sensitiveCatalog = V2.V2JsonSerializer.Deserialize<V2.LocatorCatalog>(
     catalogJson,

@@ -1,10 +1,12 @@
 using Rpa.Worker.Data;
+using Rpa.Worker.Domain;
 using RpaFlow.Runtime;
 
 namespace Rpa.Worker.Execution;
 
 public sealed class WorkerFlowExecutionObserver(
     IWorkItemExecutionRepository repository,
+    RpaWorkItem workItem,
     IEnumerable<string> authenticationAttemptActionIds,
     IEnumerable<string> mfaAttemptActionIds) : IFlowExecutionObserver
 {
@@ -16,17 +18,33 @@ public sealed class WorkerFlowExecutionObserver(
     private int _authenticationAttemptStarted;
     private int _authenticationAttemptCompleted;
     private int _mfaAttemptStarted;
+    private int _humanHandoffPending;
 
     public string? ActiveActionId => Volatile.Read(ref _activeActionId);
     public bool AuthenticationAttemptStarted => Volatile.Read(ref _authenticationAttemptStarted) == 1;
     public bool AuthenticationAttemptCompleted => Volatile.Read(ref _authenticationAttemptCompleted) == 1;
     public bool MfaAttemptStarted => Volatile.Read(ref _mfaAttemptStarted) == 1;
+    public bool HumanHandoffPending => Volatile.Read(ref _humanHandoffPending) == 1;
 
     public async ValueTask ObserveAsync(FlowExecutionEvent executionEvent, CancellationToken token)
     {
+        if (OpensRetryFence(executionEvent))
+        {
+            await repository.AppendEventAsync(executionEvent, workItem, token);
+            Track(executionEvent);
+            return;
+        }
+
         Track(executionEvent);
-        await repository.AppendEventAsync(executionEvent, token);
+        await repository.AppendEventAsync(executionEvent, workItem, token);
     }
+
+    private static bool OpensRetryFence(FlowExecutionEvent executionEvent) =>
+        executionEvent.Kind.Equals(
+            "captchaHumanHandoffCompleted", StringComparison.Ordinal) ||
+        executionEvent.Kind.Equals("actionCompleted", StringComparison.Ordinal) &&
+        executionEvent.ActionType?.Equals(
+            "completeAuthenticationAttempt", StringComparison.OrdinalIgnoreCase) == true;
 
     internal void Track(FlowExecutionEvent executionEvent)
     {
@@ -41,6 +59,16 @@ public sealed class WorkerFlowExecutionObserver(
             }
             if (executionEvent.ActionId is not null && _mfaAttemptActionIds.Contains(executionEvent.ActionId))
                 Volatile.Write(ref _mfaAttemptStarted, 1);
+        }
+        else if (executionEvent.Kind.Equals(
+                     "captchaHumanHandoffRequested", StringComparison.Ordinal))
+        {
+            Volatile.Write(ref _humanHandoffPending, 1);
+        }
+        else if (executionEvent.Kind.Equals(
+                     "captchaHumanHandoffCompleted", StringComparison.Ordinal))
+        {
+            Volatile.Write(ref _humanHandoffPending, 0);
         }
         else if (executionEvent.Kind is "actionCompleted" or "actionFailed" &&
                  executionEvent.ActionId?.Equals(ActiveActionId, StringComparison.OrdinalIgnoreCase) == true)

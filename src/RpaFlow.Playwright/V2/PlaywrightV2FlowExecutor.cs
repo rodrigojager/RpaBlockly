@@ -161,13 +161,12 @@ public sealed class PlaywrightV2FlowExecutor : IFlowExecutor
                         DateTimeOffset.UtcNow,
                         RpaId: _snapshot.RpaId,
                         PackageOrigin: _snapshot.Origin.Kind,
-                        PackageRevision: completion.Revision?.Value ??
-                            _snapshot.Revision.Value,
+                        PackageRevision: _snapshot.Revision.Value,
                         PackageHash: _snapshot.ContentHash,
                         LocatorId: observation.LocatorId,
                         CandidateId: observation.Candidate.Id,
                         ResolutionReason: completion.Status.ToString(),
-                        Detail: completion.Detail),
+                        Detail: CompletionDetail(completion)),
                     CancellationToken.None);
             }
             catch
@@ -175,5 +174,18 @@ public sealed class PlaywrightV2FlowExecutor : IFlowExecutor
                 // Observabilidade não pode alterar o resultado da execução.
             }
         }
+    }
+
+    private static string? CompletionDetail(LocatorLearningCompletion completion)
+    {
+        if (completion.Revision is null)
+        {
+            return completion.Detail;
+        }
+
+        var published = $"Revisão publicada: {completion.Revision.Value}.";
+        return string.IsNullOrWhiteSpace(completion.Detail)
+            ? published
+            : $"{published} {completion.Detail}";
     }
 }

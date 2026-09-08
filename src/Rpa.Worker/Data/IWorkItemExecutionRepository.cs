@@ -13,11 +13,12 @@ public interface IWorkItemExecutionRepository
 
     Task SetExecutionPackageAsync(
         string executionId,
-        string originName,
+        RpaWorkItem workItem,
+        string originKind,
         RpaPackageSnapshot snapshot,
         CancellationToken cancellationToken);
 
-    Task RenewLeaseAsync(Guid workItemId, CancellationToken cancellationToken);
+    Task RenewLeaseAsync(RpaWorkItem workItem, CancellationToken cancellationToken);
 
     Task CompleteAsync(
         string executionId,
@@ -47,5 +48,6 @@ public interface IWorkItemExecutionRepository
 
     Task AppendEventAsync(
         FlowExecutionEvent executionEvent,
+        RpaWorkItem workItem,
         CancellationToken cancellationToken);
 }

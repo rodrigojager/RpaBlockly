@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "rpablockly-captcha-synthetic",
+  "corpusVersion": "1.0.0",
+  "license": "CC0-1.0",
+  "cohorts": [
+    {
+      "id": "image-clean-latin",
+      "capability": "image_ocr",
+      "generator": "pillow_image_v1",
+      "assetPath": "generated/v1/image-clean-latin",
+      "count": 120,
+      "seed": 104729,
+      "params": {
+        "width": 180,
+        "height": 64,
+        "length": 5,
+        "alphabet": "abcdefghjkmnpqrstuvwxyz23456789",
+        "noise": 0.01
+      },
+      "thresholds": {
+        "minExact": 0.95,
+        "maxCer": 0.05
+      }
+    },
+    {
+      "id": "image-noisy-latin",
+      "capability": "image_ocr",
+      "generator": "pillow_image_v1",
+      "assetPath": "generated/v1/image-noisy-latin",
+      "count": 80,
+      "seed": 130363,
+      "params": {
+        "width": 180,
+        "height": 64,
+        "length": 5,
+        "alphabet": "abcdefghjkmnpqrstuvwxyz23456789",
+        "noise": 0.08
+      },
+      "thresholds": {
+        "minExact": 0.95,
+        "maxCer": 0.05
+      }
+    },
+    {
+      "id": "audio-digits-en",
+      "capability": "audio_transcription",
+      "generator": "espeak_ng_audio_v1",
+      "assetPath": "generated/v1/audio-digits-en",
+      "count": 50,
+      "seed": 155921,
+      "params": {
+        "language": "en",
+        "voice": "en-us",
+        "rate": 145
+      },
+      "thresholds": {
+        "minExact": 0.95,
+        "maxWer": 0.05
+      }
+    },
+    {
+      "id": "geometry-point",
+      "capability": "geometry",
+      "generator": "pillow_geometry_v1",
+      "assetPath": "generated/v1/geometry-point",
+      "count": 15,
+      "seed": 180503,
+      "params": {
+        "width": 320,
+        "height": 180,
+        "task": "point",
+        "origin": {"x": 160.0, "y": 90.0},
+        "jitter": 40.0
+      },
+      "thresholds": {
+        "minActionRoleKind": 0.95,
+        "maxCoordinateMae": 12.0,
+        "maxCoordinateError": 30.0
+      }
+    },
+    {
+      "id": "geometry-drag",
+      "capability": "geometry",
+      "generator": "pillow_geometry_v1",
+      "assetPath": "generated/v1/geometry-drag",
+      "count": 15,
+      "seed": 205507,
+      "params": {
+        "width": 320,
+        "height": 180,
+        "task": "drag",
+        "origin": {"x": 82.0, "y": 90.0},
+        "target": {"x": 238.0, "y": 90.0},
+        "jitter": 20.0
+      },
+      "thresholds": {
+        "minActionRoleKind": 0.95,
+        "maxCoordinateMae": 15.0,
+        "maxCoordinateError": 35.0
+      }
+    }
+  ]
+}

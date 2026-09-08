@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -8,7 +9,7 @@ using RpaFlow.Playwright.V2;
 
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var expectedActionTypes = FlowActionCatalog.SupportedTypes;
-Check(expectedActionTypes.Count == 33, "o catálogo oficial contém 33 tipos de ação");
+Check(expectedActionTypes.Count == 39, "o catálogo oficial contém 39 tipos de ação");
 
 var editorCatalogPath = Path.Combine(
     repositoryRoot,
@@ -30,8 +31,8 @@ var editorBlockTypes = calls
     .Append("rpa_subflow_definition")
     .ToHashSet(StringComparer.Ordinal);
 Check(editorActionTypes.SetEquals(expectedActionTypes),
-    "o editor cobre exatamente os 33 tipos do runtime");
-Check(editorBlockTypes.Count == 36, "o editor preserva os 36 blocos do catálogo V2");
+    "o editor cobre exatamente os 39 tipos do runtime");
+Check(editorBlockTypes.Count == 42, "o editor preserva os 42 blocos do catálogo V2");
 
 var flowSchema = ReadStrict(Path.Combine(repositoryRoot, "schemas", "flow-v2.schema.json"));
 Check(!Regex.IsMatch(
@@ -48,6 +49,42 @@ await CheckOperationalPackageAsync(
     repositoryRoot,
     Path.Combine("templates", "rpa-web", "package-store"),
     "rpa-template");
+
+var exampleSettings = JsonNode.Parse(ReadStrict(Path.Combine(
+    repositoryRoot, "examples", "RpaExemplo", "appsettings.example.json")))!.AsObject();
+var templateSettings = JsonNode.Parse(ReadStrict(Path.Combine(
+    repositoryRoot, "templates", "rpa-web", "appsettings.example.json")))!.AsObject();
+var workerSettings = JsonNode.Parse(ReadStrict(Path.Combine(
+    repositoryRoot, "src", "Rpa.Worker", "appsettings.example.json")))!.AsObject();
+var browserDefaults = new[]
+{
+    exampleSettings["Runtime"],
+    templateSettings["Runtime"],
+    workerSettings["RpaWorker"]?["Definitions"]?["exemplo"]?["Runtime"]
+};
+Check(browserDefaults.All(runtime =>
+        runtime?["Browser"]?.GetValue<string>() == "spybrowser" &&
+        runtime?["SpyBrowserHumanize"]?.GetValue<bool>() == true),
+    "worker, exemplo e template usam SpyBrowser humanizado por padrão");
+var captchaDefaults = browserDefaults.Select(runtime => runtime?["Captcha"]).ToArray();
+Check(captchaDefaults.All(captcha =>
+        captcha?["RecaptchaMaxAttempts"]?.GetValue<int>() == 3 &&
+        captcha?["HCaptchaMaxAttempts"]?.GetValue<int>() == 3),
+    "worker, exemplo e template publicam os limites padrão de captcha");
+var captchaConfigurationReaders = new[]
+{
+    ReadStrict(Path.Combine(repositoryRoot, "examples", "RpaExemplo", "Program.cs")),
+    ReadStrict(Path.Combine(repositoryRoot, "templates", "rpa-web", "Program.cs")),
+    ReadStrict(Path.Combine(
+        repositoryRoot,
+        "src",
+        "RpaFlow.Editor",
+        "AssistedValidation",
+        "AssistedExecutionService.cs"))
+};
+Check(captchaConfigurationReaders.All(source =>
+        source.Contains("HCaptchaMaxAttempts:", StringComparison.Ordinal)),
+    "exemplo, template e homologação propagam HCaptchaMaxAttempts");
 
 var contractsAssembly = typeof(FlowActionCatalog).Assembly;
 var playwrightAssembly = typeof(PlaywrightV2FlowExecutor).Assembly;
@@ -118,11 +155,13 @@ Check(
         StringComparison.Ordinal),
     "release permanece RC enquanto o aceite humano REC-140 está pendente");
 
-var forbiddenNames = Directory.EnumerateFiles(repositoryRoot, "*", SearchOption.AllDirectories)
-    .Where(path => !IsIgnored(repositoryRoot, path))
+var forbiddenNames = EnumerateTrackedFiles(repositoryRoot)
     .Select(Path.GetFileName)
     .Where(name => name is not null &&
         (name.Equals("appsettings.local.json", StringComparison.OrdinalIgnoreCase) ||
+         name.Equals("appsettings.json", StringComparison.OrdinalIgnoreCase) ||
+         name.Equals(".env", StringComparison.OrdinalIgnoreCase) ||
+         name.Equals(".env.local", StringComparison.OrdinalIgnoreCase) ||
          name.Equals("secrets.json", StringComparison.OrdinalIgnoreCase) ||
          name.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase) ||
          name.EndsWith(".p12", StringComparison.OrdinalIgnoreCase)))
@@ -165,6 +204,7 @@ static IEnumerable<string> EnumerateOwnedTextFiles(string root)
 static bool IsIgnored(string root, string path)
 {
     var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+    var fileName = Path.GetFileName(path);
     return relative.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
         relative.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
         relative.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
@@ -178,7 +218,36 @@ static bool IsIgnored(string root, string path)
         relative.Contains("/__pycache__/", StringComparison.OrdinalIgnoreCase) ||
         relative.StartsWith("tmp/", StringComparison.OrdinalIgnoreCase) ||
         relative.StartsWith("artifacts/", StringComparison.OrdinalIgnoreCase) ||
-        relative.Contains("/wwwroot/vendor/", StringComparison.OrdinalIgnoreCase);
+        relative.Contains("/wwwroot/vendor/", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("appsettings.local.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("appsettings.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals(".env", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals(".env.local", StringComparison.OrdinalIgnoreCase);
+}
+
+static IEnumerable<string> EnumerateTrackedFiles(string root)
+{
+    var startInfo = new ProcessStartInfo("git")
+    {
+        WorkingDirectory = root,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
+    startInfo.ArgumentList.Add("ls-files");
+    startInfo.ArgumentList.Add("-z");
+    using var process = Process.Start(startInfo) ??
+        throw new InvalidOperationException("Não foi possível iniciar git ls-files.");
+    var output = process.StandardOutput.ReadToEnd();
+    var error = process.StandardError.ReadToEnd();
+    process.WaitForExit();
+    if (process.ExitCode != 0)
+    {
+        throw new InvalidOperationException($"git ls-files falhou: {error.Trim()}");
+    }
+    return output.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+        .Select(path => Path.Combine(root, path));
 }
 
 static bool HasMojibake(string content)

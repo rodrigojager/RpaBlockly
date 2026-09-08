@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baselineCommit": "03b74fe2197ad7651f4ba05ec5819efa9787f194",
-  "actionCount": 33,
+  "actionCount": 39,
   "actionCoverage": [
     {
       "actionType": "captureTimestamp",
@@ -129,6 +129,31 @@
       "fixture": "data-artifact.json"
     },
     {
+      "actionType": "solveCaptcha",
+      "family": "captcha",
+      "fixture": "captcha.json"
+    },
+    {
+      "actionType": "solveHCaptcha",
+      "family": "captcha",
+      "fixture": "captcha.json"
+    },
+    {
+      "actionType": "solveImageCaptcha",
+      "family": "captcha",
+      "fixture": "captcha.json"
+    },
+    {
+      "actionType": "solveRecaptchaV2",
+      "family": "captcha",
+      "fixture": "captcha.json"
+    },
+    {
+      "actionType": "solveSliderCaptcha",
+      "family": "captcha",
+      "fixture": "captcha.json"
+    },
+    {
       "actionType": "switchPage",
       "family": "navigation",
       "fixture": "navigation.json"
@@ -162,6 +187,11 @@
       "actionType": "waitForOneTimeCode",
       "family": "data-artifact",
       "fixture": "data-artifact.json"
+    },
+    {
+      "actionType": "waitHumanInput",
+      "family": "captcha",
+      "fixture": "captcha.json"
     },
     {
       "actionType": "waitStable",

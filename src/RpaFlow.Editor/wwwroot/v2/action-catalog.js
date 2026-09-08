@@ -34,6 +34,12 @@ export const actionCatalog = [
   control("repeat", "rpa_repeat", "Repetir", "Controle", []),
   control("forEach", "rpa_for_each", "Para cada", "Controle", []),
   entry("runSubflow", "rpa_run_subflow", "Executar subfluxo", "Subfluxos", []),
+  entry("solveImageCaptcha", "rpa_solve_image_captcha", "Resolver captcha de imagem", "Captchas", ["target", "trigger"]),
+  entry("solveSliderCaptcha", "rpa_solve_slider_captcha", "Resolver captcha deslizante", "Captchas", ["target", "trigger", "options"]),
+  entry("solveRecaptchaV2", "rpa_solve_recaptcha_v2", "Resolver reCAPTCHA v2", "Captchas", []),
+  entry("solveHCaptcha", "rpa_solve_hcaptcha", "Resolver hCaptcha", "Captchas", []),
+  entry("solveCaptcha", "rpa_solve_captcha_auto", "Resolver captcha (detecção automática)", "Captchas", []),
+  entry("waitHumanInput", "rpa_wait_human_input", "Aguardar intervenção humana", "Captchas", []),
   { actionType: null, blockType: "rpa_subflow_definition", label: "Definir subfluxo", category: "Subfluxos", roles: [], structural: "subflow" }
 ];
 

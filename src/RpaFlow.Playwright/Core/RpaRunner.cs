@@ -113,27 +113,36 @@ public sealed class RpaRunner(
         DateTimeOffset startedAt,
         CancellationToken cancellationToken)
     {
-        await using var session = await BrowserLauncher.LaunchAsync(options);
+        await using var session = await BrowserLauncher.LaunchAsync(options, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var storageStatePath = ResolveStorageStatePath(options);
 
-        var browserContext = await session.Browser.NewContextAsync(
-            new BrowserNewContextOptions
-            {
-                AcceptDownloads = true,
-                Locale = options.Locale,
-                StorageStatePath = storageStatePath is not null && File.Exists(storageStatePath)
-                    ? storageStatePath
-                    : null,
-                ViewportSize = new ViewportSize
+        var browserContext = await BrowserLauncher.AwaitCancellableResourceAsync(
+            session.NewContextAsync(
+                new BrowserNewContextOptions
                 {
-                    Width = options.ViewportWidth,
-                    Height = options.ViewportHeight
-                }
-            });
+                    AcceptDownloads = true,
+                    Locale = options.Locale,
+                    StorageStatePath = storageStatePath is not null && File.Exists(storageStatePath)
+                        ? storageStatePath
+                        : null,
+                    ViewportSize = new ViewportSize
+                    {
+                        Width = options.ViewportWidth,
+                        Height = options.ViewportHeight
+                    }
+                }),
+            static context => context.CloseAsync(),
+            cancellationToken);
 
         try
         {
-            var page = await browserContext.NewPageAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            var page = await BrowserLauncher.AwaitCancellableResourceAsync(
+                browserContext.NewPageAsync(),
+                static created => created.CloseAsync(),
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             var outputDirectory = ResolveOutputDirectory(options);
             using var context = new RpaContext(
                 page,
@@ -158,6 +167,10 @@ public sealed class RpaRunner(
             {
                 Console.WriteLine(
                     $"Execução concluída pelo guard após a ação '{signal.ActionId}'.");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception executionException)
             {

@@ -16,9 +16,12 @@ __pycache__/
 .recorder-audit/
 appsettings.local.json
 appsettings.json
+.env
+.env.local
 *.bak
 *.tmp
 *.user
 *.suo
 *.pdf
 *.zip
+captcha-models/

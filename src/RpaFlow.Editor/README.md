@@ -28,8 +28,12 @@ modos `strict`, `fallback` e `adaptive`, além da promoção e do write-back.
 Na raiz do repositório:
 
 ```powershell
-dotnet run --project src/RpaFlow.Editor/RpaFlow.Editor.csproj -- --project-root C:\caminho\do\RPA
+.\rpablockly.cmd editor -Project examples\RpaExemplo
 ```
+
+Sem argumentos, `rpablockly.cmd` oferece setup, diagnóstico, editor, validação e
+serviços de captcha em menu. O comando `dotnet run` direto permanece disponível
+para depuração do host.
 
 Opções:
 
@@ -71,7 +75,7 @@ mesmo `PlaywrightV2FlowExecutor` da execução operacional.
 
 Antes de iniciar:
 
-1. escolha `CloakBrowser` ou `Chromium Playwright`;
+1. escolha `SpyBrowser` (padrão), `Chromium Playwright` ou `CloakBrowser`;
 2. escolha a última ação-folha que pode ser executada com segurança;
 3. confirme explicitamente o limite;
 4. mantenha screenshots habilitadas quando o conteúdo puder ser armazenado com

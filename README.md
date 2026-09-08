@@ -34,10 +34,11 @@ Seletores de negócio não ficam nas ações nem nos blocos Blockly.
 
 ## Pré-requisitos
 
-- .NET SDK `9.0.300` ou patch compatível, conforme `global.json`;
-- PowerShell 7 para os scripts de verificação;
+- .NET SDK `10.0.302` ou feature band `10.0.x` posterior, conforme `global.json`;
+- PowerShell 7.2 ou posterior para scripts e launcher;
+- Git para validar que configurações e chaves locais não serão versionadas;
 - Node.js 24 e npm para conformidade TypeScript dos schemas;
-- Chromium do Playwright para os checks de navegador;
+- Chromium do Playwright para o SpyBrowser padrão e os checks de navegador;
 - SQL Server apenas para o worker/store SQL; os checks locais normais não iniciam
   Docker.
 
@@ -46,6 +47,35 @@ dotnet restore RpaBlockly.slnx
 dotnet build RpaBlockly.slnx --configuration Release
 pwsh src/RpaFlow.Playwright/bin/Release/net9.0/playwright.ps1 install chromium
 ```
+
+## Início rápido
+
+O launcher prepara a configuração local, compila, instala o browser e abre o
+editor. Sem argumentos, mostra um menu:
+
+```powershell
+.\rpablockly.cmd
+```
+
+Uso não interativo:
+
+```powershell
+.\rpablockly.cmd doctor
+.\rpablockly.cmd setup
+.\rpablockly.cmd editor
+```
+
+O setup padrão evita downloads de modelos e imagens Docker. Para preparar
+captchas, escolha explicitamente um modo:
+
+```powershell
+.\rpablockly.cmd setup -CaptchaMode Models
+.\rpablockly.cmd setup -CaptchaMode Docker
+```
+
+`Models` ocupa aproximadamente 25 MB no cache local. `Docker` constrói o solver
+com OCR, hCaptcha e Whisper e pode ocupar 1 GB ou mais. Comandos, lifecycle e
+limpeza estão no [guia do launcher](docs/referencia-markdown/launcher-local.md).
 
 ## Criar e editar um RPA
 
@@ -63,16 +93,22 @@ Git e adiciona o projeto à solução. O package store inicial permanece com o I
 `rpa-template`; altere `Runtime.RpaId` e `rpa.editor.json` juntos se quiser outro
 ID e publique o pacote sob esse ID.
 
-No editor, os 36 blocos cobrem os 33 tipos de ação. O pacote é aberto por revisão;
+No editor, os 42 blocos cobrem os 39 tipos de ação. O pacote é aberto por revisão;
 salvar publica os três documentos atomicamente. Conflito de revisão nunca
 sobrescreve alterações silenciosamente.
 
+O browser operacional padrão é `spybrowser`, com interações humanizadas. Defina
+`Runtime.SpyBrowserHumanize=false` para desativar essa cadência ou selecione
+explicitamente `chromium`, Firefox, WebKit, um canal Chrome/Edge ou
+`cloakbrowser`; as opções anteriores continuam disponíveis. Cada caso usa um
+contexto descartável e isolado, sem perfil persistente implícito.
+
 O botão **Validar roteiro** executa um snapshot temporário do rascunho em uma
-janela visível do Chromium ou CloakBrowser. Antes de iniciar, a pessoa escolhe a
-última ação-folha segura que pode ser executada. O painel destaca o bloco ativo,
-mostra cards de progresso, permite interromper e exibe screenshots sanitizadas.
-Essa homologação não publica o rascunho, não usa o worker e desabilita write-back
-de aprendizado.
+janela visível do SpyBrowser, Chromium ou CloakBrowser. Antes de iniciar, a
+pessoa escolhe a última ação-folha segura que pode ser executada. O painel
+destaca o bloco ativo, mostra cards de progresso, permite interromper e exibe
+screenshots sanitizadas. Essa homologação não publica o rascunho, não usa o
+worker e desabilita write-back de aprendizado.
 
 ## Gravar um roteiro no Chrome
 
@@ -135,6 +171,107 @@ Aprendizado é isolado por `executionId`. Os modos de write-back são `disabled`
 `memory`, `source` e `overlay`. `source` e `overlay` exigem writer explícito e
 publicam por compare-and-swap.
 
+## Captchas e intervenção humana
+
+O runtime V2 oferece seis ações: `solveImageCaptcha` usa OCR ONNX embutido,
+`solveSliderCaptcha` faz template matching e arraste humanizado,
+`solveRecaptchaV2` usa o desafio de áudio, `solveHCaptcha` resolve a grade
+binária do hCaptcha com classificadores ResNet ONNX do serviço opcional,
+`solveCaptcha` detecta o tipo quando isso é seguro e `waitHumanInput` suspende
+até confirmação por arquivo. Cloudflare Turnstile é apenas observado na sessão
+original e segue para intervenção humana quando o lifecycle não conclui; o
+runtime não produz nem importa tokens.
+
+`captcha-models/` é um cache local ignorado pelo Git: os arquivos ONNX são
+binários derivados, enquanto os manifestos versionados guardam origem, versão,
+tamanho, SHA-256 e contrato dos tensores. Após um clone, provisione o cache uma
+vez:
+
+```powershell
+.\tools\Get-CaptchaModels.ps1
+.\tools\Get-CaptchaModels.ps1 -Suite hcaptcha
+```
+
+O build de `services/captcha-solver/Dockerfile` executa o mesmo provisionamento
+dentro da imagem, portanto não depende do cache da máquina. Um clone somente do
+Git não é uma distribuição offline: ele ainda precisa acessar as URLs fixadas
+nos manifestos ou baixar uma imagem `captcha-solver` previamente publicada em
+um registry controlado. Para ambientes sem Internet, publique essa imagem por
+digest ou espelhe os artefatos e versione um manifesto com as URLs do espelho;
+não versione modelos soltos sem integridade verificável.
+
+Configure limites e, opcionalmente, o serviço HTTP de áudio/OCR de fallback em
+`Runtime.Captcha`. Segredos pertencem somente ao `appsettings.local.json`:
+
+```json
+"Captcha": {
+  "ServiceUrl": "http://127.0.0.1:8855",
+  "ServiceApiKey": "troque-esta-chave",
+  "OcrModelPath": "../../captcha-models/common.onnx",
+  "ServiceTimeoutSeconds": 60,
+  "RecaptchaMaxAttempts": 3,
+  "HCaptchaMaxAttempts": 3,
+  "HumanHandoffTimeoutSeconds": 900,
+  "HumanHandoffPollSeconds": 2,
+  "DeadlineSeconds": 90,
+  "LocalOnly": true,
+  "AllowVlmFallback": false,
+  "SamePageWaitSeconds": 30,
+  "CloudflareSidecarEnabled": false,
+  "CloudflareSidecarProvider": "byparr",
+  "CloudflareSidecarUrl": "http://127.0.0.1:8191",
+  "CloudflareSidecarApiKey": null,
+  "CloudflareSidecarTimeoutSeconds": 60,
+  "CloudflareSidecarMaximumResponseBytes": 1048576,
+  "CloudflareSidecarAllowedHosts": ["sistema.exemplo"]
+}
+```
+
+`DeadlineSeconds` limita somente a resolução técnica. Ao entrar em handoff,
+`HumanHandoffTimeoutSeconds` passa a controlar a espera do operador. Nas ações,
+`captcha.maxAttempts` limita tentativas do mesmo desafio dentro desse orçamento;
+cada inferência local, pelo serviço ou pelo VLM consome uma unidade compartilhada;
+para reCAPTCHA, ele sobrescreve `RecaptchaMaxAttempts`; para hCaptcha, ele
+sobrescreve `HCaptchaMaxAttempts`. `ServiceRetryAttempts`
+cobre transporte apenas no contrato legado. Requisições V2 não são reenviadas:
+sem deduplicação no servidor, uma resposta perdida poderia consumir o orçamento duas vezes.
+
+O serviço Python é opcional para captcha de imagem e obrigatório para o desafio
+de áudio do reCAPTCHA v2 e para a grade binária do hCaptcha:
+
+```powershell
+docker build -f services/captcha-solver/Dockerfile -t captcha-solver .
+docker run --rm -p 127.0.0.1:8855:8855 `
+  -e CAPTCHA_API_KEY=troque-esta-chave captcha-solver
+```
+
+Contrato e execução sem Docker estão em
+[`services/captcha-solver`](services/captcha-solver/README.md). A intervenção
+humana grava o pedido e aguarda a resposta em
+`<OutputDirectory>/human-handoff/`. Turnstile e Friendly Captcha primeiro
+observam o lifecycle na mesma página; somente Turnstile aceita um clique único
+quando `captcha.allowInteractiveClick` estiver explicitamente habilitado na ação.
+O fallback visual via LiteLLM também é opt-in por `AllowVlmFallback` e continua
+sujeito a `LocalOnly`.
+
+Cloudflare Managed Challenge possui fallback experimental para Byparr 3.0.4 ou
+FlareSolverr 3.5.0. Ele exige configuração habilitada, domínio na allowlist e
+`captcha.kind=cloudflareChallenge` com `captcha.allowCloudflareSidecar=true` na
+ação. Somente `cf_clearance` é importado e a página atual é recarregada para
+revalidar no `BrowserContext` original. O retorno do sidecar nunca é suficiente
+para marcar `Solved`. Implantação, limites e riscos estão em
+[`services/cloudflare-sidecar`](services/cloudflare-sidecar/README.md).
+
+As imagens sidecar possuem defaults por digest para builds reproduzíveis, mas
+podem ser atualizadas sem editar o Compose por `BYPARR_IMAGE` e
+`FLARESOLVERR_IMAGE`. Use sempre referência com digest e rode os checks de
+contrato antes de promover uma versão; atualizar a imagem não garante que a API
+do provider permaneceu compatível.
+
+O corpus sintético versionado contém 200 imagens, 50 áudios e 30 cenários
+geométricos, com relatórios JSON/CSV. Consulte
+[`services/captcha-solver/benchmarks`](services/captcha-solver/benchmarks/README.md).
+
 ## Worker e banco
 
 O worker SQL faz claim individual, lease, heartbeat e retry. Cada execução carrega
@@ -153,7 +290,11 @@ Migrations em ordem:
 2. `database/sqlserver/003_worker_resilience.sql` — liderança, heartbeat operacional e recuperação de leases;
 3. `003_create_rpa_package_store.sql` — revisões e documentos do pacote;
 4. `004_add_execution_package_revision.sql` — revisão/hash na execução;
-5. `005_add_locator_diagnostics.sql` — diagnóstico do resolver.
+5. `005_add_locator_diagnostics.sql` — diagnóstico do resolver;
+6. `006_add_work_item_lease_fencing.sql` — token único por claim contra escrita tardia.
+
+Pare todos os Workers antigos antes de `006` e reinicie somente a versão com
+`LeaseToken`; schema e binário devem avançar juntos nessa migration.
 
 Antes de habilitar claims, confira `RpaWorker.Tables`, configure cada definição,
 informe o limite seguro e os IDs irreversíveis, mantenha
@@ -195,6 +336,7 @@ O migrador nunca sobrescreve a origem e começa com policy `strict`.
 | `tools/RpaFlow.Migrator` | conversão offline schema 1 → pacote V2. |
 | `tools/RpaFlow.Legacy.Contracts` | contrato histórico isolado. |
 | `tools/RpaFlow.RecorderFixture` | site local loopback para aceite strict/fallback do Recorder. |
+| `services/captcha-solver` | OCR de fallback e transcrição de áudio self-hosted em CPU. |
 | `examples/` e `templates/` | exemplo e scaffold operacionais V2. |
 | `tests/` | checks executáveis de contrato, stores, editor, worker e navegador. |
 

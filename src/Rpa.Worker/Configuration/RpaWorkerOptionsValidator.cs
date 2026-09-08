@@ -299,6 +299,10 @@ public static class RpaWorkerOptionsValidator
         {
             errors.Add($"{prefix}.Package.RpaId possui um identificador inválido.");
         }
+        else if (rpaId.Length > 200)
+        {
+            errors.Add($"{prefix}.Package.RpaId não pode exceder 200 caracteres.");
+        }
 
         ValidatePackageStoreReference(
             package.OriginName,
@@ -346,6 +350,10 @@ public static class RpaWorkerOptionsValidator
         {
             errors.Add($"{prefix}.OriginName possui um identificador inválido.");
         }
+        else if (originName.Length > 100)
+        {
+            errors.Add($"{prefix}.OriginName não pode exceder 100 caracteres.");
+        }
 
         if (!provider.Equals("File", StringComparison.OrdinalIgnoreCase) &&
             !provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
@@ -356,6 +364,11 @@ public static class RpaWorkerOptionsValidator
         if (string.IsNullOrWhiteSpace(location))
         {
             errors.Add($"{prefix}.Location é obrigatório.");
+        }
+        else if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) &&
+                 location.Length > 1000)
+        {
+            errors.Add($"{prefix}.Location não pode exceder 1000 caracteres para SqlServer.");
         }
     }
 
@@ -460,7 +473,9 @@ public static class RpaWorkerOptionsValidator
                 MaximumArtifactBytes: runtime.MaximumArtifactBytes,
                 MaximumArtifactFilesPerExecution:
                     runtime.MaximumArtifactFilesPerExecution,
-                ArtifactRetentionDays: runtime.ArtifactRetentionDays));
+                ArtifactRetentionDays: runtime.ArtifactRetentionDays,
+                Captcha: runtime.Captcha?.ToRuntimeOptions(),
+                SpyBrowserHumanize: runtime.SpyBrowserHumanize));
         }
         catch (Exception exception)
         {
@@ -666,9 +681,10 @@ public static class RpaWorkerOptionsValidator
         string path,
         ICollection<string> errors)
     {
-        if (!SqlIdentifier.IsMatch(value))
+        if (value.Length > 128 || !SqlIdentifier.IsMatch(value))
         {
-            errors.Add($"{path} deve ser um identificador SQL simples e seguro.");
+            errors.Add(
+                $"{path} deve ser um identificador SQL simples, seguro e ter no máximo 128 caracteres.");
         }
     }
 

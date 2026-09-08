@@ -76,7 +76,8 @@ public sealed class WorkItemProcessor(
                 caseTimeout.Token);
             await repository.SetExecutionPackageAsync(
                 executionId,
-                packageReference.OriginName,
+                workItem,
+                packageSnapshot.Origin.Kind,
                 packageSnapshot,
                 caseTimeout.Token);
 
@@ -125,7 +126,9 @@ public sealed class WorkItemProcessor(
                 MaximumArtifactBytes: runtime.MaximumArtifactBytes,
                 MaximumArtifactFilesPerExecution:
                     runtime.MaximumArtifactFilesPerExecution,
-                ArtifactRetentionDays: runtime.ArtifactRetentionDays);
+                ArtifactRetentionDays: runtime.ArtifactRetentionDays,
+                Captcha: runtime.Captcha?.ToRuntimeOptions(),
+                SpyBrowserHumanize: runtime.SpyBrowserHumanize);
             PlaywrightRuntimeOptionsValidator.Validate(runtimeOptions);
 
             executionGuard = new ConfiguredExecutionGuard(
@@ -133,6 +136,7 @@ public sealed class WorkItemProcessor(
                 definition);
             observer = new WorkerFlowExecutionObserver(
                 repository,
+                workItem,
                 definition.AuthenticationAttemptActionIds,
                 definition.MfaAttemptActionIds);
             var sourceWriter = packageRegistry.ResolveWriter(
@@ -269,24 +273,18 @@ public sealed class WorkItemProcessor(
                   (decision.PreserveAttempt || workItem.AttemptCount < workItem.MaxAttempts)
                     ? LocatorLearningOutcome.Retry
                     : LocatorLearningOutcome.Failed;
-            try
+            if (v2Executor is not null && executionRequest is not null)
             {
-                await repository.FailAsync(
-                    executionId,
-                    workItem,
-                    decision,
+                await v2Executor.CompleteLearningAsync(
+                    executionRequest,
+                    outcome,
                     CancellationToken.None);
             }
-            finally
-            {
-                if (v2Executor is not null && executionRequest is not null)
-                {
-                    await v2Executor.CompleteLearningAsync(
-                        executionRequest,
-                        outcome,
-                        CancellationToken.None);
-                }
-            }
+            await repository.FailAsync(
+                executionId,
+                workItem,
+                decision,
+                CancellationToken.None);
         }
         finally
         {
@@ -316,7 +314,7 @@ public sealed class WorkItemProcessor(
             TimeSpan.FromSeconds(options.HeartbeatSeconds));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
-            await repository.RenewLeaseAsync(workItem.WorkItemId, cancellationToken);
+            await repository.RenewLeaseAsync(workItem, cancellationToken);
         }
     }
 

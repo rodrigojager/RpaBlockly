@@ -20,6 +20,15 @@ dotnet run --project src/Rpa.Worker/Rpa.Worker.csproj -- --validate-only
 
 O arquivo local pode conter a string de conexão e fica ignorado. O exemplo permanece vazio, desabilitado e em `SafeValidation`.
 
+## CAPTCHA e sidecar Cloudflare
+
+As opções de CAPTCHA são validadas antes do claim. O fallback de Cloudflare
+Managed Challenge permanece desabilitado e exige provider, URL privada e
+`CloudflareSidecarAllowedHosts`. O pacote também precisa autorizar a ação com
+`captcha.kind=cloudflareChallenge` e `captcha.allowCloudflareSidecar=true`.
+Somente `cf_clearance` é transferido; Turnstile não usa esse caminho. Consulte o
+[guia do sidecar](../../services/cloudflare-sidecar/README.md).
+
 ## OTP por e-mail
 
 O bloco `waitForOneTimeCode` usa `providerAlias` para selecionar uma entrada de `RpaWorker.EmailReader.Providers`. O fluxo não recebe tenant, client ID, segredo, caixa postal ou expressão regular.

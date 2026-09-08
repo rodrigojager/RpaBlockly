@@ -1,5 +1,8 @@
 namespace Rpa.Worker.Configuration;
 
+using RpaFlow.Playwright;
+using RpaFlow.Playwright.V2;
+
 public sealed class RpaWorkerOptions
 {
     public const string SectionName = "RpaWorker";
@@ -161,7 +164,9 @@ public sealed class RpaRuntimeOptions
 {
     public bool Headless { get; set; } = true;
 
-    public string Browser { get; set; } = "cloakbrowser";
+    public string Browser { get; set; } = PlaywrightBrowserSelection.DefaultValue;
+
+    public bool SpyBrowserHumanize { get; set; } = true;
 
     public int ActionTimeoutSeconds { get; set; } = 30;
 
@@ -188,6 +193,93 @@ public sealed class RpaRuntimeOptions
     public int MaximumArtifactFilesPerExecution { get; set; } = 100;
 
     public int ArtifactRetentionDays { get; set; } = 30;
+
+    public RpaCaptchaWorkerOptions? Captcha { get; set; }
+}
+
+/// <summary>
+/// Espelha <c>CaptchaOptions</c> do runtime de execução com binding amigável
+/// de configuração (classes com setters).
+/// </summary>
+public sealed class RpaCaptchaWorkerOptions
+{
+    public string? ServiceUrl { get; set; }
+
+    public string? ServiceApiKey { get; set; }
+
+    public string? OcrModelPath { get; set; }
+
+    public int ServiceTimeoutSeconds { get; set; } = 60;
+
+    public int RecaptchaMaxAttempts { get; set; } = 3;
+
+    public int HCaptchaMaxAttempts { get; set; } = 3;
+
+    public int HumanHandoffTimeoutSeconds { get; set; } = 900;
+
+    public int HumanHandoffPollSeconds { get; set; } = 2;
+
+    public int DeadlineSeconds { get; set; } = 90;
+
+    public int ServiceRetryAttempts { get; set; } = 2;
+
+    public int ServiceRetryBackoffMs { get; set; } = 250;
+
+    public int MaximumServiceResponseBytes { get; set; } = 1024 * 1024;
+
+    public int MaximumImagePixels { get; set; } = 16_000_000;
+
+    public double SliderMinimumScore { get; set; } = 0.65;
+
+    public bool LocalOnly { get; set; } = true;
+
+    public bool AutoSolveEnabled { get; set; }
+
+    public bool AllowVlmFallback { get; set; }
+
+    public int SamePageWaitSeconds { get; set; } = 30;
+
+    public bool CloudflareSidecarEnabled { get; set; }
+
+    public string CloudflareSidecarProvider { get; set; } = "byparr";
+
+    public string? CloudflareSidecarUrl { get; set; }
+
+    public string? CloudflareSidecarApiKey { get; set; }
+
+    public int CloudflareSidecarTimeoutSeconds { get; set; } = 60;
+
+    public int CloudflareSidecarMaximumResponseBytes { get; set; } = 1024 * 1024;
+
+    public List<string>? CloudflareSidecarAllowedHosts { get; set; }
+
+    public CaptchaOptions ToRuntimeOptions() =>
+        new(
+            ServiceUrl: ServiceUrl,
+            ServiceApiKey: ServiceApiKey,
+            OcrModelPath: OcrModelPath,
+            ServiceTimeoutSeconds: ServiceTimeoutSeconds,
+            RecaptchaMaxAttempts: RecaptchaMaxAttempts,
+            HCaptchaMaxAttempts: HCaptchaMaxAttempts,
+            HumanHandoffTimeoutSeconds: HumanHandoffTimeoutSeconds,
+            HumanHandoffPollSeconds: HumanHandoffPollSeconds,
+            DeadlineSeconds: DeadlineSeconds,
+            ServiceRetryAttempts: ServiceRetryAttempts,
+            ServiceRetryBackoffMs: ServiceRetryBackoffMs,
+            MaximumServiceResponseBytes: MaximumServiceResponseBytes,
+            MaximumImagePixels: MaximumImagePixels,
+            SliderMinimumScore: SliderMinimumScore,
+            LocalOnly: LocalOnly,
+            AutoSolveEnabled: AutoSolveEnabled,
+            AllowVlmFallback: AllowVlmFallback,
+            SamePageWaitSeconds: SamePageWaitSeconds,
+            CloudflareSidecarEnabled: CloudflareSidecarEnabled,
+            CloudflareSidecarProvider: CloudflareSidecarProvider,
+            CloudflareSidecarUrl: CloudflareSidecarUrl,
+            CloudflareSidecarApiKey: CloudflareSidecarApiKey,
+            CloudflareSidecarTimeoutSeconds: CloudflareSidecarTimeoutSeconds,
+            CloudflareSidecarMaximumResponseBytes: CloudflareSidecarMaximumResponseBytes,
+            CloudflareSidecarAllowedHosts: CloudflareSidecarAllowedHosts);
 }
 
 public sealed class OutputMappingOptions

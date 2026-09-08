@@ -73,7 +73,11 @@ internal sealed class FormActionHandler : IFlowActionHandler
             action,
             execution.Context.Data);
         await execution.CreateLocator(action)
-            .FillWhenReadyAsync(value, action.Name, cancellationToken);
+            .FillWhenReadyAsync(
+                value,
+                action.Name,
+                execution.Context.Options,
+                cancellationToken);
     }
 
     private static async Task SelectOptionAsync(
@@ -149,7 +153,9 @@ internal sealed class FormActionHandler : IFlowActionHandler
         var locator = execution.CreateLocator(action);
         await LocatorActions.EnsureSingleVisibleAsync(locator, action.Name);
         cancellationToken.ThrowIfCancellationRequested();
-        await locator.PressAsync(key);
+        await locator.PressAsync(
+            key,
+            key.Contains('+', StringComparison.Ordinal) ? new LocatorPressOptions() : null);
     }
 
     private static async Task TypeSequentiallyAsync(
@@ -166,7 +172,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
         if (action.ClearFirst)
         {
             await locator.ClickAsync();
-            await locator.PressAsync("Control+A");
+            await locator.PressAsync("Control+A", new LocatorPressOptions());
             await locator.PressAsync("Backspace");
 
             locator = execution.CreateLocator(action);
@@ -220,7 +226,7 @@ internal sealed class FormActionHandler : IFlowActionHandler
                     cancellationToken);
                 var input = inputs[index];
                 await input.ClickAsync();
-                await input.PressAsync("Control+A");
+                await input.PressAsync("Control+A", new LocatorPressOptions());
                 await input.PressAsync("Backspace");
             }
         }
@@ -385,7 +391,11 @@ internal sealed class FormActionHandler : IFlowActionHandler
 
         if (string.IsNullOrWhiteSpace(current))
         {
-            await locator.FillWhenReadyAsync(expected, action.Name, cancellationToken);
+            await locator.FillWhenReadyAsync(
+                expected,
+                action.Name,
+                context.Options,
+                cancellationToken);
             return;
         }
 
@@ -561,12 +571,12 @@ internal sealed class FormActionHandler : IFlowActionHandler
             MidpointRounding.AwayFromZero);
         var digits = minorUnits.ToString("0", CultureInfo.InvariantCulture);
         await locator.ClickAsync();
-        await locator.PressAsync("Control+A");
+        await locator.PressAsync("Control+A", new LocatorPressOptions());
         await locator.PressAsync("Backspace");
         await locator.PressSequentiallyAsync(
             digits,
             new LocatorPressSequentiallyOptions { Delay = action.DelayMs ?? 30 });
-        await locator.PressAsync(action.CommitKey ?? "Tab");
+        await locator.PressAsync(action.CommitKey ?? "Tab", new LocatorPressOptions());
 
         var actual = await locator.InputValueAsync();
         if (!TryParseNumber(actual, out var actualAmount) || actualAmount != amountToType)

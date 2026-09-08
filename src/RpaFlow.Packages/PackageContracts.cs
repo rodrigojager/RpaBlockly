@@ -7,7 +7,9 @@ public sealed record PackageRevision
     public PackageRevision(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        Value = value;
+        Value = value.Length == 64 && value.All(Uri.IsHexDigit)
+            ? value.ToUpperInvariant()
+            : value;
     }
 
     public string Value { get; }

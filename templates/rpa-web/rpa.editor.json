@@ -22,6 +22,11 @@
       "type": "text"
     },
     {
+      "path": "Runtime.SpyBrowserHumanize",
+      "label": "Humanizar interações no SpyBrowser",
+      "type": "checkbox"
+    },
+    {
       "path": "Runtime.Locale",
       "label": "Idioma e região do navegador",
       "type": "text"
@@ -82,6 +87,33 @@
       "path": "Runtime.HoldBrowserOpenForInspection",
       "label": "Manter navegador aberto para inspeção",
       "type": "checkbox"
+    },
+    {
+      "path": "Runtime.Captcha.CloudflareSidecarEnabled",
+      "label": "Habilitar sidecar Cloudflare experimental",
+      "type": "checkbox"
+    },
+    {
+      "path": "Runtime.Captcha.CloudflareSidecarProvider",
+      "label": "Provider Cloudflare (byparr ou flaresolverr)",
+      "type": "text"
+    },
+    {
+      "path": "Runtime.Captcha.CloudflareSidecarUrl",
+      "label": "URL privada do sidecar Cloudflare",
+      "type": "url",
+      "nullable": true
+    },
+    {
+      "path": "Runtime.Captcha.CloudflareSidecarTimeoutSeconds",
+      "label": "Timeout do sidecar Cloudflare (s)",
+      "type": "number"
+    },
+    {
+      "path": "Runtime.Captcha.CloudflareSidecarAllowedHosts",
+      "label": "Domínios autorizados para o sidecar",
+      "type": "stringList",
+      "nullable": true
     }
   ]
 }

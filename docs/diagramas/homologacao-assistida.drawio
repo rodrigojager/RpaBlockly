@@ -13,7 +13,7 @@
         <mxCell id="4" value="Snapshot temporário validado" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fef3c7;strokeColor=#d97706;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="520" y="180" width="210" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="5" value="Playwright ou CloakBrowser visível" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe4e6;strokeColor=#be123c;fontStyle=1;" vertex="1" parent="1">
+        <mxCell id="5" value="SpyBrowser, Playwright ou CloakBrowser visível" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe4e6;strokeColor=#be123c;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="790" y="180" width="230" height="70" as="geometry" />
         </mxCell>
         <mxCell id="6" value="Cards, destaque, screenshots e erros" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ede9fe;strokeColor=#7c3aed;fontStyle=1;" vertex="1" parent="1">

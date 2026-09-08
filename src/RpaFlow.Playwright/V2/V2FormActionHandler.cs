@@ -69,8 +69,10 @@ internal sealed class V2FormActionHandler : IV2FlowActionHandler
             action,
             LocatorRequiredState.Visible,
             cancellationToken);
-        await target.Locator.FillAsync(
-            V2FlowValueResolver.ResolveRequired(action, execution.Context.Data));
+        await target.Locator.FillWithRuntimeAsync(
+            V2FlowValueResolver.ResolveRequired(action, execution.Context.Data),
+            execution.Context.Options,
+            cancellationToken);
     }
 
     private static async Task SelectOptionAsync(
@@ -140,8 +142,10 @@ internal sealed class V2FormActionHandler : IV2FlowActionHandler
             action,
             LocatorRequiredState.Visible,
             cancellationToken)).Locator;
+        var key = V2FlowValueResolver.ResolveRequired(action, execution.Context.Data);
         await locator.PressAsync(
-            V2FlowValueResolver.ResolveRequired(action, execution.Context.Data));
+            key,
+            key.Contains('+', StringComparison.Ordinal) ? new LocatorPressOptions() : null);
     }
 
     private static async Task TypeSequentiallyAsync(
@@ -157,7 +161,7 @@ internal sealed class V2FormActionHandler : IV2FlowActionHandler
         if (action.ClearFirst)
         {
             await locator.ClickAsync();
-            await locator.PressAsync("Control+A");
+            await locator.PressAsync("Control+A", new LocatorPressOptions());
             await locator.PressAsync("Backspace");
             locator = (await execution.ResolveTargetAsync(
                 action,
@@ -208,7 +212,7 @@ internal sealed class V2FormActionHandler : IV2FlowActionHandler
                     elements.Length,
                     cancellationToken);
                 await inputs[index].ClickAsync();
-                await inputs[index].PressAsync("Control+A");
+                await inputs[index].PressAsync("Control+A", new LocatorPressOptions());
                 await inputs[index].PressAsync("Backspace");
             }
         }
@@ -371,7 +375,10 @@ internal sealed class V2FormActionHandler : IV2FlowActionHandler
         var current = await locator.InputValueAsync();
         if (string.IsNullOrWhiteSpace(current))
         {
-            await locator.FillAsync(expected);
+            await locator.FillWithRuntimeAsync(
+                expected,
+                execution.Context.Options,
+                cancellationToken);
             return;
         }
 
@@ -531,12 +538,12 @@ internal sealed class V2FormActionHandler : IV2FlowActionHandler
             0,
             MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture);
         await locator.ClickAsync();
-        await locator.PressAsync("Control+A");
+        await locator.PressAsync("Control+A", new LocatorPressOptions());
         await locator.PressAsync("Backspace");
         await locator.PressSequentiallyAsync(
             digits,
             new LocatorPressSequentiallyOptions { Delay = action.DelayMs ?? 30 });
-        await locator.PressAsync(action.CommitKey ?? "Tab");
+        await locator.PressAsync(action.CommitKey ?? "Tab", new LocatorPressOptions());
         var actual = await locator.InputValueAsync();
         if (!TryParseNumber(actual, out var actualAmount) || actualAmount != amountToType)
         {

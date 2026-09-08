@@ -15,10 +15,10 @@ internal static partial class SqlServerPackageStoreOptionsValidator
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.ConnectionString);
-        if (!Identifier().IsMatch(options.Schema))
+        if (options.Schema.Length > 128 || !Identifier().IsMatch(options.Schema))
         {
             throw new ArgumentException(
-                "Schema SQL inválido; use letras ASCII, números e sublinhado.",
+                "Schema SQL inválido; use até 128 letras ASCII, números ou sublinhados.",
                 nameof(options));
         }
 
@@ -31,6 +31,18 @@ internal static partial class SqlServerPackageStoreOptionsValidator
 
         ArgumentException.ThrowIfNullOrWhiteSpace(options.OriginKind);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.OriginLocation);
+        if (options.OriginKind.Length > 100)
+        {
+            throw new ArgumentException(
+                "OriginKind não pode exceder 100 caracteres.",
+                nameof(options));
+        }
+        if (options.OriginLocation.Length > 1000)
+        {
+            throw new ArgumentException(
+                "OriginLocation não pode exceder 1000 caracteres.",
+                nameof(options));
+        }
     }
 
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]

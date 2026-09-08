@@ -1,7 +1,9 @@
 using System.Net;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Playwright;
 using RpaFlow.Contracts;
 using RpaFlow.Playwright;
 using RpaFlow.Playwright.V2;
@@ -9,6 +11,7 @@ using RpaFlow.Playwright.V2.Adaptive;
 using RpaFlow.Packages;
 using RpaFlow.Runtime;
 using RpaFlow.Migrator;
+using SpyBrowser.Playwright;
 using V2 = RpaFlow.Contracts.V2;
 
 var innermostFrame =
@@ -451,13 +454,17 @@ var storageStatePath = Path.Combine(
     $"storage-state-{Guid.NewGuid():N}.json");
 var options = new PlaywrightRuntimeOptions(
     Headless: true,
-    Browser: Environment.GetEnvironmentVariable("RPABLOCKLY_CHECKS_BROWSER") ?? "chromium",
+    Browser: Environment.GetEnvironmentVariable("RPABLOCKLY_CHECKS_BROWSER") ??
+        PlaywrightBrowserSelection.DefaultValue,
     ActionTimeoutSeconds: 15,
     UploadTimeoutSeconds: 15,
     OutputDirectory: "tmp/playwright-runtime-checks",
     ConfigurationDirectory: Directory.GetCurrentDirectory(),
     StorageStatePath: storageStatePath,
     SaveStorageState: true);
+CheckBrowserSelections();
+await CheckCancelledBrowserLaunchAsync(options);
+await CheckSpyBrowserHumanizationAsync(options);
 var result = await new PlaywrightFlowExecutor(
         flow,
         options,
@@ -543,6 +550,20 @@ await CheckLocatorLearningAsync();
 await CheckV2FlowExecutorAsync(options, originUrl);
 await CheckLearningDiagnosticsAsync(options);
 await CheckArtifactHardeningAsync(options.Browser);
+CheckCtcDecode();
+CheckCaptchaPixels();
+CheckSliderOffset();
+CheckRecaptchaAudioUrlValidation();
+await CheckCaptchaServiceClientAsync();
+await CheckHumanHandoffAsync();
+await CheckHumanHandoffDeadlineAsync(options);
+await CheckImageOcrAsync();
+await CheckCaptchaDetectorAsync();
+await CheckCloudflareSidecarAsync(options.Browser);
+await CheckHCaptchaServiceClientAsync();
+await CheckHCaptchaSolverAsync();
+await CheckAutomaticCaptchaAsync(options);
+await CheckCaptchaVerificationTransitionAsync(options);
 CheckV2LocatorArchitecture();
 
 Console.WriteLine(
@@ -550,6 +571,144 @@ Console.WriteLine(
     $"subfluxo e cadeia de " +
     $"iframes estável entre frames auxiliares funcionaram em HTML local com " +
     $"o navegador '{options.Browser}'.");
+
+static void CheckBrowserSelections()
+{
+    var spyBrowser = PlaywrightBrowserSelection.Resolve("SPYBROWSER");
+    if (PlaywrightBrowserSelection.DefaultValue != "spybrowser" ||
+        spyBrowser.Engine != "spybrowser" ||
+        spyBrowser.Channel is not null ||
+        !PlaywrightBrowserSelection.SupportedValues.All(PlaywrightBrowserSelection.IsSupported) ||
+        PlaywrightBrowserSelection.Resolve("chrome-canary") !=
+            new PlaywrightBrowserSelection("chromium", "chrome-canary") ||
+        PlaywrightBrowserSelection.Resolve("msedge-dev") !=
+            new PlaywrightBrowserSelection("chromium", "msedge-dev"))
+    {
+        throw new InvalidOperationException(
+            "SpyBrowser não é o padrão ou uma seleção de navegador anterior foi removida.");
+    }
+    Console.WriteLine("OK: SpyBrowser é o padrão e as seleções anteriores permanecem disponíveis.");
+}
+
+static async Task CheckSpyBrowserHumanizationAsync(PlaywrightRuntimeOptions baseline)
+{
+    foreach (var humanize in new[] { true, false })
+    {
+        await using var session = await BrowserLauncher.LaunchAsync(baseline with
+        {
+            Browser = PlaywrightBrowserSelection.DefaultValue,
+            SpyBrowserHumanize = humanize,
+            StorageStatePath = null,
+            SaveStorageState = false
+        });
+        IBrowserContext? observedContext = null;
+        session.Browser.Context += (_, created) => observedContext = created;
+        var context = await session.Browser.NewContextAsync(new BrowserNewContextOptions());
+        try
+        {
+            var page = await context.NewPageAsync();
+            var contextIsWrapped = !ReferenceEquals(context, PlaywrightHumanizer.Unwrap(context));
+            var pageIsWrapped = !ReferenceEquals(page, PlaywrightHumanizer.Unwrap(page));
+            if (contextIsWrapped != humanize || pageIsWrapped != humanize ||
+                !ReferenceEquals(context, observedContext) ||
+                !session.Browser.Contexts.Contains(context))
+            {
+                throw new InvalidOperationException(
+                    "SpyBrowser não respeitou a configuração de humanização do runtime.");
+            }
+
+            var observedTimeZone = await page.EvaluateAsync<string>(
+                "Intl.DateTimeFormat().resolvedOptions().timeZone");
+            if (!string.Equals(
+                    observedTimeZone,
+                    BrowserLauncher.ResolveLocalTimeZoneId(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"SpyBrowser alterou o timezone local para '{observedTimeZone}'.");
+            }
+
+            if (humanize)
+            {
+                await page.SetContentAsync("<input id='cancel-fill' disabled>");
+                using var cancellation = new CancellationTokenSource(
+                    TimeSpan.FromMilliseconds(100));
+                var stopwatch = Stopwatch.StartNew();
+                try
+                {
+                    await page.Locator("#cancel-fill").FillWithRuntimeAsync(
+                        new string('x', 4_096),
+                        baseline with { SpyBrowserHumanize = true },
+                        cancellation.Token);
+                    throw new InvalidOperationException(
+                        "O preenchimento ignorou o cancelamento.");
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    if (stopwatch.Elapsed > TimeSpan.FromSeconds(2))
+                    {
+                        throw new InvalidOperationException(
+                            "O preenchimento demorou para observar o cancelamento.");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            await context.CloseAsync();
+        }
+        if (session.Browser.Contexts.Contains(context))
+        {
+            throw new InvalidOperationException(
+                "SpyBrowser manteve um contexto encerrado na coleção pública.");
+        }
+    }
+
+    Console.WriteLine("OK: SpyBrowser liga e desliga a humanização sem trocar o provider.");
+}
+
+static async Task CheckCancelledBrowserLaunchAsync(PlaywrightRuntimeOptions baseline)
+{
+    using var cancellation = new CancellationTokenSource();
+    cancellation.Cancel();
+    try
+    {
+        await BrowserLauncher.LaunchAsync(baseline, cancellation.Token);
+        throw new InvalidOperationException(
+            "O launcher abriu um navegador para uma execução já cancelada.");
+    }
+    catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+    {
+        // Validado abaixo junto com cancelamento durante a criação do recurso.
+    }
+
+    var pending = new TaskCompletionSource<object>(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    var cleaned = new TaskCompletionSource(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    using var duringStartup = new CancellationTokenSource(
+        TimeSpan.FromMilliseconds(50));
+    try
+    {
+        await BrowserLauncher.AwaitCancellableResourceAsync(
+            pending.Task,
+            _ =>
+            {
+                cleaned.TrySetResult();
+                return Task.CompletedTask;
+            },
+            duringStartup.Token);
+        throw new InvalidOperationException(
+            "O startup ignorou o cancelamento durante a criação do recurso.");
+    }
+    catch (OperationCanceledException) when (duringStartup.IsCancellationRequested)
+    {
+        pending.SetResult(new object());
+        await cleaned.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    Console.WriteLine("OK: startup cancelado não inicia nem vaza recursos tardios.");
+}
 
 static async Task CheckV2LocatorResolverAsync(string browserName)
 {
@@ -1177,7 +1336,7 @@ static async Task CheckV2FlowExecutorAsync(
     if (!supported.SetEquals(FlowActionCatalog.SupportedTypes))
     {
         throw new InvalidOperationException(
-            "Os handlers V2 não cobrem exatamente os 33 tipos do catálogo.");
+            "Os handlers V2 não cobrem exatamente os 39 tipos do catálogo.");
     }
 
 
@@ -1845,6 +2004,2012 @@ static FlowActionDefinition Action(
 
 static string DataUrl(string html) =>
     "data:text/html;charset=utf-8," + Uri.EscapeDataString(html);
+
+static void CheckCtcDecode()
+{
+    long[] indices = [1, 2, 2, 0, 3, 3, 1, 0, 0, 4, 4, 4];
+    var charset = OcrCharset.Get();
+    var decoded = CtcDecoder.Decode(indices, charset);
+    var expected = string.Concat(charset[1], charset[2], charset[3], charset[1], charset[4]);
+    if (decoded != expected)
+    {
+        throw new InvalidOperationException(
+            $"Decode CTC divergente: '{decoded}' != '{expected}'.");
+    }
+
+    Console.WriteLine("OK: decodificador CTC ignora blanks e duplicados adjacentes.");
+}
+
+static void CheckCaptchaPixels()
+{
+    // RGBA 2x2 uniforme -> cinza constante
+    byte[] rgba = [200, 100, 50, 255, 200, 100, 50, 255, 200, 100, 50, 255, 200, 100, 50, 255];
+    var gray = CaptchaPixels.ToGrayscale(rgba, 4);
+    var mid = 0.299 * 200 + 0.587 * 100 + 0.114 * 50;
+    if (!gray.All(value => Math.Abs(value - mid) < 0.01))
+    {
+        throw new InvalidOperationException("A conversão RGBA->cinza diverge da luma esperada.");
+    }
+
+    double[] uniform = [255, 255, 255, 255];
+    var (width, samples) = CaptchaPixels.ResizeAndNormalize(uniform, 2, 2, 64);
+    if (width < 1 || samples.Any(value => Math.Abs(value - 1f) > 0.01))
+    {
+        throw new InvalidOperationException(
+            "O resize bilinear alterou uma imagem uniforme.");
+    }
+
+    var mask = CaptchaPixels.ToAlphaMask(rgba, 4);
+    if (!mask.All(flag => flag))
+    {
+        throw new InvalidOperationException("A máscara de opacidade falhou para pixels opacos.");
+    }
+
+    Console.WriteLine("OK: pixels RGBA->cinza com resize bilinear preserva uniformidade.");
+}
+
+static void CheckSliderOffset()
+{
+    // fundo 40x12 com marca de gradiente 8x4 na posição x=7
+    var width = 40;
+    var height = 12;
+    var background = Enumerable.Repeat(255.0, width * height).ToArray();
+    for (var y = 0; y < 4; y++)
+    {
+        for (var x = 7; x < 15; x++)
+        {
+            background[y * width + x] = (x - 7) * 30;
+        }
+    }
+
+    var pieceGray = Enumerable.Range(0, 8 * 4)
+        .Select(i => (i % 8) * 30.0)
+        .ToArray();
+    var pieceMask = Enumerable.Repeat(true, 8 * 4).ToArray();
+    var (bestX, score) = SliderSolver.FindBestOffset(
+        background, width, height, pieceGray, pieceMask, 8, 4);
+    if (bestX != 7)
+    {
+        throw new InvalidOperationException(
+            $"O offset do slider foi {bestX}, esperado 7 (score {score:F2}).");
+    }
+
+    try
+    {
+        _ = SliderSolver.FindBestMatch(
+            new double[1_000 * 1_000],
+            1_000,
+            1_000,
+            new double[100 * 100],
+            Enumerable.Repeat(true, 100 * 100).ToArray(),
+            100,
+            100);
+        throw new InvalidOperationException("Slider sem limite de trabalho foi aceito.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.InvalidPayload)
+    {
+    }
+
+    using var cancelled = new CancellationTokenSource();
+    cancelled.Cancel();
+    try
+    {
+        _ = SliderSolver.FindBestMatch(
+            background,
+            width,
+            height,
+            pieceGray,
+            pieceMask,
+            8,
+            4,
+            cancellationToken: cancelled.Token);
+        throw new InvalidOperationException("Slider ignorou cancelamento.");
+    }
+    catch (OperationCanceledException)
+    {
+    }
+
+    Console.WriteLine(
+        "OK: template matching do slider encontra o offset e respeita trabalho/cancelamento.");
+}
+
+static void CheckRecaptchaAudioUrlValidation()
+{
+    var valid = RecaptchaV2Solver.RequireOfficialAudioUri(
+        "https://www.google.com/recaptcha/api2/payload?id=teste");
+    if (valid.Host != "www.google.com")
+    {
+        throw new InvalidOperationException("A URL oficial de áudio foi alterada.");
+    }
+
+    foreach (var invalid in new[]
+             {
+                 "http://www.google.com/recaptcha/api2/payload",
+                 "https://www.google.com.evil.example/recaptcha/api2/payload",
+                 "https://127.0.0.1/recaptcha/api2/payload",
+                 "https://www.google.com:8443/recaptcha/api2/payload",
+                 "https://www.google.com/fora-do-recaptcha"
+             })
+    {
+        try
+        {
+            _ = RecaptchaV2Solver.RequireOfficialAudioUri(invalid);
+            throw new InvalidOperationException($"A URL insegura foi aceita: {invalid}");
+        }
+        catch (InvalidOperationException exception)
+            when (exception.Message.Contains("não permitida", StringComparison.Ordinal))
+        {
+        }
+    }
+    if (RecaptchaV2Solver.ResolveMaximumAttempts(
+            new CaptchaOptions(RecaptchaMaxAttempts: 4),
+            actionMaximumAttempts: 2) != 2)
+    {
+        throw new InvalidOperationException(
+            "captcha.maxAttempts não sobrescreveu o limite global do reCAPTCHA.");
+    }
+    if (V2CaptchaActionHandler.ComposeAttempts(1, 2) != 3)
+    {
+        throw new InvalidOperationException(
+            "As tentativas locais e remotas não foram compostas no mesmo orçamento.");
+    }
+    try
+    {
+        V2CaptchaActionHandler.ValidateExpectedAnswer("abc", expectedLength: 4, attempts: 3);
+        throw new InvalidOperationException(
+            "A validação pós-serviço aceitou resposta com comprimento incorreto.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.LowConfidence &&
+        exception.Attempts == 3)
+    {
+    }
+
+    Console.WriteLine(
+        "OK: reCAPTCHA restringe URLs e o orçamento preserva tentativas compostas.");
+}
+
+static async Task CheckCaptchaServiceClientAsync()
+{
+    const string requestId = "request-http-v2";
+    const string challengeId = "challenge-http-v2";
+    const string snapshotId = "snapshot-http-v2";
+    try
+    {
+        using var expiredClient = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: "http://127.0.0.1:1"));
+        await expiredClient.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?>(),
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(-1),
+                new Dictionary<string, object?> { ["maxAttempts"] = 1 }),
+            CancellationToken.None);
+        throw new InvalidOperationException("Prazo expirado foi enviado ao serviço.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.DeadlineExceeded &&
+        exception.Attempts == 0)
+    {
+    }
+
+    var errorBody = JsonSerializer.Serialize(new
+    {
+        contractVersion = 2,
+        requestId,
+        challengeId,
+        snapshotId,
+        status = "Failed",
+        actions = Array.Empty<object>(),
+        answer = (string?)null,
+        solver = (string?)null,
+        modelVersion = (string?)null,
+        confidence = (double?)null,
+        attempts = 3,
+        elapsedMs = 1,
+        error = new
+        {
+            code = CaptchaErrorCodes.Busy,
+            message = "solver ocupado após consumir as tentativas",
+            retryable = true
+        }
+    });
+    var (url, server) = StartSingleResponseServer(422, errorBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: url,
+            ServiceRetryAttempts: 2));
+        await client.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?> { ["width"] = 1, ["height"] = 1 },
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(10),
+                new Dictionary<string, object?>
+                {
+                    ["maxAttempts"] = 3,
+                    ["localOnly"] = true,
+                    ["allowVlmFallback"] = false
+                }),
+            CancellationToken.None);
+        throw new InvalidOperationException("Erro HTTP V2 foi tratado como sucesso.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.Busy &&
+        exception.Retryable &&
+        exception.Attempts == 3)
+    {
+    }
+    finally
+    {
+        await server;
+    }
+
+    var successBody = JsonSerializer.Serialize(new
+    {
+        contractVersion = 2,
+        requestId,
+        challengeId,
+        snapshotId,
+        status = "AnswerProduced",
+        actions = new[]
+        {
+            new
+            {
+                kind = "TypeText",
+                targetRole = "response",
+                text = "a3x9z"
+            }
+        },
+        answer = "a3x9z",
+        solver = "retry-test",
+        modelVersion = "test",
+        confidence = 0.9,
+        attempts = 3,
+        elapsedMs = 5,
+        error = (object?)null
+    });
+    var (successUrl, successServer) = StartSingleResponseServer(200, successBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: successUrl,
+            ServiceRetryAttempts: 1));
+        var result = await client.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?> { ["width"] = 1, ["height"] = 1 },
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(10),
+                new Dictionary<string, object?> { ["maxAttempts"] = 3 }),
+            CancellationToken.None);
+        if (result.Attempts != 3)
+        {
+            throw new InvalidOperationException(
+                "O cliente V2 não preservou a quantidade real de tentativas.");
+        }
+    }
+    finally
+    {
+        await successServer;
+    }
+
+    var (mismatchUrl, mismatchServer) = StartSingleResponseServer(200, successBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: mismatchUrl,
+            ServiceRetryAttempts: 2));
+        await client.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?>(),
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(10),
+                new Dictionary<string, object?> { ["maxAttempts"] = 1 }),
+            CancellationToken.None);
+        throw new InvalidOperationException(
+            "O cliente aceitou tentativas acima do orçamento solicitado.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation &&
+        exception.Attempts == 3)
+    {
+    }
+    finally
+    {
+        await mismatchServer;
+    }
+
+    var missingAttemptsBody = JsonSerializer.Serialize(new
+    {
+        contractVersion = 2,
+        requestId,
+        challengeId,
+        snapshotId,
+        status = "AnswerProduced",
+        actions = new[]
+        {
+            new { kind = "TypeText", targetRole = "response", text = "a3x9z" }
+        },
+        answer = "a3x9z",
+        error = (object?)null
+    });
+    var (missingAttemptsUrl, missingAttemptsServer) =
+        StartSingleResponseServer(200, missingAttemptsBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: missingAttemptsUrl));
+        await client.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?>(),
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(10),
+                new Dictionary<string, object?> { ["maxAttempts"] = 1 }),
+            CancellationToken.None);
+        throw new InvalidOperationException("O cliente aceitou envelope V2 sem attempts.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation &&
+        exception.Attempts == 0)
+    {
+    }
+    finally
+    {
+        await missingAttemptsServer;
+    }
+
+    var malformedFailureBody = JsonSerializer.Serialize(new
+    {
+        contractVersion = 2,
+        requestId,
+        challengeId,
+        snapshotId,
+        status = "Failed",
+        attempts = 3,
+        error = (object?)null
+    });
+    var (malformedFailureUrl, malformedFailureServer) =
+        StartSingleResponseServer(422, malformedFailureBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: malformedFailureUrl));
+        await client.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?>(),
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(10),
+                new Dictionary<string, object?> { ["maxAttempts"] = 3 }),
+            CancellationToken.None);
+        throw new InvalidOperationException("O cliente aceitou erro V2 sem objeto error.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation &&
+        exception.Attempts == 3)
+    {
+    }
+    finally
+    {
+        await malformedFailureServer;
+    }
+
+    var legacyFailureBody = JsonSerializer.Serialize(new
+    {
+        error = new
+        {
+            code = CaptchaErrorCodes.Unauthorized,
+            message = "token inválido",
+            retryable = false
+        }
+    });
+    var (legacyFailureUrl, legacyFailureServer) =
+        StartSingleResponseServer(401, legacyFailureBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: legacyFailureUrl));
+        await client.SolveV2Async(
+            new CaptchaServiceSolveRequest(
+                requestId,
+                challengeId,
+                snapshotId,
+                "image",
+                new Dictionary<string, object?> { ["imageBase64"] = "aW1hZ2U=" },
+                new Dictionary<string, object?>(),
+                Hint: null,
+                DateTimeOffset.UtcNow.AddSeconds(10),
+                new Dictionary<string, object?> { ["maxAttempts"] = 1 }),
+            CancellationToken.None);
+        throw new InvalidOperationException(
+            "O cliente V2 aceitou um erro sem envelope V2 correlacionado.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation &&
+        exception.Attempts == 0)
+    {
+    }
+    finally
+    {
+        await legacyFailureServer;
+    }
+
+    foreach (var invalidUrl in new[]
+             {
+                 "http://solver.example/",
+                 "https://solver.example/?destino=outro",
+                 "https://usuario:senha@solver.example/"
+             })
+    {
+        try
+        {
+            using var client = new CaptchaServiceClient(
+                new CaptchaOptions(ServiceUrl: invalidUrl));
+            throw new InvalidOperationException($"ServiceUrl insegura foi aceita: {invalidUrl}");
+        }
+        catch (CaptchaException exception) when (
+            exception.ErrorCode == CaptchaErrorCodes.InvalidPayload)
+        {
+        }
+    }
+
+    Console.WriteLine(
+        "OK: cliente de captcha preserva erros, tentativas e restringe transporte/URL.");
+}
+
+static (string Url, Task Server) StartSingleResponseServer(int statusCode, string body)
+{
+    using var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+    probe.Start();
+    var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+    probe.Stop();
+
+    var listener = new HttpListener();
+    var url = $"http://127.0.0.1:{port}/";
+    listener.Prefixes.Add(url);
+    listener.Start();
+    var server = Task.Run(async () =>
+    {
+        try
+        {
+            var context = await listener.GetContextAsync();
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            var bytes = Encoding.UTF8.GetBytes(body);
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+        finally
+        {
+            listener.Close();
+        }
+    });
+    return (url, server);
+}
+
+static async Task CheckCloudflareSidecarAsync(string browserName)
+{
+    using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+    await using var browser = browserName.ToLowerInvariant() switch
+    {
+        "firefox" => await playwright.Firefox.LaunchAsync(
+            new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true }),
+        "webkit" => await playwright.Webkit.LaunchAsync(
+            new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true }),
+        _ => await playwright.Chromium.LaunchAsync(
+            new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true })
+    };
+    await using var context = await browser.NewContextAsync();
+    var page = await context.NewPageAsync();
+    const string targetUrl = "https://portal.example.com/protegido";
+    await page.RouteAsync("https://portal.example.com/**", async route =>
+    {
+        var headers = await route.Request.AllHeadersAsync();
+        var cookieHeader = headers.FirstOrDefault(item =>
+            item.Key.Equals("cookie", StringComparison.OrdinalIgnoreCase)).Value;
+        var cleared = cookieHeader?.Contains(
+            "cf_clearance=clearance-teste", StringComparison.Ordinal) == true;
+        await route.FulfillAsync(new Microsoft.Playwright.RouteFulfillOptions
+        {
+            Status = 200,
+            ContentType = "text/html; charset=utf-8",
+            Body = cleared
+                ? "<html><body><main id='conteudo'>acesso autorizado</main></body></html>"
+                : "<html><body><div id='challenge-running'>aguarde</div></body></html>"
+        });
+    });
+    await page.GotoAsync(targetUrl);
+    var detected = (await CaptchaDetector.DetectAllAsync(
+            page,
+            "execucao-sidecar",
+            "captcha-sidecar",
+            CancellationToken.None))
+        .Challenges.Single(item =>
+            item.Challenge.Kind == CaptchaKind.CloudflareChallenge);
+    var userAgent = await page.EvaluateAsync<string>("() => navigator.userAgent");
+    var sidecarBody = JsonSerializer.Serialize(new
+    {
+        status = "ok",
+        message = "Success",
+        solution = new
+        {
+            url = targetUrl,
+            status = 200,
+            cookies = new object[]
+            {
+                new
+                {
+                    name = "cookie-lateral",
+                    value = "não-importar",
+                    domain = ".portal.example.com",
+                    path = "/"
+                },
+                new
+                {
+                    name = "cf_clearance",
+                    value = "clearance-teste",
+                    domain = "portal.example.com",
+                    path = "/",
+                    expires = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds(),
+                    httpOnly = true,
+                    secure = true,
+                    sameSite = "None"
+                }
+            },
+            userAgent
+        },
+        startTimestamp = 0,
+        endTimestamp = 1,
+        version = "3.0.4"
+    });
+    var (sidecarUrl, sidecarServer) = StartSingleResponseServer(200, sidecarBody);
+    try
+    {
+        var result = await CloudflareSidecarAdapter.ExecuteAsync(
+            page,
+            detected,
+            new CaptchaOptions(
+                CloudflareSidecarEnabled: true,
+                CloudflareSidecarProvider: "byparr",
+                CloudflareSidecarUrl: sidecarUrl,
+                CloudflareSidecarTimeoutSeconds: 10,
+                CloudflareSidecarMaximumResponseBytes: 16 * 1024,
+                CloudflareSidecarAllowedHosts: ["portal.example.com"]),
+            CancellationToken.None);
+        var cookies = await context.CookiesAsync();
+        if (result.Status != CaptchaSolveStatus.InteractionDone ||
+            await page.Locator("#conteudo").CountAsync() != 1 ||
+            cookies.Count(cookie =>
+                cookie.Name == "cf_clearance" &&
+                cookie.Domain == "portal.example.com") != 1 ||
+            cookies.Any(cookie => cookie.Name == "cookie-lateral"))
+        {
+            throw new InvalidOperationException(
+                "O sidecar não preservou transferência filtrada e verificação na sessão original.");
+        }
+    }
+    finally
+    {
+        await sidecarServer;
+    }
+
+    var maliciousBody = JsonSerializer.Serialize(new
+    {
+        status = "ok",
+        solution = new
+        {
+            url = targetUrl,
+            status = 200,
+            cookies = new[]
+            {
+                new
+                {
+                    name = "cf_clearance",
+                    value = "fora-do-escopo",
+                    domain = ".evil.example",
+                    path = "/",
+                    secure = true
+                }
+            },
+            userAgent
+        },
+        version = "3.5.0"
+    });
+    var (maliciousUrl, maliciousServer) = StartSingleResponseServer(200, maliciousBody);
+    try
+    {
+        using var client = new CloudflareSidecarClient(new CaptchaOptions(
+            CloudflareSidecarProvider: "flaresolverr",
+            CloudflareSidecarUrl: maliciousUrl,
+            CloudflareSidecarTimeoutSeconds: 10,
+            CloudflareSidecarMaximumResponseBytes: 16 * 1024,
+            CloudflareSidecarAllowedHosts: ["portal.example.com"]));
+        await client.SolveAsync(new Uri(targetUrl), userAgent, CancellationToken.None);
+        throw new InvalidOperationException("O sidecar aceitou cf_clearance de outro domínio.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation &&
+        exception.Attempts == 1)
+    {
+    }
+    finally
+    {
+        await maliciousServer;
+    }
+
+    var invalidStatusBody = JsonSerializer.Serialize(new
+    {
+        status = "ok",
+        solution = new
+        {
+            url = targetUrl,
+            status = "200",
+            cookies = Array.Empty<object>(),
+            userAgent
+        },
+        version = "3.5.0"
+    });
+    var (invalidStatusUrl, invalidStatusServer) = StartSingleResponseServer(200, invalidStatusBody);
+    try
+    {
+        using var client = new CloudflareSidecarClient(new CaptchaOptions(
+            CloudflareSidecarProvider: "flaresolverr",
+            CloudflareSidecarUrl: invalidStatusUrl,
+            CloudflareSidecarTimeoutSeconds: 10,
+            CloudflareSidecarMaximumResponseBytes: 16 * 1024,
+            CloudflareSidecarAllowedHosts: ["portal.example.com"]));
+        await client.SolveAsync(new Uri(targetUrl), userAgent, CancellationToken.None);
+        throw new InvalidOperationException("O sidecar aceitou solution.status inválido.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation &&
+        exception.Attempts == 1)
+    {
+    }
+    finally
+    {
+        await invalidStatusServer;
+    }
+    Console.WriteLine(
+        "OK: sidecar Cloudflare filtra cookies e revalida no BrowserContext original.");
+}
+
+static async Task CheckHCaptchaServiceClientAsync()
+{
+    const string requestId = "request-hcaptcha";
+    const string challengeId = "challenge-hcaptcha";
+    const string snapshotId = "snapshot-hcaptcha";
+
+    CaptchaServiceSolveRequest NewRequest() =>
+        new(
+            requestId,
+            challengeId,
+            snapshotId,
+            "hcaptcha_image_label",
+            new Dictionary<string, object?>
+            {
+                ["tilesBase64"] = new[] { "dGlsZS0w", "dGlsZS0x", "dGlsZS0y" }
+            },
+            new Dictionary<string, object?> { ["tileCount"] = 3 },
+            "Please click each image containing an airplane",
+            DateTimeOffset.UtcNow.AddSeconds(10),
+            new Dictionary<string, object?> { ["maxAttempts"] = 1 },
+            Provider: "hcaptcha");
+
+    static string TilesBody(object tiles) => JsonSerializer.Serialize(new
+    {
+        contractVersion = 2,
+        requestId = "request-hcaptcha",
+        challengeId = "challenge-hcaptcha",
+        snapshotId = "snapshot-hcaptcha",
+        status = "AnswerProduced",
+        actions = Array.Empty<object>(),
+        answer = (string?)null,
+        tiles,
+        solver = "hcaptcha-resnet-onnx",
+        modelVersion = "airplane2310@fixture",
+        confidence = (double?)null,
+        attempts = 1,
+        elapsedMs = 5,
+        error = (object?)null
+    });
+
+    var successBody = TilesBody(new[]
+    {
+        new { index = 0, match = false, confidence = 0.9 },
+        new { index = 1, match = true, confidence = 0.8 },
+        new { index = 2, match = false, confidence = 0.7 }
+    });
+    var (successUrl, successServer) = StartSingleResponseServer(200, successBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: successUrl));
+        var result = await client.SolveV2Async(NewRequest(), CancellationToken.None);
+        var decisions = result.TileDecisions;
+        if (result.Status != CaptchaSolveStatus.AnswerProduced ||
+            result.Kind != CaptchaKind.HCaptcha ||
+            result.Attempts != 1 ||
+            decisions is null ||
+            decisions.Count != 3 ||
+            decisions.Count(item => item.Match) != 1 ||
+            !decisions[1].Match ||
+            decisions[1].Confidence != 0.8 ||
+            result.Actions.Count != 0)
+        {
+            throw new InvalidOperationException(
+                "O cliente V2 não preservou as decisões de tile do hCaptcha.");
+        }
+    }
+    finally
+    {
+        await successServer;
+    }
+
+    var duplicateBody = TilesBody(new[]
+    {
+        new { index = 1, match = true, confidence = 0.9 },
+        new { index = 1, match = false, confidence = 0.8 },
+        new { index = 2, match = false, confidence = 0.7 }
+    });
+    var (duplicateUrl, duplicateServer) = StartSingleResponseServer(200, duplicateBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: duplicateUrl));
+        await client.SolveV2Async(NewRequest(), CancellationToken.None);
+        throw new InvalidOperationException("Índice duplicado de tile foi aceito.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation)
+    {
+    }
+    finally
+    {
+        await duplicateServer;
+    }
+
+    var outOfRangeBody = TilesBody(new[]
+    {
+        new { index = 0, match = false, confidence = 0.9 },
+        new { index = 1, match = true, confidence = 0.8 },
+        new { index = 3, match = false, confidence = 0.7 }
+    });
+    var (outOfRangeUrl, outOfRangeServer) = StartSingleResponseServer(200, outOfRangeBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: outOfRangeUrl));
+        await client.SolveV2Async(NewRequest(), CancellationToken.None);
+        throw new InvalidOperationException("Índice de tile fora da requisição foi aceito.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation)
+    {
+    }
+    finally
+    {
+        await outOfRangeServer;
+    }
+
+    var mismatchBody = TilesBody(new[]
+    {
+        new { index = 0, match = false, confidence = 0.9 },
+        new { index = 1, match = true, confidence = 0.8 }
+    });
+    var (mismatchUrl, mismatchServer) = StartSingleResponseServer(200, mismatchBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: mismatchUrl));
+        await client.SolveV2Async(NewRequest(), CancellationToken.None);
+        throw new InvalidOperationException(
+            "Contagem de tiles divergente da requisição foi aceita.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation)
+    {
+    }
+    finally
+    {
+        await mismatchServer;
+    }
+
+    var emptyBody = JsonSerializer.Serialize(new
+    {
+        contractVersion = 2,
+        requestId,
+        challengeId,
+        snapshotId,
+        status = "AnswerProduced",
+        actions = Array.Empty<object>(),
+        answer = (string?)null,
+        tiles = (object?)null,
+        solver = "hcaptcha-resnet-onnx",
+        modelVersion = "airplane2310@fixture",
+        confidence = (double?)null,
+        attempts = 1,
+        elapsedMs = 5,
+        error = (object?)null
+    });
+    var (emptyUrl, emptyServer) = StartSingleResponseServer(200, emptyBody);
+    try
+    {
+        using var client = new CaptchaServiceClient(new CaptchaOptions(
+            ServiceUrl: emptyUrl));
+        await client.SolveV2Async(NewRequest(), CancellationToken.None);
+        throw new InvalidOperationException(
+            "Resposta sem ações e sem tiles foi aceita.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation)
+    {
+    }
+    finally
+    {
+        await emptyServer;
+    }
+
+    Console.WriteLine(
+        "OK: cliente de captcha valida decisões de tile e preserva o contrato hCaptcha.");
+}
+
+static async Task CheckHCaptchaSolverAsync()
+{
+    using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+    await using var browser = await playwright.Chromium.LaunchAsync(
+        new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true });
+
+    const string anchorSrc =
+        "https://newassets.hcaptcha.com/captcha/v1/fixture/static/hcaptcha.html#frame=checkbox&id=fx0";
+    const string challengeSrc =
+        "https://newassets.hcaptcha.com/captcha/v1/fixture/static/hcaptcha-challenge.html#frame=challenge&id=fx1";
+    const string areaSrc =
+        "https://newassets.hcaptcha.com/captcha/v1/fixture/static/hcaptcha-area.html#frame=challenge&id=fx2";
+    const string anchorHtml =
+        """
+        <body>
+          <div id="checkbox" aria-checked="false" role="checkbox"
+               style="width:28px;height:28px;border:1px solid #333"></div>
+          <script>
+            document.getElementById('checkbox').addEventListener('click', () => {
+              window.parent.postMessage('open-challenge', '*');
+            });
+            window.addEventListener('message', event => {
+              if (event.data === 'mark-solved') {
+                document.getElementById('checkbox').setAttribute('aria-checked', 'true');
+              }
+            });
+          </script>
+        </body>
+        """;
+    const string challengeHtml =
+        """
+        <body>
+          <div class="challenge-view">
+            <div class="prompt-text">Please click each image containing an airplane</div>
+            <div class="task-grid">
+              <div class="image" style="width:120px;height:120px;background:#a00"></div>
+              <div class="image" style="width:120px;height:120px;background:#0a0"></div>
+              <div class="image" style="width:120px;height:120px;background:#00a"></div>
+              <div class="image" style="width:120px;height:120px;background:#aa0"></div>
+              <div class="image" style="width:120px;height:120px;background:#0aa"></div>
+              <div class="image" style="width:120px;height:120px;background:#a0a"></div>
+              <div class="image" style="width:120px;height:120px;background:#888"></div>
+              <div class="image" style="width:120px;height:120px;background:#444"></div>
+              <div class="image" style="width:120px;height:120px;background:#ccc"></div>
+            </div>
+            <button class="button-submit">Verify</button>
+          </div>
+          <script>
+            window.clicked = [];
+            document.querySelectorAll('.task-grid .image').forEach((element, index) => {
+              element.addEventListener('click', () => {
+                window.clicked.push(index);
+                element.style.outline = '2px solid #0f0';
+              });
+            });
+            document.querySelector('.button-submit').addEventListener('click', () => {
+              window.parent.postMessage('challenge-solved', '*');
+            });
+          </script>
+        </body>
+        """;
+    const string areaHtml =
+        """
+        <body>
+          <div class="challenge-view">
+            <div class="prompt-text">Please click on the head of the animal</div>
+            <div class="task-image" style="width:300px;height:300px;background:#567"></div>
+            <button class="button-submit">Submit</button>
+          </div>
+        </body>
+        """;
+
+    static string MainHtml(string anchor, string challenge) =>
+        "<body>" +
+        $"<iframe id='anchor' src='{anchor}' style='width:300px;height:80px'></iframe>" +
+        "<textarea name='h-captcha-response'></textarea>" +
+        "<script>" +
+        "window.addEventListener('message', event => {" +
+        "  if (event.data === 'open-challenge') {" +
+        "    const frame = document.createElement('iframe');" +
+        "    frame.id = 'challenge';" +
+        $"    frame.src = '{challenge}';" +
+        "    frame.style = 'width:400px;height:600px';" +
+        "    document.body.appendChild(frame);" +
+        "  }" +
+        "  if (event.data === 'challenge-solved') {" +
+        "    document.getElementById('anchor').contentWindow.postMessage('mark-solved', '*');" +
+        "  }" +
+        "});" +
+        "</script>" +
+        "</body>";
+
+    static async Task RouteFixtureAsync(
+        Microsoft.Playwright.IPage page,
+        string mainUrl,
+        string anchorHtml,
+        string challengeHtml,
+        string challengeSrc,
+        string anchorSrc)
+    {
+        await page.RouteAsync("https://newassets.hcaptcha.com/**", async route =>
+        {
+            var url = route.Request.Url;
+            var body = url.Contains("/hcaptcha-challenge.html") ||
+                url.Contains("/hcaptcha-area.html")
+                ? challengeHtml
+                : anchorHtml;
+            await route.FulfillAsync(new Microsoft.Playwright.RouteFulfillOptions
+            {
+                Status = 200,
+                ContentType = "text/html; charset=utf-8",
+                Body = body
+            });
+        });
+        await page.RouteAsync(mainUrl, async route =>
+        {
+            await route.FulfillAsync(new Microsoft.Playwright.RouteFulfillOptions
+            {
+                Status = 200,
+                ContentType = "text/html; charset=utf-8",
+                Body = MainHtml(anchorSrc, challengeSrc)
+            });
+        });
+    }
+
+    var (serviceUrl, serviceServer) = StartHCaptchaServiceStub([1, 4]);
+    var page = await browser.NewPageAsync();
+    await RouteFixtureAsync(
+        page,
+        "https://site.exemplo/form",
+        anchorHtml,
+        challengeHtml,
+        challengeSrc,
+        anchorSrc);
+    await page.GotoAsync("https://site.exemplo/form");
+
+    var attemptsObserved = 0;
+    var outcome = await HCaptchaSolver.ExecuteAsync(
+        page,
+        new CaptchaOptions(
+            ServiceUrl: serviceUrl,
+            ServiceTimeoutSeconds: 15,
+            DeadlineSeconds: 30,
+            HCaptchaMaxAttempts: 2),
+        maximumAttempts: null,
+        value => attemptsObserved = Math.Max(attemptsObserved, value),
+        CancellationToken.None);
+    await serviceServer;
+    if (!outcome.Solved || outcome.Unsupported || outcome.Attempts != 1 ||
+        attemptsObserved != 1)
+    {
+        throw new InvalidOperationException(
+            "O solver de hCaptcha não concluiu a grade binária na primeira rodada.");
+    }
+    var clicked = await page
+        .FrameLocator("iframe[src*='challenge']")
+        .Locator("body")
+        .EvaluateAsync<string>("() => window.clicked.join(',')");
+    if (clicked != "1,4")
+    {
+        throw new InvalidOperationException(
+            $"O solver clicou os tiles '{clicked}', esperado '1,4'.");
+    }
+    var checkedCount = await page
+        .FrameLocator("iframe[src*='checkbox']")
+        .Locator("#checkbox[aria-checked='true']")
+        .CountAsync();
+    if (checkedCount != 1)
+    {
+        throw new InvalidOperationException(
+            "O checkbox do hCaptcha não transitou para o estado resolvido.");
+    }
+
+    var areaPage = await browser.NewPageAsync();
+    await RouteFixtureAsync(
+        areaPage,
+        "https://area.exemplo/form",
+        anchorHtml,
+        areaHtml,
+        areaSrc,
+        anchorSrc);
+    await areaPage.GotoAsync("https://area.exemplo/form");
+    var areaOutcome = await HCaptchaSolver.ExecuteAsync(
+        areaPage,
+        new CaptchaOptions(
+            ServiceUrl: "http://127.0.0.1:1",
+            ServiceTimeoutSeconds: 5,
+            DeadlineSeconds: 20),
+        maximumAttempts: null,
+        _ => { },
+        CancellationToken.None);
+    if (!areaOutcome.Unsupported || areaOutcome.Solved || areaOutcome.Attempts != 0)
+    {
+        throw new InvalidOperationException(
+            "Superfície não-binária do hCaptcha não sinalizou Unsupported para o fallback.");
+    }
+
+    Console.WriteLine(
+        "OK: solver hCaptcha clica tiles decididos pelo serviço e sinaliza fallback " +
+        "em superfície não-binária.");
+}
+
+static (string Url, Task Server) StartHCaptchaServiceStub(IReadOnlyCollection<int> matches)
+{
+    using var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+    probe.Start();
+    var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+    probe.Stop();
+
+    var listener = new HttpListener();
+    var url = $"http://127.0.0.1:{port}/";
+    listener.Prefixes.Add(url);
+    listener.Start();
+    var server = Task.Run(async () =>
+    {
+        try
+        {
+            var context = await listener.GetContextAsync();
+            using var reader = new StreamReader(context.Request.InputStream);
+            using var request = JsonDocument.Parse(await reader.ReadToEndAsync());
+            var root = request.RootElement;
+            var sent = root.GetProperty("assets")
+                .GetProperty("tilesBase64").GetArrayLength();
+            var tiles = string.Join(",", Enumerable.Range(0, sent).Select(index =>
+                $"{{\"index\":{index}," +
+                $"\"match\":{(matches.Contains(index) ? "true" : "false")}," +
+                "\"confidence\":0.9}"));
+            var body =
+                "{\"contractVersion\":2," +
+                $"\"requestId\":\"{root.GetProperty("requestId").GetString()}\"," +
+                $"\"challengeId\":\"{root.GetProperty("challengeId").GetString()}\"," +
+                $"\"snapshotId\":\"{root.GetProperty("snapshotId").GetString()}\"," +
+                "\"status\":\"AnswerProduced\",\"actions\":[],\"answer\":null," +
+                $"\"tiles\":[{tiles}]," +
+                "\"solver\":\"hcaptcha-resnet-onnx\",\"modelVersion\":\"fixture@1\"," +
+                "\"confidence\":null,\"attempts\":1,\"elapsedMs\":3,\"error\":null}";
+            var bytes = Encoding.UTF8.GetBytes(body);
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+        finally
+        {
+            listener.Close();
+        }
+    });
+    return (url, server);
+}
+
+static async Task CheckHumanHandoffAsync()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"handoff-{Guid.NewGuid():N}");
+    var firstContext = new HumanHandoffContext(
+        "execucao-a", "acao", "desafio", "generic", CaptchaKind.ImageText);
+    var secondContext = new HumanHandoffContext(
+        "execucao-b", "acao", "desafio", "generic", CaptchaKind.ImageText);
+    var firstTask = HumanHandoff.ExecuteAsync(
+        firstContext,
+        "primeiro caso",
+        directory,
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromMilliseconds(50),
+        [],
+        CancellationToken.None);
+    var secondTask = HumanHandoff.ExecuteAsync(
+        secondContext,
+        "segundo caso",
+        directory,
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromMilliseconds(50),
+        [],
+        CancellationToken.None);
+
+    var firstFolder = HumanHandoffFolder(directory, firstContext);
+    var secondFolder = HumanHandoffFolder(directory, secondContext);
+    await WaitForFileAsync(Path.Combine(firstFolder, HumanHandoff.RequestFileName));
+    await WaitForFileAsync(Path.Combine(secondFolder, HumanHandoff.RequestFileName));
+    var firstRequest = JsonNode.Parse(
+        await File.ReadAllTextAsync(Path.Combine(firstFolder, HumanHandoff.RequestFileName)))!.AsObject();
+    var secondRequest = JsonNode.Parse(
+        await File.ReadAllTextAsync(Path.Combine(secondFolder, HumanHandoff.RequestFileName)))!.AsObject();
+
+    await WriteHumanHandoffResponseAsync(firstFolder, secondRequest);
+    await Task.Delay(150);
+    if (firstTask.IsCompleted)
+    {
+        throw new InvalidOperationException(
+            "Uma resposta de outra execução retomou o primeiro handoff.");
+    }
+
+    await WriteHumanHandoffResponseAsync(firstFolder, firstRequest);
+    await WriteHumanHandoffResponseAsync(secondFolder, secondRequest);
+    await Task.WhenAll(firstTask, secondTask);
+    var acknowledged = JsonNode.Parse(
+        await File.ReadAllTextAsync(Path.Combine(firstFolder, HumanHandoff.RequestFileName)))!.AsObject();
+    if (acknowledged["state"]?.GetValue<string>() != "Acknowledged")
+    {
+        throw new InvalidOperationException("O handoff confirmado não foi marcado como reconhecido.");
+    }
+
+    Console.WriteLine("OK: handoff humano correlaciona execução, ação, desafio e tentativa.");
+}
+
+static async Task CheckHumanHandoffDeadlineAsync(PlaywrightRuntimeOptions options)
+{
+    var directory = Path.Combine(
+        Path.GetTempPath(),
+        $"handoff-deadline-{Guid.NewGuid():N}");
+    const string executionId = "handoff-deadline";
+    const string actionId = "aguardar-operador";
+    var documents = new RpaPackageDocuments(
+        new V2.FlowDefinition
+        {
+            Name = "Handoff além do deadline técnico",
+            Actions =
+            [
+                new V2.FlowActionDefinition
+                {
+                    Id = actionId,
+                    Type = "waitHumanInput",
+                    Name = "Aguardar operador",
+                    Captcha = new V2.FlowCaptchaOptionsDefinition
+                    {
+                        ResultOutput = "runtime.handoff"
+                    }
+                }
+            ]
+        },
+        new V2.LocatorCatalog(),
+        new V2.RpaPolicyDefinition());
+    var snapshot = new RpaPackageSnapshot(
+        "handoff-deadline",
+        new PackageRevision("handoff-deadline-r1"),
+        documents,
+        new RpaPackageOrigin("test", "memory"));
+    var execution = new PlaywrightV2FlowExecutor(
+            snapshot,
+            options with
+            {
+                OutputDirectory = directory,
+                StorageStatePath = null,
+                SaveStorageState = false,
+                Captcha = new CaptchaOptions(
+                    DeadlineSeconds: 1,
+                    HumanHandoffTimeoutSeconds: 10,
+                    HumanHandoffPollSeconds: 1)
+            })
+        .ExecuteAsync(
+            new FlowExecutionRequest(executionId, [], [], []),
+            CancellationToken.None);
+    var context = new HumanHandoffContext(
+        executionId,
+        actionId,
+        $"manual-{actionId}",
+        null,
+        CaptchaKind.Unknown);
+    var folder = HumanHandoffFolder(directory, context);
+    await WaitForFileAsync(Path.Combine(folder, HumanHandoff.RequestFileName));
+    var request = JsonNode.Parse(
+        await File.ReadAllTextAsync(Path.Combine(folder, HumanHandoff.RequestFileName)))!.AsObject();
+    await Task.Delay(TimeSpan.FromMilliseconds(1_200));
+    if (execution.IsCompleted)
+    {
+        throw new InvalidOperationException(
+            "O deadline técnico encerrou indevidamente o handoff humano.");
+    }
+
+    await WriteHumanHandoffResponseAsync(folder, request);
+    var result = await execution;
+    if (result.Output["handoff"]?["status"]?.GetValue<string>() !=
+        nameof(CaptchaSolveStatus.InteractionDone))
+    {
+        throw new InvalidOperationException(
+            "O handoff não concluiu depois da confirmação do operador.");
+    }
+    Console.WriteLine(
+        "OK: handoff humano usa prazo próprio além do deadline técnico de captcha.");
+}
+
+static string HumanHandoffFolder(string root, HumanHandoffContext context) =>
+    Path.Combine(
+        root,
+        HumanHandoff.FolderName,
+        context.ExecutionId,
+        context.ActionId,
+        context.ChallengeId);
+
+static async Task WaitForFileAsync(string path)
+{
+    var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+    while (!File.Exists(path) && DateTimeOffset.UtcNow < deadline)
+    {
+        await Task.Delay(20);
+    }
+    if (!File.Exists(path))
+    {
+        throw new InvalidOperationException($"Arquivo de handoff não criado: {path}");
+    }
+}
+
+static Task WriteHumanHandoffResponseAsync(string folder, JsonObject request) =>
+    File.WriteAllTextAsync(
+        Path.Combine(folder, HumanHandoff.ResponseFileName),
+        new JsonObject
+        {
+            ["contractVersion"] = request["contractVersion"]?.DeepClone(),
+            ["requestId"] = request["requestId"]?.DeepClone(),
+            ["executionId"] = request["executionId"]?.DeepClone(),
+            ["actionId"] = request["actionId"]?.DeepClone(),
+            ["challengeId"] = request["challengeId"]?.DeepClone(),
+            ["action"] = "continue",
+            ["respondedAtUtc"] = DateTimeOffset.UtcNow.ToString("O")
+        }.ToJsonString());
+
+static async Task CheckImageOcrAsync()
+{
+    var modelPath = ResolveModelPath();
+    if (modelPath is null)
+    {
+        Console.WriteLine("SKIP: modelo OCR (captcha-models/common.onnx) não localizado.");
+        return;
+    }
+
+    using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+    await using var browser = await playwright.Chromium.LaunchAsync(
+        new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true });
+    var page = await browser.NewPageAsync();
+    await page.GotoAsync(DataUrl(
+        $"<body><img id='captcha' src='data:image/png;base64,{EmbeddedImageBase64()}'></body>"));
+    await page.WaitForFunctionAsync(
+        "() => document.getElementById('captcha').naturalWidth > 0",
+        new Microsoft.Playwright.PageWaitForFunctionOptions { Timeout = 5_000 });
+
+    var pixels = await PagePixelsExtractor.TryExtractAsync(
+        page.Locator("#captcha"),
+        CancellationToken.None);
+    if (pixels is null)
+    {
+        throw new InvalidOperationException("Pixels do captcha de teste não extraídos.");
+    }
+
+    using var engine = new ImageOcrEngine(modelPath);
+    var text = engine.Recognize(pixels.Rgba, pixels.Width, pixels.Height);
+    if (!Equals(text, "a3x9z"))
+    {
+        throw new InvalidOperationException(
+            $"O OCR embutido devolveu '{text}', esperado 'a3x9z'.");
+    }
+
+    Console.WriteLine($"OK: OCR embutido decodificou '{text}' (modelo local).");
+}
+
+static async Task CheckCaptchaDetectorAsync()
+{
+    using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+    await using var browser = await playwright.Chromium.LaunchAsync(
+        new Microsoft.Playwright.BrowserTypeLaunchOptions { Headless = true });
+    var page = await browser.NewPageAsync();
+
+    await page.GotoAsync(DataUrl("<body><p>sem captcha</p></body>"));
+    var absent = await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None);
+    if (absent.Status != CaptchaDetector.DetectionStatus.NotPresent ||
+        await CaptchaDetector.DetectAsync(page, CancellationToken.None) != CaptchaDetector.Kind.None)
+    {
+        throw new InvalidOperationException("O detector não separou ausência de tipo desconhecido.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<head><title>Just a moment</title></head><body><p>conteúdo normal</p></body>"));
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) !=
+        CaptchaDetector.Kind.None)
+    {
+        throw new InvalidOperationException(
+            "Título genérico foi aceito isoladamente como Cloudflare Challenge.");
+    }
+
+    await page.GotoAsync(DataUrl("<body><iframe id='fake'></iframe></body>"));
+    await page.Locator("#fake").EvaluateAsync(
+        "element => element.setAttribute('src', 'https://recaptcha.example/recaptcha/api2/anchor')");
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) != CaptchaDetector.Kind.None)
+    {
+        throw new InvalidOperationException("Host não oficial foi aceito como reCAPTCHA.");
+    }
+
+    await page.GotoAsync(DataUrl("<body><iframe id='official'></iframe></body>"));
+    await page.Locator("#official").EvaluateAsync(
+        "element => element.setAttribute('src', 'https://www.google.com/recaptcha/api2/anchor?k=test')");
+    var recaptcha = await CaptchaDetector.DetectAsync(page, CancellationToken.None);
+    if (recaptcha != CaptchaDetector.Kind.RecaptchaV2)
+    {
+        throw new InvalidOperationException("reCAPTCHA não detectado pelo iframe.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='g-recaptcha' data-size='invisible' " +
+        "style='width:1px;height:1px'></div></body>"));
+    var invisible = await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None);
+    if (!invisible.Challenges.Any(item =>
+            item.Challenge.Kind == CaptchaKind.RecaptchaV2 &&
+            item.Challenge.Variant == "v2-invisible"))
+    {
+        throw new InvalidOperationException("reCAPTCHA v2 invisível foi confundido com v3.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        $"<body><img id='captcha' src='data:image/png;base64,{EmbeddedImageBase64()}'>" +
+        "<input name='captcha-response'></body>"));
+    var image = await CaptchaDetector.DetectAsync(page, CancellationToken.None);
+    if (image != CaptchaDetector.Kind.ImageText)
+    {
+        throw new InvalidOperationException("Captcha de imagem não detectado por heurística.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        $"<body><img class='captcha' src='data:image/png;base64,{EmbeddedImageBase64()}'>" +
+        $"<img class='captcha' src='data:image/png;base64,{EmbeddedImageBase64()}'>" +
+        "<input name='captcha-one'><input name='captcha-two'></body>"));
+    var ambiguousImages = await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None);
+    if (ambiguousImages.Status != CaptchaDetector.DetectionStatus.Uncertain ||
+        !ambiguousImages.Challenges.Any(item => item.Challenge.Kind == CaptchaKind.Unknown))
+    {
+        throw new InvalidOperationException(
+            "Múltiplas imagens/campos foram tratados como ausência de captcha.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><iframe id='one' style='display:block;width:300px;height:80px'></iframe>" +
+        "<iframe id='two' style='display:block;width:300px;height:80px'></iframe></body>"));
+    await page.Locator("#one").EvaluateAsync(
+        "element => element.setAttribute('src', 'https://www.google.com/recaptcha/api2/anchor?k=one')");
+    await page.Locator("#two").EvaluateAsync(
+        "element => element.setAttribute('src', 'https://www.recaptcha.net/recaptcha/api2/anchor?k=two')");
+    var multiple = await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None);
+    if (multiple.Challenges.Count(item =>
+            item.Challenge.Kind == CaptchaKind.RecaptchaV2 &&
+            item.Challenge.Visible) != 2)
+    {
+        throw new InvalidOperationException("O detector colapsou widgets reCAPTCHA distintos.");
+    }
+
+    await page.GotoAsync(DataUrl("<body><iframe id='enterprise'></iframe></body>"));
+    await page.Locator("#enterprise").EvaluateAsync(
+        "element => element.setAttribute('src', " +
+        "'https://www.google.com/recaptcha/enterprise/anchor?k=test')");
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) !=
+        CaptchaDetector.Kind.RecaptchaEnterprise)
+    {
+        throw new InvalidOperationException("reCAPTCHA Enterprise não foi separado do v2.");
+    }
+
+    await page.GotoAsync(DataUrl("<body><iframe id='arkose'></iframe></body>"));
+    await page.Locator("#arkose").EvaluateAsync(
+        "element => element.setAttribute('src', " +
+        "'https://client-api.arkoselabs.com/fc/gc/?token=test')");
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) !=
+        CaptchaDetector.Kind.ArkoseFunCaptcha)
+    {
+        throw new InvalidOperationException("Arkose/FunCaptcha não foi detectado.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='geetest_holder' style='width:300px;height:120px'></div></body>"));
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) !=
+        CaptchaDetector.Kind.GeeTest)
+    {
+        throw new InvalidOperationException("GeeTest não foi detectado pelo container.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div id='aws-waf-captcha' style='width:300px;height:120px'></div></body>"));
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) !=
+        CaptchaDetector.Kind.AwsWaf)
+    {
+        throw new InvalidOperationException("AWS WAF CAPTCHA não foi detectado.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='frc-captcha' style='width:300px;height:80px'></div></body>"));
+    if (await CaptchaDetector.DetectAsync(page, CancellationToken.None) !=
+        CaptchaDetector.Kind.FriendlyCaptcha)
+    {
+        throw new InvalidOperationException("Friendly Captcha não foi detectado.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='cf-turnstile' style='width:300px;height:80px'>" +
+        "<iframe id='turnstile' style='width:300px;height:80px'></iframe>" +
+        "<input name='cf-turnstile-response' value='token-cliente'></div></body>"));
+    await page.Locator("#turnstile").EvaluateAsync(
+        "element => element.setAttribute('src', " +
+        "'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0')");
+    var turnstile = await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None);
+    var turnstileChallenges = turnstile.Challenges
+        .Where(item => item.Challenge.Kind == CaptchaKind.CloudflareTurnstile)
+        .ToArray();
+    if (turnstileChallenges.Length != 1 || turnstileChallenges[0].Challenge.AlreadySolved)
+    {
+        throw new InvalidOperationException(
+            "Turnstile foi duplicado ou token cliente foi tratado como aceite da aplicação.");
+    }
+    var passiveTurnstile = await SamePageCaptchaAdapter.ExecuteAsync(
+        page,
+        turnstileChallenges[0],
+        allowInteractiveClick: false,
+        TimeSpan.FromSeconds(1),
+        CancellationToken.None);
+    if (passiveTurnstile.Status != CaptchaSolveStatus.InteractionDone ||
+        passiveTurnstile.Actions.Count != 0)
+    {
+        throw new InvalidOperationException("Turnstile passivo não observou o token cliente.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='cf-turnstile' id='resolved' style='width:300px;height:80px'>" +
+        "<input name='cf-turnstile-response' value='token-anterior'></div>" +
+        "<div class='cf-turnstile' id='pending' style='width:300px;height:80px'>" +
+        "<input name='cf-turnstile-response'></div></body>"));
+    var scopedTurnstiles = (await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None)).Challenges
+        .Where(item => item.Challenge.Kind == CaptchaKind.CloudflareTurnstile)
+        .ToArray();
+    var pendingTurnstile = scopedTurnstiles.Single(item =>
+        item.Challenge.Evidence.Contains("[1]", StringComparison.Ordinal));
+    var scopedResult = await SamePageCaptchaAdapter.ExecuteAsync(
+        page,
+        pendingTurnstile,
+        allowInteractiveClick: false,
+        TimeSpan.FromMilliseconds(300),
+        CancellationToken.None);
+    if (scopedResult.Status != CaptchaSolveStatus.NeedsHuman)
+    {
+        throw new InvalidOperationException(
+            "Token de outro widget Turnstile liberou o desafio pendente.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='cf-turnstile' style='width:300px;height:80px' " +
+        "onclick=\"window.clicks=(window.clicks||0)+1;" +
+        "document.querySelector('input').value='token';\">" +
+        "<input name='cf-turnstile-response'></div></body>"));
+    var clickableTurnstile = (await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None)).Challenges.Single();
+    var clickedTurnstile = await SamePageCaptchaAdapter.ExecuteAsync(
+        page,
+        clickableTurnstile,
+        allowInteractiveClick: true,
+        TimeSpan.FromSeconds(2),
+        CancellationToken.None);
+    var clickCount = await page.EvaluateAsync<int>("() => window.clicks || 0");
+    if (clickedTurnstile.Status != CaptchaSolveStatus.InteractionDone ||
+        clickedTurnstile.Actions.Count != 1 || clickCount != 1)
+    {
+        throw new InvalidOperationException("Turnstile não limitou a interação autorizada a um clique.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div class='frc-captcha' style='width:300px;height:80px'>" +
+        "<input name='frc-captcha-solution'></div>" +
+        "<script>setTimeout(() => document.querySelector('input').value='proof', 100)</script>" +
+        "</body>"));
+    var friendly = (await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None)).Challenges.Single();
+    var friendlyResult = await SamePageCaptchaAdapter.ExecuteAsync(
+        page,
+        friendly,
+        allowInteractiveClick: false,
+        TimeSpan.FromSeconds(2),
+        CancellationToken.None);
+    if (friendlyResult.Status != CaptchaSolveStatus.InteractionDone)
+    {
+        throw new InvalidOperationException("Friendly Captcha não observou o proof same-page.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div id='challenge-stage'>aguardando</div>" +
+        "<script>setTimeout(() => document.querySelector('#challenge-stage').remove(), 1000)</script>" +
+        "</body>"));
+    var cloudflare = (await CaptchaDetector.DetectAllAsync(
+        page, "exec-detector", "acao-detector", CancellationToken.None)).Challenges.Single();
+    var cloudflareResult = await SamePageCaptchaAdapter.ExecuteAsync(
+        page,
+        cloudflare,
+        allowInteractiveClick: false,
+        TimeSpan.FromSeconds(2),
+        CancellationToken.None);
+    if (cloudflareResult.Status != CaptchaSolveStatus.InteractionDone ||
+        cloudflareResult.Actions.Count != 0)
+    {
+        throw new InvalidOperationException(
+            "Cloudflare Managed Challenge não concluiu por observação passiva.");
+    }
+
+    await page.GotoAsync(DataUrl(
+        "<body><div id='surface' style='position:absolute;left:20px;top:30px;" +
+         "width:200px;height:100px'></div><script>" +
+         "window.clicks=[];" +
+         "document.getElementById('surface').addEventListener('click', e => {" +
+         "const marker=document.createElement('span');" +
+         "marker.style='position:absolute;width:5px;height:5px;background:red;pointer-events:none';" +
+         "marker.style.left=(e.offsetX-2)+'px';marker.style.top=(e.offsetY-2)+'px';" +
+         "e.currentTarget.appendChild(marker);}, { once: true });" +
+         "document.addEventListener('click', e => window.clicks.push([e.clientX,e.clientY]));" +
+         "document.addEventListener('mouseup', e => window.lastUp=[e.clientX,e.clientY]);" +
+         "</script></body>"));
+    var surfaceBounds = await page.Locator("#surface").BoundingBoxAsync() ??
+        throw new InvalidOperationException("Fixture visual sem bounding box.");
+    var surfaceElement = await page.Locator("#surface").ElementHandleAsync() ??
+        throw new InvalidOperationException("Fixture visual sem elemento estável.");
+    var surfaceScreenshot = await page.Locator("#surface").ScreenshotAsync();
+    var visualActions = await VisualCaptchaAdapter.ExecuteActionsAsync(
+        page,
+        [
+            new CaptchaPlannedAction(CaptchaActionKind.Click, X: 25, Y: 15),
+            new CaptchaPlannedAction(
+                CaptchaActionKind.Drag,
+                X: 10,
+                Y: 10,
+                ToX: 90,
+                ToY: 40)
+        ],
+        surfaceBounds,
+        imageWidth: 100,
+        imageHeight: 50,
+        CancellationToken.None,
+        token => VisualCaptchaAdapter.ValidateRetainedElementAsync(
+            surfaceElement,
+            surfaceBounds,
+            token),
+        token => VisualCaptchaAdapter.ValidateRetainedSnapshotAsync(
+            page.Locator("#surface"),
+            surfaceElement,
+            surfaceBounds,
+            surfaceScreenshot,
+            token));
+    var lastClick = await page.EvaluateAsync<float[]>("() => window.clicks[0]");
+    var lastUp = await page.EvaluateAsync<float[]>("() => window.lastUp");
+    if (visualActions.Count != 2 ||
+        Math.Abs(lastClick[0] - 70) > 1 || Math.Abs(lastClick[1] - 60) > 1 ||
+        Math.Abs(lastUp[0] - 200) > 1 || Math.Abs(lastUp[1] - 110) > 1)
+    {
+        throw new InvalidOperationException(
+            "Coordenadas VLM não foram transformadas do snapshot para pixels CSS.");
+    }
+    try
+    {
+        await VisualCaptchaAdapter.ExecuteActionsAsync(
+            page,
+            [new CaptchaPlannedAction(CaptchaActionKind.Click, X: 100, Y: 10)],
+            surfaceBounds,
+            imageWidth: 100,
+            imageHeight: 50,
+            CancellationToken.None);
+        throw new InvalidOperationException("Coordenada fora do snapshot foi executada.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.ContractViolation)
+    {
+    }
+
+    await page.EvaluateAsync(
+        "() => document.getElementById('surface').addEventListener('click', " +
+        "e => e.currentTarget.style.backgroundColor='rgb(255, 0, 0)', { once: true })");
+    try
+    {
+        await VisualCaptchaAdapter.ExecuteActionsAsync(
+            page,
+            [
+                new CaptchaPlannedAction(CaptchaActionKind.Click, X: 10, Y: 10),
+                new CaptchaPlannedAction(CaptchaActionKind.Click, X: 20, Y: 20)
+            ],
+            surfaceBounds,
+            imageWidth: 100,
+            imageHeight: 50,
+            CancellationToken.None,
+            token => VisualCaptchaAdapter.ValidateRetainedElementAsync(
+                surfaceElement,
+                surfaceBounds,
+                token));
+        throw new InvalidOperationException("Desafio visual alterado aceitou a segunda ação.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.StaleSnapshot)
+    {
+    }
+    await page.Locator("#surface").EvaluateAsync("element => element.style.backgroundColor = ''");
+
+    await page.EvaluateAsync(
+        "() => document.getElementById('surface').addEventListener('click', e => {" +
+        "const marker=document.createElement('span');marker.className='end-mutation';" +
+        "marker.style='position:absolute;left:177px;top:77px;width:7px;height:7px;background:blue';" +
+        "e.currentTarget.appendChild(marker);}, { once: true })");
+    try
+    {
+        await VisualCaptchaAdapter.ExecuteActionsAsync(
+            page,
+            [
+                new CaptchaPlannedAction(CaptchaActionKind.Click, X: 10, Y: 10),
+                new CaptchaPlannedAction(
+                    CaptchaActionKind.Drag,
+                    X: 10,
+                    Y: 10,
+                    ToX: 90,
+                    ToY: 40)
+            ],
+            surfaceBounds,
+            imageWidth: 100,
+            imageHeight: 50,
+            CancellationToken.None,
+            token => VisualCaptchaAdapter.ValidateRetainedElementAsync(
+                surfaceElement,
+                surfaceBounds,
+                token));
+        throw new InvalidOperationException("Destino visual alterado aceitou o arrasto.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.StaleSnapshot)
+    {
+    }
+    await page.Locator(".end-mutation").EvaluateAsync("element => element.remove()");
+
+    await page.EvaluateAsync(
+        "() => { const old = document.getElementById('surface'); " +
+        "old.addEventListener('click', () => old.outerHTML = " +
+        "'<div id=\"surface\" style=\"position:absolute;left:20px;top:30px;" +
+        "width:200px;height:100px\"></div>', { once: true }); }");
+    var replacedElement = await page.Locator("#surface").ElementHandleAsync() ??
+        throw new InvalidOperationException("Fixture visual substituível não foi encontrada.");
+    try
+    {
+        await VisualCaptchaAdapter.ExecuteActionsAsync(
+            page,
+            [
+                new CaptchaPlannedAction(CaptchaActionKind.Click, X: 10, Y: 10),
+                new CaptchaPlannedAction(CaptchaActionKind.Click, X: 20, Y: 20)
+            ],
+            surfaceBounds,
+            imageWidth: 100,
+            imageHeight: 50,
+            CancellationToken.None,
+            token => VisualCaptchaAdapter.ValidateRetainedElementAsync(
+                replacedElement,
+                surfaceBounds,
+                token));
+        throw new InvalidOperationException("Elemento visual substituído aceitou o segundo clique.");
+    }
+    catch (CaptchaException exception) when (
+        exception.ErrorCode == CaptchaErrorCodes.StaleSnapshot)
+    {
+    }
+
+    Console.WriteLine(
+        "OK: detector, adapters same-page e executor visual preservam escopo e geometria.");
+}
+
+static async Task CheckAutomaticCaptchaAsync(PlaywrightRuntimeOptions options)
+{
+    var url = DataUrl(
+        "<body><div class='frc-captcha' style='width:300px;height:80px'>" +
+        "<input name='frc-captcha-solution' value='proof'></div></body>");
+    var documents = new RpaPackageDocuments(
+        new V2.FlowDefinition
+        {
+            Name = "Captcha automático opt-in",
+            Actions =
+            [
+                new V2.FlowActionDefinition
+                {
+                    Id = "abrir-captcha",
+                    Type = "navigate",
+                    Name = "Abrir captcha",
+                    Value = JsonSerializer.SerializeToElement(url),
+                    Captcha = new V2.FlowCaptchaOptionsDefinition
+                    {
+                        Kind = "friendlyCaptcha",
+                        ResultOutput = "runtime.autoCaptcha"
+                    }
+                }
+            ]
+        },
+        new V2.LocatorCatalog(),
+        new V2.RpaPolicyDefinition
+        {
+            LocatorResilience = new V2.LocatorResiliencePolicy
+            {
+                Mode = V2.LocatorResilienceMode.Strict
+            }
+        });
+    var snapshot = new RpaPackageSnapshot(
+        "captcha-auto",
+        new PackageRevision("captcha-auto-r1"),
+        documents,
+        new RpaPackageOrigin("test", "memory"));
+    var request = new FlowExecutionRequest("captcha-auto", [], [], []);
+    var enabled = await new PlaywrightV2FlowExecutor(
+            snapshot,
+            options with
+            {
+                StorageStatePath = null,
+                SaveStorageState = false,
+                Captcha = new CaptchaOptions(
+                    AutoSolveEnabled: true,
+                    SamePageWaitSeconds: 2)
+            })
+        .ExecuteAsync(request, CancellationToken.None);
+    if (enabled.Output["autoCaptcha"]?["status"]?.GetValue<string>() !=
+            nameof(CaptchaSolveStatus.InteractionDone) ||
+        enabled.Output["autoCaptcha"]?["kind"]?.GetValue<string>() !=
+            nameof(CaptchaKind.FriendlyCaptcha))
+    {
+        throw new InvalidOperationException(
+            "AutoSolveEnabled não encaminhou o desafio detectado ao adapter correto.");
+    }
+
+    var turnstileUrl = DataUrl(
+        "<body><div class='cf-turnstile' style='width:300px;height:80px'>" +
+        "<input name='cf-turnstile-response' value='proof'></div></body>");
+    var turnstileAction = new V2.FlowActionDefinition
+    {
+        Id = "abrir-turnstile",
+        Type = "navigate",
+        Name = "Abrir Turnstile",
+        Value = JsonSerializer.SerializeToElement(turnstileUrl),
+        Captcha = new V2.FlowCaptchaOptionsDefinition
+        {
+            Kind = "turnstile",
+            ResultOutput = "runtime.autoTurnstile"
+        }
+    };
+    var turnstileSnapshot = new RpaPackageSnapshot(
+        "captcha-auto-turnstile",
+        new PackageRevision("captcha-auto-turnstile-r1"),
+        new RpaPackageDocuments(
+            new V2.FlowDefinition
+            {
+                Name = "Mapeamento canônico do Turnstile",
+                Actions = [turnstileAction]
+            },
+            new V2.LocatorCatalog(),
+            documents.Policy),
+        new RpaPackageOrigin("test", "memory"));
+    var turnstileResult = await new PlaywrightV2FlowExecutor(
+            turnstileSnapshot,
+            options with
+            {
+                StorageStatePath = null,
+                SaveStorageState = false,
+                Captcha = new CaptchaOptions(
+                    AutoSolveEnabled: true,
+                    SamePageWaitSeconds: 2)
+            })
+        .ExecuteAsync(
+            request with { ExecutionId = "captcha-auto-turnstile" },
+            CancellationToken.None);
+    if (turnstileResult.Output["autoTurnstile"]?["kind"]?.GetValue<string>() !=
+        nameof(CaptchaKind.CloudflareTurnstile))
+    {
+        throw new InvalidOperationException(
+            "kind=turnstile validado pelo schema não foi mapeado no runtime.");
+    }
+
+    var completionGuard = new CompletingExecutionGuard(turnstileAction.Id);
+    var guardedResult = await new PlaywrightV2FlowExecutor(
+            turnstileSnapshot,
+            options with
+            {
+                StorageStatePath = null,
+                SaveStorageState = false,
+                Captcha = new CaptchaOptions(AutoSolveEnabled: true)
+            },
+            executionGuard: completionGuard)
+        .ExecuteAsync(
+            request with { ExecutionId = "captcha-auto-checkpoint" },
+            CancellationToken.None);
+    if (guardedResult.Output["autoTurnstile"] is not null ||
+        !completionGuard.AfterCalls.Contains(turnstileAction.Id))
+    {
+        throw new InvalidOperationException(
+            "O auto-solve ocorreu antes do checkpoint posterior da ação original.");
+    }
+
+    var disabled = await new PlaywrightV2FlowExecutor(
+            snapshot,
+            options with
+            {
+                StorageStatePath = null,
+                SaveStorageState = false,
+                Captcha = new CaptchaOptions(AutoSolveEnabled: false)
+            })
+        .ExecuteAsync(request with { ExecutionId = "captcha-auto-disabled" }, CancellationToken.None);
+    if (disabled.Output["autoCaptcha"] is not null)
+    {
+        throw new InvalidOperationException("AutoSolveEnabled=false iniciou detecção automática.");
+    }
+    Console.WriteLine("OK: detecção automática pós-navegação permanece opt-in e roteada.");
+}
+
+static async Task CheckCaptchaVerificationTransitionAsync(PlaywrightRuntimeOptions options)
+{
+    var url = DataUrl(
+        "<body><div class='frc-captcha' style='width:300px;height:80px'>" +
+        "<input name='frc-captcha-solution' value='proof'></div>" +
+        "<div id='captcha-success'>marcador já visível</div></body>");
+    var result = await new PlaywrightV2FlowExecutor(
+            new RpaPackageSnapshot(
+                "captcha-verification-transition",
+                new PackageRevision("captcha-verification-transition-r1"),
+                new RpaPackageDocuments(
+                    new V2.FlowDefinition
+                    {
+                        Name = "Verificação exige transição",
+                        Actions =
+                        [
+                            new V2.FlowActionDefinition
+                            {
+                                Id = "abrir-verificacao",
+                                Type = "navigate",
+                                Name = "Abrir verificação",
+                                Value = JsonSerializer.SerializeToElement(url)
+                            },
+                            new V2.FlowActionDefinition
+                            {
+                                Id = "resolver-com-verificacao",
+                                Type = "solveCaptcha",
+                                Name = "Resolver com verificação",
+                                Optional = true,
+                                Success = new V2.LocatorUseDefinition
+                                {
+                                    LocatorId = "captcha-success",
+                                    Cardinality = V2.LocatorCardinality.Single
+                                },
+                                Captcha = new V2.FlowCaptchaOptionsDefinition
+                                {
+                                    Kind = "friendlyCaptcha",
+                                    VerificationMode = "solveAndVerify",
+                                    ResultOutput = "runtime.verifiedCaptcha"
+                                }
+                            }
+                        ]
+                    },
+                    new V2.LocatorCatalog
+                    {
+                        Locators =
+                        [
+                            new V2.LocatorDefinition
+                            {
+                                Id = "captcha-success",
+                                DisplayName = "Sucesso do captcha",
+                                Candidates =
+                                [
+                                    new V2.LocatorCandidate
+                                    {
+                                        Id = "captcha-success-original",
+                                        Origin = V2.LocatorCandidateOrigin.Developer,
+                                        DeveloperRole = V2.DeveloperLocatorRole.Original,
+                                        OriginalOrder = 0,
+                                        Recipe = new V2.LocatorRecipe
+                                        {
+                                            Target = new V2.LocatorExpression
+                                            {
+                                                Strategy = V2.LocatorStrategy.Css,
+                                                Selector = "#captcha-success"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    new V2.RpaPolicyDefinition()),
+                new RpaPackageOrigin("test", "memory")),
+            options with
+            {
+                StorageStatePath = null,
+                SaveStorageState = false,
+                Captcha = new CaptchaOptions(SamePageWaitSeconds: 2)
+            })
+        .ExecuteAsync(
+            new FlowExecutionRequest("captcha-verification-transition", [], [], []),
+            CancellationToken.None);
+    if (result.Output["verifiedCaptcha"]?["status"]?.GetValue<string>() !=
+            nameof(CaptchaSolveStatus.Failed) ||
+        result.Output["verifiedCaptcha"]?["errorCode"]?.GetValue<string>() !=
+            CaptchaErrorCodes.VerificationFailed)
+    {
+        throw new InvalidOperationException(
+            "Locator previamente visível foi aceito como prova de resolução do captcha.");
+    }
+    Console.WriteLine("OK: Solved exige transição observável da pós-condição.");
+}
+
+
+
+static string? ResolveModelPath()
+{
+    var candidates = new[]
+    {
+        Environment.GetEnvironmentVariable("RPABLOCKLY_CAPTCHA_MODEL"),
+        Path.GetFullPath(
+            Path.Combine(Directory.GetCurrentDirectory(), "captcha-models", "common.onnx")),
+        Path.GetFullPath(
+            Path.Combine(
+                Path.GetDirectoryName(AppContext.BaseDirectory)!,
+                "..", "..", "..", "..", "..",
+                "captcha-models", "common.onnx"))
+    };
+    foreach (var candidate in candidates)
+    {
+        if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+        {
+            return candidate;
+        }
+    }
+
+    return null;
+}
+
+static string EmbeddedImageBase64() =>
+    "iVBORw0KGgoAAAANSUhEUgAAAKAAAAA8CAYAAADha7EVAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAP4SURBVHhe7ZxBcuowEERzXQ7B1muuAFdgyZYbcApOoWAKEtvqlkeWorFJv6pZRRFC8zQjper/ryCEIxJQuCIBhSsSULgiAYUrElC4IgGFKxJQuCIBhSsSULgiAYUrElC4IgGFKxJQuCIBhStft9stlIYQS6lSAZGULUNsl49owUjKliGWoztgBZCULWPLrF7A+6ULu90uiu5yf43w5B4uXby23a4LLZeHpGwZJaxWQCbeNI5OBeB2xOsZxzH8hwaNpLTGKgW0yveOthKyqseibTXcGusT8H4JHUxkKtol2Vb5JtFdHtoKxOoEhNVvVOJu4Tj9+SOa3AnJ4Rgv7xj9vI913FnXx8oEBO0NVQ8kQoM+jA4HFAutT1UQUlfAufZpSsK4wpkTHAmIKyUTFd87h60d3f14649b9XRs7l1yGJ9zr6wj4Jx40yitVqDNQVFJO4w/3tLWkTD8lTtfLSVgTwUBSaWZCSiMBSgVFwE+GiaV2DKmhoDjgycBe4oFXPQqfEbO38hSyZpLxkx1g0KjOdEa+GfDfZGAEWUCwtYLNsecZAarskaJ6edbWu8vSCo8lqw38yFCD3fpFWZFVHqE/G442xu0meZ9TN0xjZOYK3VKEnKnHEvIDssjMgTEj6K8ObZAJQHn+TMBn2GphAkxfmKuKpe0zUcY5aHyZV1btsHfC5iQZ2kngQmyJJdUsHfYHkYWkUlY1kj363PufUMqC5hXIZYK2GO/j42hrTirtc1LeLwAkWY/g89bsldrpoqAvGWko2hTUaWwTMiqYJaAL9Bc73my18cPr60yb5NiAdOX+9+2UXQHhIBqUVBh+qiaaCBnan66j59a+l6UCYgqANkwq4DTcXz/8wVMH5Y+6t2zUFdg3+W/vHgRRQLGCeWvNIuAMBE8a3ktbuYB8hPJpMfS46qW8Udruq7Pe/EiCgTM2GTysot8gePwnEho3uJw64UPhUfQedD6kLCpu+EQsi81K/HaqSxgH5OTm6g8ccGyzYlbaV71fQuB2x8TgKxv+EWsh40cCjz2c6ncgvMCbjStCumgVQsegKFgRCrSihe9+MEXXTTPMJJXhbagf+thjbJHSI4sXReNZdJkJ4eWDFxlos8l3wOvj1VpEjVFHsZgXpTYllFCmYA9FgmfgoDEpU6x8dFAK9+DVOudUqUVT+Nwhgnr43ra49+xxv4Urq+5tky5gC8syY6TPH/ZppViUPWmyX3G+QB/73AGY59xDad9PH6Y6Ciup7Cfju8jdbBe1KyAW6aKgDA5DUNsF/3vWMKVai1YiCVIQOGKBBSuSEDhigQUrkhA4YoEFK5IQOGKBBSuSEDhigQUrkhA4YoEFK5IQOFICN8WQpe3OBxNtAAAAABJRU5ErkJggg==";
 
 static async Task CheckExecutionGuardAsync(PlaywrightRuntimeOptions options)
 {

@@ -30,6 +30,7 @@ BEGIN
         AttemptCount int NOT NULL CONSTRAINT DF_Rpa_WorkItem_Attempts DEFAULT (0),
         MaxAttempts int NOT NULL CONSTRAINT DF_Rpa_WorkItem_MaxAttempts DEFAULT (3),
         LeaseOwner nvarchar(200) NULL,
+        LeaseToken uniqueidentifier NULL,
         LeaseExpiresAtUtc datetime2(3) NULL,
         InputJson nvarchar(max) NOT NULL CONSTRAINT DF_Rpa_WorkItem_Input DEFAULT (N'{}'),
         ConfigurationJson nvarchar(max) NOT NULL
@@ -52,7 +53,15 @@ BEGIN
         CONSTRAINT CK_Rpa_WorkItem_ConfigurationJson CHECK (ISJSON(ConfigurationJson) = 1),
         CONSTRAINT CK_Rpa_WorkItem_AttachmentsJson CHECK (ISJSON(AttachmentsJson) = 1),
         CONSTRAINT CK_Rpa_WorkItem_OutputJson CHECK
-            (OutputJson IS NULL OR ISJSON(OutputJson) = 1)
+            (OutputJson IS NULL OR ISJSON(OutputJson) = 1),
+        CONSTRAINT CK_Rpa_WorkItem_LeaseIdentity CHECK
+            (
+                (Status = N'Running' AND LeaseOwner IS NOT NULL
+                 AND LeaseToken IS NOT NULL AND LeaseExpiresAtUtc IS NOT NULL)
+                OR
+                (Status <> N'Running' AND LeaseOwner IS NULL
+                 AND LeaseToken IS NULL AND LeaseExpiresAtUtc IS NULL)
+            )
     );
 
     CREATE INDEX IX_Rpa_WorkItem_Claim
@@ -68,8 +77,12 @@ BEGIN
         ExecutionId nvarchar(64) NOT NULL CONSTRAINT PK_Rpa_Execution PRIMARY KEY,
         WorkItemId uniqueidentifier NOT NULL,
         WorkerId nvarchar(200) NOT NULL,
+        LeaseToken uniqueidentifier NOT NULL,
         Status nvarchar(30) NOT NULL,
         StartedAtUtc datetime2(3) NOT NULL,
+        RecoveryPolicyJson nvarchar(max) NOT NULL
+            CONSTRAINT DF_Rpa_Execution_RecoveryPolicy DEFAULT
+            (N'{"policyKnown":false,"authenticationAttemptActionIds":[],"mfaAttemptActionIds":[],"irreversibleActionIds":[]}'),
         CompletedAtUtc datetime2(3) NULL,
         ExecutedActions int NULL,
         OutputJson nvarchar(max) NULL,
@@ -80,7 +93,9 @@ BEGIN
         CONSTRAINT CK_Rpa_Execution_Status CHECK
             (Status IN (N'Running', N'Succeeded', N'Validated', N'Failed', N'Cancelled')),
         CONSTRAINT CK_Rpa_Execution_OutputJson CHECK
-            (OutputJson IS NULL OR ISJSON(OutputJson) = 1)
+            (OutputJson IS NULL OR ISJSON(OutputJson) = 1),
+        CONSTRAINT CK_Rpa_Execution_RecoveryPolicyJson CHECK
+            (ISJSON(RecoveryPolicyJson) = 1)
     );
 
     CREATE INDEX IX_Rpa_Execution_WorkItem

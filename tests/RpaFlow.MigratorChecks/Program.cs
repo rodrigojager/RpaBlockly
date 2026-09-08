@@ -63,6 +63,33 @@ Check(first.Documents.Policy.LocatorResilience.Mode.ToString() == "Strict" &&
     "política migrada é strict e sem write-back");
 
 var catalogFixture = CreateCatalogFixture();
+var v1ExecutionRejected = false;
+try
+{
+    FlowDefinitionValidator.Validate(new FlowDefinition
+    {
+        SchemaVersion = 1,
+        Name = "Captcha não executável em V1",
+        Actions =
+        [
+            new FlowActionDefinition
+            {
+                Id = "captcha",
+                Type = "solveSliderCaptcha",
+                Name = "Resolver slider",
+                TriggerSelector = ".captcha",
+                OptionSelector = ".puzzle"
+            }
+        ]
+    });
+}
+catch (InvalidOperationException exception) when (
+    exception.Message.Contains("exige o runtime V2", StringComparison.Ordinal))
+{
+    v1ExecutionRejected = true;
+}
+Check(v1ExecutionRejected,
+    "ações de CAPTCHA são reconhecidas para migração, mas rejeitadas pelo runtime V1");
 var catalogMigration = new V1ToV2Migrator().Migrate(
     catalogFixture,
     "catalogo-completo-v1.json");
@@ -72,7 +99,12 @@ var migratedTypes = Enumerate(catalogMigration.Documents.Flow.Actions)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 Check(
     migratedTypes.SetEquals(FlowActionCatalog.SupportedTypes),
-    "a fixture agregada cobre mecanicamente os 33 tipos do catálogo");
+    "a fixture agregada cobre mecanicamente os 39 tipos do catálogo");
+var migratedSlider = Enumerate(catalogMigration.Documents.Flow.Actions)
+    .Single(action => action.Type.Equals("solveSliderCaptcha", StringComparison.OrdinalIgnoreCase));
+Check(
+    migratedSlider.Options?.Cardinality.ToString() == "Single",
+    "peça do slider V1 migra com cardinalidade única compatível com V2");
 
 ValidateVersionedBaseline(repositoryRoot);
 
@@ -270,6 +302,13 @@ static FlowActionDefinition CreateCatalogAction(string type)
                 action.FileName = "evidencia.png";
             }
             break;
+        case "solveimagecaptcha":
+            action.TriggerSelector = ".captcha-image";
+            break;
+        case "solveslidercaptcha":
+            action.TriggerSelector = ".slider-background";
+            action.OptionSelector = ".slider-piece";
+            break;
         case "if":
             action.Selector = null;
             action.Target = null;
@@ -379,7 +418,7 @@ static void WriteBaselineFixtures(string repositoryRoot)
     }
 
     WriteJson(
-        Path.Combine(fixtureDirectory, "aggregate-33.json"),
+        Path.Combine(fixtureDirectory, "aggregate-39.json"),
         CreateCatalogFixture());
     var actionToFamily = families
         .SelectMany(pair => pair.Value.Select(actionType => new
@@ -441,7 +480,7 @@ static void ValidateVersionedBaseline(string repositoryRoot)
                      StringComparison.OrdinalIgnoreCase)))
     {
         var flow = FlowJsonSerializer.Deserialize(ReadStrict(path));
-        FlowDefinitionValidator.Validate(flow);
+        FlowDefinitionValidator.ValidateForV2Migration(flow);
         var migration = new V1ToV2Migrator().Migrate(flow, Path.GetFileName(path));
         _ = RpaPackageValidator.Validate(migration.Documents);
         coveredTypes.UnionWith(EnumerateV1(flow.Actions)
@@ -451,7 +490,7 @@ static void ValidateVersionedBaseline(string repositoryRoot)
 
     Check(
         coveredTypes.SetEquals(FlowActionCatalog.SupportedTypes),
-        "goldens V1 sanitizados por família cobrem os 33 tipos e migram para pacote válido");
+        "goldens V1 sanitizados por família cobrem os 39 tipos e migram para pacote válido");
 }
 
 static IReadOnlyDictionary<string, string[]> ActionFamilies() =>
@@ -474,7 +513,12 @@ static IReadOnlyDictionary<string, string[]> ActionFamilies() =>
             "completeAuthenticationAttempt", "setVariable", "readElement",
             "readElements", "download", "screenshot", "safeFinalConfirmation"
         ],
-        ["control"] = ["if", "repeat", "forEach", "runSubflow"]
+        ["control"] = ["if", "repeat", "forEach", "runSubflow"],
+        ["captcha"] =
+        [
+            "solveImageCaptcha", "solveRecaptchaV2", "solveSliderCaptcha",
+            "solveHCaptcha", "solveCaptcha", "waitHumanInput"
+        ]
     };
 
 static FlowDefinition CreateFamilyFixture(string family, IEnumerable<string> actionTypes)

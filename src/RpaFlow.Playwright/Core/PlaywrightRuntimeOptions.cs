@@ -1,5 +1,7 @@
 namespace RpaFlow.Playwright;
 
+using RpaFlow.Playwright.V2;
+
 public sealed record PlaywrightRuntimeOptions(
     bool Headless,
     string Browser,
@@ -19,4 +21,6 @@ public sealed record PlaywrightRuntimeOptions(
     long MaximumArtifactBytes = 50 * 1024 * 1024,
     int MaximumArtifactFilesPerExecution = 100,
     int ArtifactRetentionDays = 30,
-    bool CaptureScreenshotsAfterActions = false);
+    bool CaptureScreenshotsAfterActions = false,
+    CaptchaOptions? Captcha = null,
+    bool SpyBrowserHumanize = true);

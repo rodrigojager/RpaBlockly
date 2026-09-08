@@ -1,0 +1,19 @@
+services:
+  captcha-solver:
+    environment:
+      CAPTCHA_ENABLE_VLM: "1"
+      CAPTCHA_LITELLM_URL: "http://litellm:4000"
+      CAPTCHA_LITELLM_API_KEY: "${LITELLM_MASTER_KEY:?configure LITELLM_MASTER_KEY}"
+      CAPTCHA_LITELLM_MODEL: "${CAPTCHA_LITELLM_MODEL:-captcha-vision}"
+      CAPTCHA_LITELLM_IS_LOCAL: "${CAPTCHA_LITELLM_IS_LOCAL:-0}"
+
+  litellm:
+    image: "${LITELLM_IMAGE:?configure LITELLM_IMAGE com tag e digest fixados}"
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:?configure LITELLM_MASTER_KEY}"
+      CAPTCHA_VLM_UPSTREAM_MODEL: "${CAPTCHA_VLM_UPSTREAM_MODEL:?configure CAPTCHA_VLM_UPSTREAM_MODEL}"
+      CAPTCHA_VLM_UPSTREAM_API_KEY: "${CAPTCHA_VLM_UPSTREAM_API_KEY:-}"
+    volumes:
+      - ./litellm-config.example.yaml:/app/config.yaml:ro
+    restart: unless-stopped

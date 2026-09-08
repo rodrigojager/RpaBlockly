@@ -24,6 +24,7 @@ public static class RpaPackageRegistryFactory
                 package.OriginName,
                 package.Provider,
                 package.Location,
+                options.Tables.Schema,
                 environment));
             if (package.Overlay is not null)
             {
@@ -32,6 +33,7 @@ public static class RpaPackageRegistryFactory
                     package.Overlay.OriginName,
                     package.Overlay.Provider,
                     package.Overlay.Location,
+                    options.Tables.Schema,
                     environment));
             }
         }
@@ -44,12 +46,13 @@ public static class RpaPackageRegistryFactory
         string originName,
         string provider,
         string location,
+        string schema,
         WorkerEnvironment environment)
     {
         return provider.ToLowerInvariant() switch
         {
             "file" => CreateFile(rpaId, originName, location, environment),
-            "sqlserver" => CreateSqlServer(rpaId, originName, location, environment),
+            "sqlserver" => CreateSqlServer(rpaId, originName, location, schema, environment),
             _ => throw new InvalidOperationException(
                 $"Provider de pacote não suportado: '{provider}'.")
         };
@@ -77,10 +80,12 @@ public static class RpaPackageRegistryFactory
         string rpaId,
         string originName,
         string location,
+        string schema,
         WorkerEnvironment environment)
     {
         var store = new SqlServerRpaPackageStore(new SqlServerPackageStoreOptions(
             environment.ConnectionString,
+            Schema: schema,
             OriginLocation: location));
         return new RpaPackageRegistration(
             rpaId,

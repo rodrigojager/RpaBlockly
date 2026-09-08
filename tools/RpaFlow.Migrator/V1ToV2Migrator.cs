@@ -44,7 +44,7 @@ public sealed class V1ToV2Migrator
     public MigrationResult Migrate(V1Flow source, string sourceName)
     {
         ArgumentNullException.ThrowIfNull(source);
-        V1FlowValidator.Validate(source);
+        V1FlowValidator.ValidateForV2Migration(source);
         _locators.Clear();
         _uses.Clear();
         _humanReview.Clear();
@@ -182,7 +182,13 @@ public sealed class V1ToV2Migrator
                 TargetCardinality(source));
         }
         action.Trigger = AddAuxiliary(source.Id, "trigger", source.TriggerSelector, "single");
-        action.Options = AddAuxiliary(source.Id, "options", source.OptionSelector, "many");
+        action.Options = AddAuxiliary(
+            source.Id,
+            "options",
+            source.OptionSelector,
+            source.Type.Equals("solveSliderCaptcha", StringComparison.OrdinalIgnoreCase)
+                ? "single"
+                : "many");
         action.Ready = AddAuxiliary(source.Id, "ready", source.ReadySelector, "single");
         action.Success = AddAuxiliary(source.Id, "success", source.SuccessSelector, "single");
         action.Protocol = AddAuxiliary(source.Id, "protocol", source.ProtocolSelector, "single");

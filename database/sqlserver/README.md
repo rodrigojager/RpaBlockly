@@ -11,9 +11,19 @@ Depois do baseline, aplique as migrations V2 na ordem:
 
 1. `003_create_rpa_package_store.sql`: revisão, documentos e ponteiro atual;
 2. `004_add_execution_package_revision.sql`: origem, revisão e hash executados;
-3. `005_add_locator_diagnostics.sql`: identidade do pacote nos eventos.
+3. `005_add_locator_diagnostics.sql`: identidade do pacote nos eventos;
+4. `006_add_work_item_lease_fencing.sql`: fencing token único por claim e snapshot
+   da política de recovery por execução.
 
 Todos os scripts são idempotentes para os objetos que criam ou acrescentam.
+
+Antes de aplicar `006`, interrompa todas as versões anteriores do Worker. A
+migration preenche os tokens das leases em andamento, torna o token da execução
+obrigatório e instala constraints que recusam claims e conclusões sem fencing.
+Execuções anteriores recebem política desconhecida e não são repetidas
+automaticamente após expirar; a liberação exige decisão operacional explícita.
+Depois dela, não inicie novamente um binário que ainda grave apenas por
+`LeaseOwner`; publique schema e Worker novo na mesma janela de manutenção.
 
 ## Responsabilidade de cada tabela
 
@@ -42,7 +52,7 @@ Credenciais não devem entrar nesses JSONs. Use identidade do serviço, cofre de
 
 ## Primeira execução
 
-1. Ajuste os `:setvar` e execute `001_create_worker_schema.sql`, `003_worker_resilience.sql`, `003_create_rpa_package_store.sql`, `004_add_execution_package_revision.sql` e `005_add_locator_diagnostics.sql` nessa ordem.
+1. Ajuste os `:setvar` e execute `001_create_worker_schema.sql`, `003_worker_resilience.sql`, `003_create_rpa_package_store.sql`, `004_add_execution_package_revision.sql`, `005_add_locator_diagnostics.sql` e `006_add_work_item_lease_fencing.sql` nessa ordem.
 2. Copie `src/Rpa.Worker/appsettings.example.json` para `appsettings.local.json`.
 3. Informe `ConnectionStrings.RpaDatabase` apenas no arquivo local.
 4. Configure `Definitions.<id>.Package` com provider, origem, RPA e localização.

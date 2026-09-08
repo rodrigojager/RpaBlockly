@@ -675,6 +675,106 @@ dialog::backdrop {
   white-space: nowrap;
 }
 
+.assisted-handoffs-panel {
+  grid-column: 1 / -1;
+}
+
+.assisted-handoff-list {
+  display: grid;
+  gap: 0.75rem;
+  max-height: 28rem;
+  margin-top: 0.9rem;
+  overflow: auto;
+}
+
+.assisted-handoff-card {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.4fr) minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #f59e0b;
+  border-radius: 0.7rem;
+  background: #fffbeb;
+}
+
+.assisted-handoff-card[data-state="acknowledged"],
+.assisted-handoff-card[data-state="continuing"] {
+  border-color: #34d399;
+  background: #ecfdf5;
+}
+
+.assisted-handoff-card[data-state="rejected"],
+.assisted-handoff-card[data-state="rejecting"],
+.assisted-handoff-card[data-state="expired"],
+.assisted-handoff-card[data-state="cancelled"] {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.assisted-handoff-preview,
+.assisted-handoff-card > img {
+  display: grid;
+  width: 100%;
+  min-height: 11rem;
+  max-height: 18rem;
+  place-items: center;
+  object-fit: cover;
+  color: #cbd5e1;
+  background: #0f172a;
+  font-size: 0.78rem;
+}
+
+.assisted-handoff-card > img {
+  cursor: zoom-in;
+}
+
+.assisted-handoff-body {
+  display: grid;
+  align-content: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.assisted-handoff-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.assisted-handoff-heading span {
+  padding: 0.3rem 0.5rem;
+  border-radius: 999px;
+  color: #92400e;
+  background: #fef3c7;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.assisted-handoff-body p,
+.assisted-handoff-body small {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.assisted-handoff-body p {
+  color: #334155;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.assisted-handoff-body small {
+  color: #64748b;
+  font: 0.72rem/1.35 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.assisted-handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
 .assisted-empty {
   margin: 0;
   padding: 1rem;
@@ -802,5 +902,9 @@ textarea {
   .dialog-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .assisted-handoff-card {
+    grid-template-columns: 1fr;
   }
 }

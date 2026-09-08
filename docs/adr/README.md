@@ -21,6 +21,9 @@
 | [017](017-zip-seguro.md) | ZIP determinístico e seguro | Aceita |
 | [018](018-importacao-atomica.md) | Importação em duas fases | Aceita |
 | [019](019-homologacao-assistida.md) | Homologação assistida no editor | Aceita |
+| [020](020-sidecar-cloudflare.md) | Sidecar Cloudflare por transferência de artefato | Experimental |
+| [021](021-hcaptcha-onnx.md) | hCaptcha por classificadores ONNX provisionados | Aceita |
+| [022](022-spybrowser-padrao.md) | SpyBrowser como navegador padrão | Aceita |
 
 O [threat model do Recorder](../recorder/threat-model.md) registra ativos,
 fronteiras e controles associados a essas decisões.

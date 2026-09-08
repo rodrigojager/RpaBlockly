@@ -1,0 +1,645 @@
+{
+  "schemaVersion": 1,
+  "suite": "hcaptcha-resnet-binary",
+  "source": {
+    "repository": "https://github.com/QIN2DIM/hcaptcha-challenger",
+    "releaseTag": "model",
+    "objects": [
+      "archive/src/objects2022.yaml",
+      "archive/src/objects2023.yaml"
+    ],
+    "license": {
+      "spdx": "CC0-1.0",
+      "source": "https://github.com/QIN2DIM/hcaptcha-challenger/blob/main/LICENSE",
+      "note": "O autor do upstream autorizou o uso dos modelos ONNX como CC0 (registro do mantenedor RpaBlockly). O código-fonte do upstream não é incorporado; os arquivos ONNX são dados carregados em runtime e provisionados pelo usuário."
+    }
+  },
+  "defaults": {
+    "kind": "resnet-binary",
+    "tensors": {
+      "inputType": "float32",
+      "inputShape": [
+        1,
+        3,
+        64,
+        64
+      ],
+      "outputType": "float32",
+      "outputShape": [
+        1,
+        2
+      ]
+    },
+    "preprocessing": {
+      "resize": [
+        64,
+        64
+      ],
+      "scale": "1/255",
+      "colorOrder": "RGB",
+      "denoiseWhenHeight": 144,
+      "positiveIndex": 0
+    }
+  },
+  "models": [
+    {
+      "id": "airplane2310",
+      "publishedFile": "airplane2310.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/airplane2310.onnx",
+      "modelSha256": "455E29FE90A56DF1A9E13F5E563616B9811313EFAB64630B33DA6FF9FA2632EB",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "飞机"
+        ],
+        "en": [
+          "airplane",
+          "aeroplane"
+        ],
+        "pt": [
+          "avião"
+        ]
+      }
+    },
+    {
+      "id": "beach",
+      "publishedFile": "beach.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/beach.onnx",
+      "modelSha256": "B117E03728C38E87535D0132445107E39E8869911BA953BFF5DC62B7A9FB5712",
+      "modelSizeBytes": 303077,
+      "aliases": {
+        "zh": [
+          "海滩"
+        ],
+        "en": [
+          "beach"
+        ],
+        "pt": [
+          "praia"
+        ]
+      }
+    },
+    {
+      "id": "bicycle2309",
+      "publishedFile": "bicycle2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/bicycle2309.onnx",
+      "modelSha256": "D580595C0580B69EA58CB19419B55233E314D77B0FF301520346AFDD23BF579B",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "en": [
+          "bicycle"
+        ],
+        "pt": [
+          "bicicleta"
+        ]
+      }
+    },
+    {
+      "id": "bird2309",
+      "publishedFile": "bird2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/bird2309.onnx",
+      "modelSha256": "757E25CDF64310B1E42EE7235255BCB887332FB0503A187ECEE8FD497011A176",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "en": [
+          "bird"
+        ],
+        "pt": [
+          "pássaro",
+          "ave"
+        ]
+      }
+    },
+    {
+      "id": "boat2310",
+      "publishedFile": "boat2310.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/boat2310.onnx",
+      "modelSha256": "C0398AADB8195FB397D96C9B117634EC287C1958EBF8F13839F1DCF505ACBE70",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "船"
+        ],
+        "en": [
+          "boat"
+        ],
+        "pt": [
+          "barco"
+        ]
+      }
+    },
+    {
+      "id": "bridge",
+      "publishedFile": "bridge.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/bridge.onnx",
+      "modelSha256": "A93CAA1541072DA393AD11909448516B77D75A3B00D40872E928A2520ED3581F",
+      "modelSizeBytes": 301496,
+      "aliases": {
+        "zh": [
+          "桥梁"
+        ],
+        "en": [
+          "bridge"
+        ],
+        "pt": [
+          "ponte"
+        ]
+      }
+    },
+    {
+      "id": "butterfly",
+      "publishedFile": "butterfly.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/butterfly.onnx",
+      "modelSha256": "51541900F0819F283F69446DEC30A2B2803BC681D20BE87ECCBF3011EC50A5BC",
+      "modelSizeBytes": 302121,
+      "aliases": {
+        "zh": [
+          "蝴蝶"
+        ],
+        "en": [
+          "butterfly"
+        ],
+        "pt": [
+          "borboleta"
+        ]
+      }
+    },
+    {
+      "id": "car2309",
+      "publishedFile": "car2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/car2309.onnx",
+      "modelSha256": "1B8354D55F12F5186EEC342ECA54273F93A9DB5D0AB634714416E5F2626D177C",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "汽车"
+        ],
+        "en": [
+          "car"
+        ],
+        "pt": [
+          "carro"
+        ]
+      }
+    },
+    {
+      "id": "castle2309",
+      "publishedFile": "castle2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/castle2309.onnx",
+      "modelSha256": "F02BC1D4E9733974D7A4079C2C2C03C72EFFC328150A0AC56BFC0A3D213C1BBE",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "城堡"
+        ],
+        "en": [
+          "castle"
+        ],
+        "pt": [
+          "castelo"
+        ]
+      }
+    },
+    {
+      "id": "cat2311",
+      "publishedFile": "cat2311.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/cat2311.onnx",
+      "modelSha256": "D2973FD24A2784F5688AB8AFBDE1369E26DE894AFB246FE88E7EFA0EF9ADE14B",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "猫"
+        ],
+        "en": [
+          "cat"
+        ],
+        "pt": [
+          "gato"
+        ]
+      }
+    },
+    {
+      "id": "desert",
+      "publishedFile": "desert.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/desert.onnx",
+      "modelSha256": "A744867259946583966AF0F3EDC4808F9D15D282388CCEE28D691876E9CB1648",
+      "modelSizeBytes": 303077,
+      "aliases": {
+        "zh": [
+          "沙漠"
+        ],
+        "en": [
+          "desert"
+        ],
+        "pt": [
+          "deserto"
+        ]
+      }
+    },
+    {
+      "id": "dog2312",
+      "publishedFile": "dog2312.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/dog2312.onnx",
+      "modelSha256": "30221DA2B6BFE18A3A05D8651B29D1EB10F3D3BB0071BCB4D4F214936673E6E7",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "狗"
+        ],
+        "en": [
+          "dog"
+        ],
+        "pt": [
+          "cachorro",
+          "cão"
+        ]
+      }
+    },
+    {
+      "id": "elephant2309",
+      "publishedFile": "elephant2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/elephant2309.onnx",
+      "modelSha256": "9D623CB978845196C31D51D047073BBB740C3DC10838D9DC2763F884010C16EB",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "大象"
+        ],
+        "en": [
+          "elephant"
+        ],
+        "pt": [
+          "elefante"
+        ]
+      }
+    },
+    {
+      "id": "flower",
+      "publishedFile": "flower.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/flower.onnx",
+      "modelSha256": "41E9A75441072DB88395615632BA533C93A4FF28B4DC8F67929565DBB32BC2A2",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "花"
+        ],
+        "en": [
+          "flower"
+        ],
+        "pt": [
+          "flor"
+        ]
+      }
+    },
+    {
+      "id": "forest",
+      "publishedFile": "forest.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/forest.onnx",
+      "modelSha256": "BF7733137DCDA859EADF1D1995CD282503073D5C45E25865E34E7C7F49963FBF",
+      "modelSizeBytes": 303077,
+      "aliases": {
+        "zh": [
+          "森林"
+        ],
+        "en": [
+          "forest"
+        ],
+        "pt": [
+          "floresta"
+        ]
+      }
+    },
+    {
+      "id": "fox2310",
+      "publishedFile": "fox2310.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/fox2310.onnx",
+      "modelSha256": "EA9E606A551869D9B137F2B6DF033EB73C8838D2E2A1308AF8950424D1301D2C",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "狐狸"
+        ],
+        "en": [
+          "fox"
+        ],
+        "pt": [
+          "raposa"
+        ]
+      }
+    },
+    {
+      "id": "goose2309",
+      "publishedFile": "goose2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/goose2309.onnx",
+      "modelSha256": "5D2537A8C5BFCC6D252A44D155364C2E20293C15006D9F7815D34915542B4F56",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "鹅"
+        ],
+        "en": [
+          "goose"
+        ],
+        "pt": [
+          "ganso"
+        ]
+      }
+    },
+    {
+      "id": "helicopter2310",
+      "publishedFile": "helicopter2310.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/helicopter2310.onnx",
+      "modelSha256": "F09076AD4AA1202A1C57B5FB78B9E554001C762437CDE999CDD1ACD5544898D9",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "直升机"
+        ],
+        "en": [
+          "helicopter"
+        ],
+        "pt": [
+          "helicóptero"
+        ]
+      }
+    },
+    {
+      "id": "hummingbird",
+      "publishedFile": "hummingbird.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/hummingbird.onnx",
+      "modelSha256": "5EF05270435853999BE4B0F28E6163FC720E682583C7DA16EA0FD16DB7B99497",
+      "modelSizeBytes": 303077,
+      "aliases": {
+        "zh": [
+          "蜂鸟"
+        ],
+        "en": [
+          "hummingbird"
+        ],
+        "pt": [
+          "beija-flor"
+        ]
+      }
+    },
+    {
+      "id": "motor_vehicle2309",
+      "publishedFile": "motor_vehicle2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/motor_vehicle2309.onnx",
+      "modelSha256": "365D39DB8CCDFCB75B58E8CFC975592B1CBC0425D7EB86137A92B95629EA7F28",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "机动车"
+        ],
+        "en": [
+          "motor vehicle"
+        ],
+        "pt": [
+          "veículo motorizado",
+          "veículo a motor"
+        ]
+      }
+    },
+    {
+      "id": "motorcycle2309",
+      "publishedFile": "motorcycle2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/motorcycle2309.onnx",
+      "modelSha256": "927DC5BF64E5563DC6458E15059ABC0370C8F7FC9029FC727E31DB0AA09F49ED",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "摩托车"
+        ],
+        "en": [
+          "motorcycle",
+          "motorbike"
+        ],
+        "pt": [
+          "motocicleta",
+          "moto"
+        ]
+      }
+    },
+    {
+      "id": "mountain2309",
+      "publishedFile": "mountain2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/mountain2309.onnx",
+      "modelSha256": "635577067794AB1F385BA86E6B99D42AD51964FA38B7F0CE951FEEF643EC926B",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "山"
+        ],
+        "en": [
+          "mountain"
+        ],
+        "pt": [
+          "montanha"
+        ]
+      }
+    },
+    {
+      "id": "ocean",
+      "publishedFile": "ocean.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/ocean.onnx",
+      "modelSha256": "848590470E48999C1858173FF23013A5DCAB7660D0D1421D1447207DA6187ED0",
+      "modelSizeBytes": 303077,
+      "aliases": {
+        "zh": [
+          "海洋"
+        ],
+        "en": [
+          "ocean"
+        ],
+        "pt": [
+          "oceano",
+          "mar"
+        ]
+      }
+    },
+    {
+      "id": "owl2309",
+      "publishedFile": "owl2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/owl2309.onnx",
+      "modelSha256": "2DC4EC84F9A88C42B6D324FF8B6FF3208B23C6580E36119BDBD9B4FE7A78441C",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "en": [
+          "owl"
+        ],
+        "pt": [
+          "coruja"
+        ]
+      }
+    },
+    {
+      "id": "panda2309",
+      "publishedFile": "panda2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/panda2309.onnx",
+      "modelSha256": "76FEC1A03012CBE6C9062712A614BAC940D9702EBC66C43B69831CACE1863315",
+      "modelSizeBytes": 302843,
+      "aliases": {
+        "en": [
+          "panda"
+        ],
+        "pt": [
+          "panda"
+        ]
+      }
+    },
+    {
+      "id": "parrot",
+      "publishedFile": "parrot.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/parrot.onnx",
+      "modelSha256": "3BB4FE9D8C83164C27FB058471282BBF4573AF2C0EC1686E3C9B066C1477627F",
+      "modelSizeBytes": 301496,
+      "aliases": {
+        "zh": [
+          "鹦鹉"
+        ],
+        "en": [
+          "parrot"
+        ],
+        "pt": [
+          "papagaio"
+        ]
+      }
+    },
+    {
+      "id": "robot2312",
+      "publishedFile": "robot2312.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/robot2312.onnx",
+      "modelSha256": "0AC39FC542B962AD3A9A050CA5A227DB0053254187A13C00592FD0B6A5D13B72",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "机器人"
+        ],
+        "en": [
+          "robot"
+        ],
+        "pt": [
+          "robô"
+        ]
+      }
+    },
+    {
+      "id": "seaplane",
+      "publishedFile": "seaplane.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/seaplane.onnx",
+      "modelSha256": "DAD37C474FCFDEBE40E9EADDA1B16D4A42CE9D5031A0AB634FB7694E6C480F0F",
+      "modelSizeBytes": 301496,
+      "aliases": {
+        "zh": [
+          "水上飞机"
+        ],
+        "en": [
+          "seaplane"
+        ],
+        "pt": [
+          "hidroavião"
+        ]
+      }
+    },
+    {
+      "id": "sheep2309",
+      "publishedFile": "sheep2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/sheep2309.onnx",
+      "modelSha256": "893E5CC2F45A30A17938B52137699F86043BBC8D7A8B7CAF693576E46EAC4DCD",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "en": [
+          "sheep"
+        ],
+        "pt": [
+          "ovelha"
+        ]
+      }
+    },
+    {
+      "id": "snowman2311",
+      "publishedFile": "snowman2311.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/snowman2311.onnx",
+      "modelSha256": "967FCA153A7D9D5838CDCCF853D9BB52147C3CA34C992B31D6458212210341C8",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "en": [
+          "snowman"
+        ],
+        "pt": [
+          "boneco de neve"
+        ]
+      }
+    },
+    {
+      "id": "tractor",
+      "publishedFile": "tractor.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/tractor.onnx",
+      "modelSha256": "2DEED5BD953CDEC7EA4A745BB2AF5D5A7983C42D5C17E892AECD004C0BD24A0E",
+      "modelSizeBytes": 303077,
+      "aliases": {
+        "zh": [
+          "拖拉机"
+        ],
+        "en": [
+          "tractor"
+        ],
+        "pt": [
+          "trator"
+        ]
+      }
+    },
+    {
+      "id": "train2309",
+      "publishedFile": "train2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/train2309.onnx",
+      "modelSha256": "33EE85421F690911B0F2D6BD2888D90EB2090811F4E2FCBA3C4E9BFBD11EB48F",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "火车"
+        ],
+        "en": [
+          "train"
+        ],
+        "pt": [
+          "trem"
+        ]
+      }
+    },
+    {
+      "id": "trees2309",
+      "publishedFile": "trees2309.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/trees2309.onnx",
+      "modelSha256": "204D5857826B0A7DE93169B8856B41418E4D7FEE453CA68046E50FD4B51171FA",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "en": [
+          "trees"
+        ],
+        "pt": [
+          "árvores",
+          "árvore"
+        ]
+      }
+    },
+    {
+      "id": "truck2310",
+      "publishedFile": "truck2310.onnx",
+      "artifactUrl": "https://github.com/QIN2DIM/hcaptcha-challenger/releases/download/model/truck2310.onnx",
+      "modelSha256": "B19AB5C7659E1C65AE3DD1AD9C4492A4F5D50D46059AD86B18935233CA02B1C5",
+      "modelSizeBytes": 303058,
+      "aliases": {
+        "zh": [
+          "卡车"
+        ],
+        "en": [
+          "truck"
+        ],
+        "pt": [
+          "caminhão"
+        ]
+      }
+    }
+  ]
+}

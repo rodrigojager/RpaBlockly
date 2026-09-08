@@ -45,14 +45,22 @@ restrição operacional de paralelismo configurada.
 ## Checks rápidos
 
 ```powershell
+.\rpablockly.cmd doctor
+.\rpablockly.cmd status
 dotnet build RpaBlockly.slnx --configuration Release
 npm run check --prefix tools/schema-conformance
 .\tools\Run-Checks.ps1
 .\tools\Test-Dependencies.ps1
 ```
 
-Se o Chromium do Playwright não estiver instalado:
+SpyBrowser é o provider padrão e usa o Chromium provisionado pelo Playwright.
+Se o browser não estiver instalado:
 
 ```powershell
 pwsh src/RpaFlow.Playwright/bin/Release/net9.0/playwright.ps1 install chromium
 ```
+
+Para isolar problemas de humanização, teste temporariamente
+`Runtime.SpyBrowserHumanize=false`. Para comparar com o launcher bruto, use
+`Runtime.Browser=chromium`; CloakBrowser e as demais opções anteriores continuam
+disponíveis.

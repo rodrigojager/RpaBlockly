@@ -340,6 +340,55 @@ app.MapGet("/api/assisted-executions/{executionId}/evidence/{evidenceId}", (
     }
 });
 
+app.MapPost(
+    "/api/assisted-executions/{executionId}/human-handoffs/{requestId}",
+    (
+        string executionId,
+        string requestId,
+        AssistedHumanHandoffDecision decision,
+        HttpRequest request,
+        EditorSession session,
+        AssistedExecutionService executions) =>
+    {
+        if (!session.IsAuthorized(request)) return Results.Unauthorized();
+        try
+        {
+            return Results.Json(executions.RespondToHumanHandoff(
+                executionId,
+                requestId,
+                decision));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return Results.NotFound(new { error = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.BadRequest(new { error = exception.Message });
+        }
+    });
+
+app.MapGet(
+    "/api/assisted-executions/{executionId}/human-handoffs/{requestId}/evidence",
+    (
+        string executionId,
+        string requestId,
+        HttpRequest request,
+        EditorSession session,
+        AssistedExecutionService executions) =>
+    {
+        if (!session.IsAuthorized(request)) return Results.Unauthorized();
+        try
+        {
+            var evidence = executions.GetHumanHandoffEvidence(executionId, requestId);
+            return Results.File(evidence.Path, evidence.ContentType, evidence.FileName);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return Results.NotFound(new { error = exception.Message });
+        }
+    });
+
 app.MapPost("/api/recorder/imports/inspect", async (
     HttpRequest request,
     EditorSession session,

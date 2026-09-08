@@ -1,6 +1,6 @@
 # Catálogo de blocos V2
 
-O catálogo compilado possui 33 tipos de ação e 36 blocos. `download` e `if` têm
+O catálogo compilado possui 39 tipos de ação e 42 blocos. `download` e `if` têm
 duas variantes visuais; `rpa_subflow_definition` não é uma ação.
 
 | Bloco | Ação | Locators | Observação |
@@ -40,6 +40,12 @@ duas variantes visuais; `rpa_subflow_definition` não é uma ação.
 | `rpa_repeat` | `repeat` | — | Contagem literal ou source. |
 | `rpa_for_each` | `forEach` | — | Lista literal ou source; `loop.*`. |
 | `rpa_run_subflow` | `runSubflow` | — | Chama subfluxo existente e acíclico. |
+| `rpa_solve_image_captcha` | `solveImageCaptcha` | target, trigger | Preenche target com OCR da imagem em trigger. |
+| `rpa_solve_slider_captcha` | `solveSliderCaptcha` | target, trigger, options | Arrasta target usando fundo em trigger e peça em options. |
+| `rpa_solve_recaptcha_v2` | `solveRecaptchaV2` | — | Resolve o desafio de áudio pelo serviço opcional. |
+| `rpa_solve_hcaptcha` | `solveHCaptcha` | — | Resolve a grade binária do hCaptcha pelo serviço opcional. |
+| `rpa_solve_captcha_auto` | `solveCaptcha` | — | Detecta os tipos suportados; VLM, clique e sidecar Cloudflare exigem opt-in explícito. |
+| `rpa_wait_human_input` | `waitHumanInput` | — | Aguarda confirmação por arquivo no diretório de artefatos. |
 | `rpa_subflow_definition` | — | — | Contêiner visual de subfluxo. |
 
 ## Propriedades comuns
@@ -50,6 +56,10 @@ duas variantes visuais; `rpa_subflow_definition` não é uma ação.
 - `timeoutMs`, `pollIntervalMs`, `delayMs` e loops possuem limites;
 - ações web usam `LocatorUseDefinition`, nunca selector;
 - `actions` e `elseActions` preservam ordem e IDs globais únicos.
+
+`captcha.allowCloudflareSidecar=true` só é válido com
+`captcha.kind=cloudflareChallenge`. A opção autoriza transferência filtrada de
+`cf_clearance` e reload; não se aplica a Turnstile e não implica `Solved`.
 
 O contrato normativo está em `schemas/flow-v2.schema.json` e no
 `FlowDefinitionValidator`. O teste de baseline deriva a cobertura diretamente do

@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Fixture sanitizada: captcha",
+  "Inputs": [],
+  "Actions": [
+    {
+      "Id": "catalogo-solveimagecaptcha",
+      "Type": "solveImageCaptcha",
+      "Name": "solveImageCaptcha",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "TriggerSelector": ".captcha-image",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-solverecaptchav2",
+      "Type": "solveRecaptchaV2",
+      "Name": "solveRecaptchaV2",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-solveslidercaptcha",
+      "Type": "solveSliderCaptcha",
+      "Name": "solveSliderCaptcha",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "TriggerSelector": ".slider-background",
+      "OptionSelector": ".slider-piece",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-solvehcaptcha",
+      "Type": "solveHCaptcha",
+      "Name": "solveHCaptcha",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-solvecaptcha",
+      "Type": "solveCaptcha",
+      "Name": "solveCaptcha",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    },
+    {
+      "Id": "catalogo-waithumaninput",
+      "Type": "waitHumanInput",
+      "Name": "waitHumanInput",
+      "Selector": "#alvo",
+      "FrameSelectors": [],
+      "Value": "valor",
+      "Target": "runtime.resultado",
+      "Actions": [],
+      "ElseActions": []
+    }
+  ],
+  "Subflows": {}
+}

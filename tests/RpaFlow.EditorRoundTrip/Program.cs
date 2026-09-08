@@ -42,6 +42,7 @@ try
         await WaitForEditorAsync(editorUrl, editor);
         await CheckAssistedExecutionApiAsync(editorUrl);
         await CheckBrowserRoundTripAsync(editorUrl, testRoot, repositoryRoot);
+        await CheckAssistedHumanHandoffApiAsync(editorUrl);
         await CheckAssistedCancellationApiAsync(editorUrl);
         await CheckAssistedFailureApiAsync(editorUrl);
         await CheckAtomicPackageApiAsync(editorUrl);
@@ -233,8 +234,8 @@ static async Task CheckBrowserRoundTripAsync(
     var blocks = JsonSerializer.Deserialize<BlockInspection[]>(
         blocksJson,
         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-    Check(blocks.Length == 36 && blocks.Select(item => item.Type).Distinct().Count() == 36,
-        "a toolbox V2 instancia os 36 blocos do catálogo");
+    Check(blocks.Length == 42 && blocks.Select(item => item.Type).Distinct().Count() == 42,
+        "a toolbox V2 instancia os 42 blocos do catálogo");
     Check(blocks.SelectMany(item => item.Fields).All(field =>
         !field.Contains("SELECTOR", StringComparison.OrdinalIgnoreCase) &&
         !field.Equals("SCOPE", StringComparison.OrdinalIgnoreCase)),
@@ -325,6 +326,11 @@ static async Task CheckBrowserRoundTripAsync(
     await page.ClickAsync("#open-assisted-validation");
     Check(await page.Locator("#assisted-validation-dialog").GetAttributeAsync("open") is not null,
         "homologação assistida abre dentro do editor real");
+    var assistedBrowsers = await page.Locator("#assisted-browser option")
+        .EvaluateAllAsync<string[]>("items => items.map(item => item.value)");
+    Check(assistedBrowsers.SequenceEqual(["spybrowser", "chromium", "cloakbrowser"]) &&
+          await page.InputValueAsync("#assisted-browser") == "spybrowser",
+        "homologação assistida usa SpyBrowser por padrão e mantém os providers anteriores");
     Check(await page.Locator("#assisted-boundary option").CountAsync() == 1,
         "limite seguro lista somente ações-folha do rascunho");
     await page.WaitForFunctionAsync(
@@ -387,7 +393,7 @@ static async Task CheckAssistedExecutionApiAsync(string editorUrl)
             ["flow"] = opened["flow"]!.DeepClone(),
             ["locators"] = opened["locators"]!.DeepClone(),
             ["policy"] = opened["policy"]!.DeepClone(),
-            ["browser"] = "chromium",
+            ["browser"] = "spybrowser",
             ["boundaryActionId"] = firstActionId,
             ["captureScreenshots"] = true
         });
@@ -416,6 +422,83 @@ static async Task CheckAssistedExecutionApiAsync(string editorUrl)
     Check(bytes.Length > 8 && bytes[0] == 0x89 && bytes[1] == 0x50 &&
           bytes[2] == 0x4E && bytes[3] == 0x47,
         "endpoint autenticado entrega a imagem PNG registrada");
+}
+
+static async Task CheckAssistedHumanHandoffApiAsync(string editorUrl)
+{
+    using var client = await AuthorizedEditorClientAsync(editorUrl);
+    var opened = await client.GetFromJsonAsync<JsonObject>("/api/package")
+        ?? throw new InvalidOperationException("Pacote do editor vazio.");
+    var flow = opened["flow"]!.DeepClone().AsObject();
+    flow["actions"] = new JsonArray
+    {
+        new JsonObject
+        {
+            ["id"] = "handoff-assistido",
+            ["type"] = "waitHumanInput",
+            ["name"] = "Confirmar desafio no navegador",
+            ["value"] = "Conclua o desafio visual e confirme a retomada."
+        }
+    };
+    using var startedResponse = await client.PostAsJsonAsync(
+        "/api/assisted-executions",
+        new JsonObject
+        {
+            ["expectedRevision"] = opened["revision"]!.DeepClone(),
+            ["flow"] = flow,
+            ["locators"] = opened["locators"]!.DeepClone(),
+            ["policy"] = opened["policy"]!.DeepClone(),
+            ["browser"] = "chromium",
+            ["boundaryActionId"] = "handoff-assistido",
+            ["captureScreenshots"] = false
+        });
+    Check(startedResponse.IsSuccessStatusCode,
+        "API inicia execução que aguarda intervenção humana");
+    var started = JsonNode.Parse(await startedResponse.Content.ReadAsStringAsync())!.AsObject();
+    var executionId = started["executionId"]!.GetValue<string>();
+    var pending = await WaitForHumanHandoffAsync(client, executionId);
+    var handoff = pending["humanHandoffs"]!.AsArray().Single()!.AsObject();
+    var requestId = handoff["requestId"]!.GetValue<string>();
+    Check(handoff["state"]?.GetValue<string>() == "Pending",
+        "snapshot publica solicitação humana pendente e correlacionada");
+    if (handoff["evidenceAvailable"]?.GetValue<bool>() == true)
+    {
+        var evidence = await client.GetByteArrayAsync(
+            $"/api/assisted-executions/{executionId}/human-handoffs/{requestId}/evidence");
+        Check(evidence.Length > 8 && evidence[0] == 0x89 && evidence[1] == 0x50,
+            "endpoint entrega a captura específica do handoff");
+    }
+
+    using var playwright = await Playwright.CreateAsync();
+    await using var browser = await playwright.Chromium.LaunchAsync(
+        new BrowserTypeLaunchOptions { Headless = true });
+    var page = await browser.NewPageAsync();
+    await page.GotoAsync(
+        $"{editorUrl}/?roundtrip-test=1",
+        new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    await page.WaitForFunctionAsync("() => Boolean(window.RpaFlowEditorTesting)");
+    await page.ClickAsync("#open-assisted-validation");
+    var handoffCard = page.Locator(
+        "#assisted-handoff-list .assisted-handoff-card[data-state='pending']");
+    await handoffCard.WaitForAsync(new LocatorWaitForOptions
+    {
+        State = WaitForSelectorState.Visible,
+        Timeout = 10_000
+    });
+    Check(await handoffCard.CountAsync() == 1,
+        "painel visual mostra somente o handoff correlacionado pendente");
+    await handoffCard.Locator("[data-handoff-action='continue']").ClickAsync();
+    await page.WaitForFunctionAsync(
+        "() => document.querySelector('#assisted-handoff-list " +
+        ".assisted-handoff-card')?.dataset.state !== 'pending'",
+        null,
+        new PageWaitForFunctionOptions { Timeout = 10_000 });
+    Check(true, "operador confirma a retomada pelo painel visual correlacionado");
+    var completed = await WaitForAssistedExecutionAsync(client, executionId);
+    Check(completed["status"]?.GetValue<string>() == "validated" &&
+          completed["humanHandoffs"]!.AsArray().Single()?["state"]?.GetValue<string>() ==
+              "Acknowledged",
+        "handoff confirmado retoma a mesma execução até o limite seguro");
 }
 
 static async Task CheckAssistedCancellationApiAsync(string editorUrl)
@@ -530,6 +613,25 @@ static async Task<JsonObject> WaitForAssistedExecutionAsync(
         await Task.Delay(100);
     }
     throw new TimeoutException("A homologação assistida não terminou em 30 segundos.");
+}
+
+static async Task<JsonObject> WaitForHumanHandoffAsync(
+    HttpClient client,
+    string executionId)
+{
+    var deadline = DateTime.UtcNow.AddSeconds(15);
+    while (DateTime.UtcNow < deadline)
+    {
+        var current = await client.GetFromJsonAsync<JsonObject>(
+            $"/api/assisted-executions/{executionId}")
+            ?? throw new InvalidOperationException("Estado da homologação vazio.");
+        if (current["humanHandoffs"]?.AsArray().Count > 0)
+        {
+            return current;
+        }
+        await Task.Delay(100);
+    }
+    throw new TimeoutException("A solicitação humana não apareceu em 15 segundos.");
 }
 
 static LocatorDefinition LocatorForUi(string id, string displayName, string selector) =>
@@ -946,7 +1048,8 @@ static async Task CheckProductionRecorderPipelineAsync(
         uploadPath);
     var options = new PlaywrightRuntimeOptions(
         Headless: true,
-        Browser: Environment.GetEnvironmentVariable("RPABLOCKLY_CHECKS_BROWSER") ?? "chromium",
+        Browser: Environment.GetEnvironmentVariable("RPABLOCKLY_CHECKS_BROWSER") ??
+                 PlaywrightBrowserSelection.DefaultValue,
         ActionTimeoutSeconds: 15,
         UploadTimeoutSeconds: 15,
         OutputDirectory: "recorder-e2e-artifacts",
@@ -1600,19 +1703,20 @@ file sealed class RecorderWorkerRepository : IWorkItemExecutionRepository
 
     public Task SetExecutionPackageAsync(
         string executionId,
-        string originName,
+        RpaWorkItem workItem,
+        string originKind,
         RpaPackageSnapshot snapshot,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (snapshot.RpaId != "editor-test" || originName != "source")
+        if (snapshot.RpaId != "editor-test" || originKind != "file")
         {
             throw new InvalidOperationException("O worker não fixou o pacote importado esperado.");
         }
         return Task.CompletedTask;
     }
 
-    public Task RenewLeaseAsync(Guid workItemId, CancellationToken cancellationToken) =>
+    public Task RenewLeaseAsync(RpaWorkItem workItem, CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
     public Task CompleteAsync(
@@ -1657,6 +1761,7 @@ file sealed class RecorderWorkerRepository : IWorkItemExecutionRepository
 
     public Task AppendEventAsync(
         FlowExecutionEvent executionEvent,
+        RpaWorkItem workItem,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

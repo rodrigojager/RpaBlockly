@@ -25,6 +25,12 @@ public static class RpaPackageStoreRules
     public static void ValidateRpaId(string rpaId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rpaId);
+        if (rpaId.Length > 200)
+        {
+            throw new ArgumentException(
+                "O ID do RPA não pode exceder 200 caracteres.",
+                nameof(rpaId));
+        }
         if (rpaId.Any(character =>
                 !(char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-')))
         {

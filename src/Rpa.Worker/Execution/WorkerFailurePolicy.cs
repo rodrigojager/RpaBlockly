@@ -41,6 +41,11 @@ public static class WorkerFailurePolicy
             return Retry("TRAVA_GLOBAL_PERDIDA", exception.Message, preserveAttempt: true);
         if (workerStopping)
             return Retry("WORKER_ENCERRADO", exception.Message, preserveAttempt: true);
+        if (observer?.HumanHandoffPending == true)
+            return Definitive(
+                "INTERVENCAO_HUMANA_PENDENTE",
+                exception.Message +
+                " A execução aguardava intervenção humana e não será repetida automaticamente.");
         if (flowFailure is not null)
             return flowFailure.Retryable && item.AttemptCount < item.MaxAttempts
                 ? Retry("FALHA_TRANSITORIA", flowFailure.Message)

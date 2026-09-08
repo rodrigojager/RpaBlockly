@@ -61,7 +61,7 @@ try
 
     await WaitForSqlAsync(connectionString!);
     var schema = "rpatest_" + Guid.NewGuid().ToString("N")[..12];
-    await ApplyMigrationAsync(repositoryRoot, connectionString!, schema);
+    await ApplyDocumentedMigrationsAsync(repositoryRoot, connectionString!, schema);
     try
     {
         var store = new SqlServerRpaPackageStore(new SqlServerPackageStoreOptions(
@@ -100,10 +100,40 @@ try
             "RPAs diferentes publicam de forma independente");
         Check((await store.ListRevisionsAsync("same-rpa", CancellationToken.None)).Count == 3,
             "histórico SQL preserva todas as revisões publicadas");
+        var beforeRollback = await store.LoadAsync("same-rpa", null, CancellationToken.None);
+        var rollback = await store.PublishAsync(
+            "same-rpa",
+            Documents("Versão 1"),
+            beforeRollback.Revision,
+            CancellationToken.None);
+        var rolledBack = await store.LoadAsync("same-rpa", null, CancellationToken.None);
+        Check(
+            rollback.Revision == first.Revision &&
+            !rollback.CreatedNewRevision &&
+            rolledBack.Revision == first.Revision &&
+            (await store.ListRevisionsAsync("same-rpa", CancellationToken.None)).Count == 3,
+            "rollback reposiciona o ponteiro sem alterar revisão imutável ou histórico");
+
+        await ApplyDocumentedMigrationsAsync(repositoryRoot, connectionString!, schema);
+        Console.WriteLine("OK: migrations documentadas são idempotentes.");
+        await VerifyWorkerLeaseFencingAsync(repositoryRoot, connectionString!, schema);
     }
     finally
     {
         await DropSchemaAsync(connectionString!, schema);
+    }
+
+    var upgradeSchema = "rpaupgrade_" + Guid.NewGuid().ToString("N")[..12];
+    try
+    {
+        await VerifyLeaseMigrationUpgradeAsync(
+            repositoryRoot,
+            connectionString!,
+            upgradeSchema);
+    }
+    finally
+    {
+        await DropSchemaAsync(connectionString!, upgradeSchema);
     }
 }
 finally
@@ -117,7 +147,7 @@ finally
     }
 }
 
-Console.WriteLine("Package store SQL Server validado com sucesso.");
+Console.WriteLine("Package store e fencing de lease SQL Server validados com sucesso.");
 
 static RpaPackageDocuments Documents(string name) => new(
     new FlowDefinition
@@ -150,10 +180,6 @@ static async Task<bool> TryPublishAsync(
         return true;
     }
     catch (PackageRevisionConflictException)
-    {
-        return false;
-    }
-    catch (SqlException exception) when (exception.Number == 1205)
     {
         return false;
     }
@@ -230,25 +256,150 @@ static async Task WaitForSqlAsync(string connectionString)
     throw new InvalidOperationException("SQL Server não ficou pronto no prazo.", last);
 }
 
-static async Task ApplyMigrationAsync(string root, string connectionString, string schema)
+static async Task ApplyDocumentedMigrationsAsync(
+    string root,
+    string connectionString,
+    string schema)
 {
-    var path = Path.Combine(root, "database", "sqlserver", "003_create_rpa_package_store.sql");
+    string[] migrations =
+    [
+        "001_create_worker_schema.sql",
+        "003_worker_resilience.sql",
+        "003_create_rpa_package_store.sql",
+        "004_add_execution_package_revision.sql",
+        "005_add_locator_diagnostics.sql",
+        "006_add_work_item_lease_fencing.sql"
+    ];
+    foreach (var migration in migrations)
+    {
+        await ApplySqlFileAsync(root, connectionString, schema, migration);
+    }
+}
+
+static async Task VerifyWorkerLeaseFencingAsync(
+    string root,
+    string connectionString,
+    string schema)
+{
+    var workerChecks = Path.Combine(
+        root,
+        "tests",
+        "Rpa.WorkerChecks",
+        "bin",
+        "Release",
+        "net9.0",
+        "Rpa.WorkerChecks.dll");
+    if (!File.Exists(workerChecks))
+    {
+        throw new FileNotFoundException(
+            "Compile Rpa.WorkerChecks antes de executar a integração SQL.",
+            workerChecks);
+    }
+
+    var result = await RunProcessAsync(
+        "dotnet",
+        [workerChecks, "--sql-connection", connectionString, "--sql-schema", schema],
+        throwOnError: true);
+    Console.WriteLine(result.Output);
+}
+
+static async Task VerifyLeaseMigrationUpgradeAsync(
+    string root,
+    string connectionString,
+    string schema)
+{
+    var runningId = Guid.NewGuid();
+    var pendingId = Guid.NewGuid();
+    await ExecuteAsync(
+        connectionString,
+        $"CREATE SCHEMA [{schema}] AUTHORIZATION [dbo];");
+    await ExecuteAsync(
+        connectionString,
+        $"CREATE TABLE [{schema}].[WorkItem] (" +
+        "WorkItemId uniqueidentifier NOT NULL PRIMARY KEY,Status nvarchar(30) NOT NULL," +
+        "LeaseOwner nvarchar(200) NULL,LeaseExpiresAtUtc datetime2(3) NULL);" +
+        $"CREATE TABLE [{schema}].[Execution] (" +
+        "ExecutionId nvarchar(64) NOT NULL PRIMARY KEY,WorkItemId uniqueidentifier NOT NULL," +
+        "WorkerId nvarchar(200) NOT NULL,Status nvarchar(30) NOT NULL,StartedAtUtc datetime2(3) NOT NULL);" +
+        $"CREATE TABLE [{schema}].[ExecutionEvent] (ExecutionEventId bigint IDENTITY PRIMARY KEY);" +
+        $"INSERT INTO [{schema}].[WorkItem] VALUES " +
+        $"('{runningId:D}',N'Running',N'old-worker',DATEADD(MINUTE,5,SYSUTCDATETIME()))," +
+        $"('{pendingId:D}',N'Pending',N'stale-owner',DATEADD(MINUTE,-5,SYSUTCDATETIME()));" +
+        $"INSERT INTO [{schema}].[Execution] VALUES " +
+        $"(N'legacy-running','{runningId:D}',N'old-worker',N'Running',SYSUTCDATETIME())," +
+        $"(N'legacy-history','{pendingId:D}',N'old-worker',N'Succeeded',SYSUTCDATETIME());");
+    await ApplySqlFileAsync(
+        root, connectionString, schema, "004_add_execution_package_revision.sql");
+    await ApplySqlFileAsync(
+        root, connectionString, schema, "005_add_locator_diagnostics.sql");
+    await ApplySqlFileAsync(
+        root, connectionString, schema, "006_add_work_item_lease_fencing.sql");
+    await ApplySqlFileAsync(
+        root, connectionString, schema, "006_add_work_item_lease_fencing.sql");
+
+    var valid = await ExecuteScalarIntAsync(
+        connectionString,
+        $"SELECT CASE WHEN " +
+        $"(SELECT LeaseToken FROM [{schema}].[WorkItem] WHERE WorkItemId='{runningId:D}') = " +
+        $"(SELECT LeaseToken FROM [{schema}].[Execution] WHERE ExecutionId=N'legacy-running') " +
+        $"AND (SELECT LeaseOwner FROM [{schema}].[WorkItem] WHERE WorkItemId='{pendingId:D}') IS NULL " +
+        $"AND (SELECT LeaseToken FROM [{schema}].[WorkItem] WHERE WorkItemId='{pendingId:D}') IS NULL " +
+        $"AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{schema}].[Execution]') " +
+        "AND name=N'LeaseToken' AND is_nullable=0) " +
+        $"AND JSON_VALUE((SELECT RecoveryPolicyJson FROM [{schema}].[Execution] " +
+        "WHERE ExecutionId=N'legacy-running'),N'$.policyKnown')=N'false' " +
+        $"AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{schema}].[Execution]') " +
+        "AND name=N'RecoveryPolicyJson' AND is_nullable=0) " +
+        "THEN 1 ELSE 0 END;");
+    Check(valid == 1,
+        "upgrade preenche tokens, cerca policy legada e converge nulabilidade");
+    await ExpectSqlFailureAsync(
+        connectionString,
+        $"UPDATE [{schema}].[WorkItem] SET Status=N'Succeeded',LeaseOwner=NULL,LeaseExpiresAtUtc=NULL " +
+        $"WHERE WorkItemId='{runningId:D}';",
+        "constraint bloqueia worker antigo que não limpa o LeaseToken");
+    await ExpectSqlFailureAsync(
+        connectionString,
+        $"UPDATE [{schema}].[Execution] SET RpaPackageOrigin=N'source' " +
+        "WHERE ExecutionId=N'legacy-running';",
+        "constraint rejeita identidade parcial do pacote");
+}
+
+static async Task ApplySqlFileAsync(
+    string root,
+    string connectionString,
+    string schema,
+    string fileName)
+{
+    var path = Path.Combine(root, "database", "sqlserver", fileName);
     var script = new UTF8Encoding(false, true).GetString(await File.ReadAllBytesAsync(path));
     script = Regex.Replace(
         script,
         "^:setvar[^\\r\\n]*(?:\\r?\\n)?",
         string.Empty,
         RegexOptions.Multiline | RegexOptions.CultureInvariant)
-        .Replace("$(RpaSchema)", schema, StringComparison.Ordinal);
+        .Replace("$(RpaSchema)", schema, StringComparison.Ordinal)
+        .Replace("$(WorkItemsTable)", "WorkItem", StringComparison.Ordinal)
+        .Replace("$(ExecutionsTable)", "Execution", StringComparison.Ordinal)
+        .Replace("$(OutputsTable)", "ExecutionOutput", StringComparison.Ordinal)
+        .Replace("$(ArtifactsTable)", "Artifact", StringComparison.Ordinal)
+        .Replace("$(EventsTable)", "ExecutionEvent", StringComparison.Ordinal)
+        .Replace("$(WorkersTable)", "WorkerState", StringComparison.Ordinal);
     await ExecuteAsync(connectionString, script);
 }
 
 static Task DropSchemaAsync(string connectionString, string schema) => ExecuteAsync(
     connectionString,
-    $"DROP TABLE [{schema}].[RpaPackageCurrent];" +
-    $"DROP TABLE [{schema}].[RpaPackageDocument];" +
-    $"DROP TABLE [{schema}].[RpaPackageRevision];" +
-    $"DROP SCHEMA [{schema}];");
+    $"IF OBJECT_ID(N'[{schema}].[ExecutionEvent]', N'U') IS NOT NULL DROP TABLE [{schema}].[ExecutionEvent];" +
+    $"IF OBJECT_ID(N'[{schema}].[Artifact]', N'U') IS NOT NULL DROP TABLE [{schema}].[Artifact];" +
+    $"IF OBJECT_ID(N'[{schema}].[ExecutionOutput]', N'U') IS NOT NULL DROP TABLE [{schema}].[ExecutionOutput];" +
+    $"IF OBJECT_ID(N'[{schema}].[Execution]', N'U') IS NOT NULL DROP TABLE [{schema}].[Execution];" +
+    $"IF OBJECT_ID(N'[{schema}].[WorkItem]', N'U') IS NOT NULL DROP TABLE [{schema}].[WorkItem];" +
+    $"IF OBJECT_ID(N'[{schema}].[WorkerState]', N'U') IS NOT NULL DROP TABLE [{schema}].[WorkerState];" +
+    $"IF OBJECT_ID(N'[{schema}].[RpaPackageCurrent]', N'U') IS NOT NULL DROP TABLE [{schema}].[RpaPackageCurrent];" +
+    $"IF OBJECT_ID(N'[{schema}].[RpaPackageDocument]', N'U') IS NOT NULL DROP TABLE [{schema}].[RpaPackageDocument];" +
+    $"IF OBJECT_ID(N'[{schema}].[RpaPackageRevision]', N'U') IS NOT NULL DROP TABLE [{schema}].[RpaPackageRevision];" +
+    $"IF SCHEMA_ID(N'{schema}') IS NOT NULL DROP SCHEMA [{schema}];");
 
 static async Task ExecuteAsync(string connectionString, string sql)
 {
@@ -256,6 +407,32 @@ static async Task ExecuteAsync(string connectionString, string sql)
     await connection.OpenAsync();
     await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
     _ = await command.ExecuteNonQueryAsync();
+}
+
+static async Task<int> ExecuteScalarIntAsync(string connectionString, string sql)
+{
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
+    return Convert.ToInt32(await command.ExecuteScalarAsync());
+}
+
+static async Task ExpectSqlFailureAsync(
+    string connectionString,
+    string sql,
+    string description)
+{
+    try
+    {
+        await ExecuteAsync(connectionString, sql);
+    }
+    catch (SqlException)
+    {
+        Console.WriteLine("OK: " + description + ".");
+        return;
+    }
+
+    throw new InvalidOperationException("Falha: " + description + ".");
 }
 
 static async Task<(int ExitCode, string Output)> RunProcessAsync(
@@ -269,6 +446,8 @@ static async Task<(int ExitCode, string Output)> RunProcessAsync(
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
             UseShellExecute = false,
             CreateNoWindow = true
         }
@@ -294,7 +473,7 @@ static async Task<(int ExitCode, string Output)> RunProcessAsync(
     if (throwOnError && process.ExitCode != 0)
     {
         throw new InvalidOperationException(
-            $"O processo '{fileName}' terminou com código {process.ExitCode}.");
+            $"O processo '{fileName}' terminou com código {process.ExitCode}: {output.Trim()}");
     }
 
     return (process.ExitCode, output.Trim());

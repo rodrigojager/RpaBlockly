@@ -137,6 +137,22 @@ export async function assistedEvidence(executionId, evidenceId) {
   return response.blob();
 }
 
+export function respondAssistedHumanHandoff(executionId, requestId, action) {
+  return request(
+    `/api/assisted-executions/${encodeURIComponent(executionId)}/human-handoffs/` +
+      encodeURIComponent(requestId),
+    { method: "POST", body: JSON.stringify({ action }) });
+}
+
+export async function assistedHumanHandoffEvidence(executionId, requestId) {
+  const response = await fetch(
+    `/api/assisted-executions/${encodeURIComponent(executionId)}/human-handoffs/` +
+      `${encodeURIComponent(requestId)}/evidence`,
+    { cache: "no-store", headers: headers() });
+  if (!response.ok) await readResponse(response);
+  return response.blob();
+}
+
 export class RevisionConflictError extends Error {
   constructor(message) {
     super(message || "A revisão do pacote mudou. Recarregue e compare antes de salvar.");

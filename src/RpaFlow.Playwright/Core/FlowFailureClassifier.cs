@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using RpaFlow.Playwright.V2;
 
 namespace RpaFlow.Playwright;
 
@@ -63,6 +64,8 @@ internal static class FlowFailureClassifier
 
         return exception switch
         {
+            CaptchaException captcha =>
+                (CaptchaCategory(captcha.ErrorCode), captcha.Retryable),
             TimeoutException => (FlowFailureCategory.Timeout, true),
             FileNotFoundException or DirectoryNotFoundException =>
                 (FlowFailureCategory.FileSystem, false),
@@ -72,4 +75,18 @@ internal static class FlowFailureClassifier
             _ => (FlowFailureCategory.Unexpected, false)
         };
     }
+
+    private static FlowFailureCategory CaptchaCategory(string errorCode) => errorCode switch
+    {
+        CaptchaErrorCodes.DeadlineExceeded or CaptchaErrorCodes.Cancelled =>
+            FlowFailureCategory.Timeout,
+        CaptchaErrorCodes.ModelMissing or CaptchaErrorCodes.ModelMismatch or
+            CaptchaErrorCodes.NeedsConfiguration or CaptchaErrorCodes.InvalidPayload or
+            CaptchaErrorCodes.ContractViolation or CaptchaErrorCodes.Unauthorized =>
+            FlowFailureCategory.Configuration,
+        CaptchaErrorCodes.UpstreamUnavailable or CaptchaErrorCodes.Busy or
+            CaptchaErrorCodes.ResponseTooLarge =>
+            FlowFailureCategory.ExternalSystem,
+        _ => FlowFailureCategory.WebInteraction
+    };
 }

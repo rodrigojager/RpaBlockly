@@ -8,6 +8,62 @@ permissions:
   contents: read
 
 jobs:
+  captcha-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            services/captcha-solver/requirements.lock
+            services/captcha-solver/requirements-dev.txt
+      - name: Instalar dependências fixadas
+        run: |
+          python -m pip install --disable-pip-version-check -r services/captcha-solver/requirements.lock
+          python -m pip install --disable-pip-version-check pytest==8.4.1
+      - name: Provisionar modelo OCR fixado
+        run: |
+          python services/captcha-solver/provision_models.py \
+            --manifest src/RpaFlow.Playwright/V2/Captcha/captcha-models.manifest.json \
+            --destination captcha-models \
+            --charset-source src/RpaFlow.Playwright/V2/Captcha/ocr-charset.json \
+            --hcaptcha-manifest src/RpaFlow.Playwright/V2/Captcha/hcaptcha-models.manifest.json \
+            --hcaptcha-destination captcha-models/hcaptcha \
+            --hcaptcha-license src/RpaFlow.Playwright/V2/Captcha/hcaptcha-models.LICENSE.txt
+      - name: Testar serviço e inferência real
+        working-directory: services/captcha-solver
+        env:
+          RPABLOCKLY_REQUIRE_CAPTCHA_MODELS: '1'
+          CAPTCHA_OCR_MODEL_PATH: ${{ github.workspace }}/captcha-models/common.onnx
+          CAPTCHA_OCR_CHARSET_PATH: ${{ github.workspace }}/captcha-models/ocr-charset.json
+          CAPTCHA_OCR_MANIFEST_PATH: ${{ github.workspace }}/captcha-models/captcha-models.manifest.json
+          CAPTCHA_HCAPTCHA_MODEL_DIR: ${{ github.workspace }}/captcha-models/hcaptcha
+          CAPTCHA_HCAPTCHA_MANIFEST_PATH: ${{ github.workspace }}/src/RpaFlow.Playwright/V2/Captcha/hcaptcha-models.manifest.json
+        run: python -m pytest tests
+      - name: Medir corpus sintético
+        working-directory: services/captcha-solver
+        env:
+          CAPTCHA_ENABLE_AUDIO: '0'
+          RPABLOCKLY_REQUIRE_CAPTCHA_MODELS: '1'
+          CAPTCHA_OCR_MODEL_PATH: ${{ github.workspace }}/captcha-models/common.onnx
+          CAPTCHA_OCR_CHARSET_PATH: ${{ github.workspace }}/captcha-models/ocr-charset.json
+          CAPTCHA_OCR_MANIFEST_PATH: ${{ github.workspace }}/captcha-models/captcha-models.manifest.json
+        run: |
+          python -m benchmarks.run_corpus \
+            --json ../../artifacts/captcha-benchmark/report.json \
+            --csv ../../artifacts/captcha-benchmark/report.csv \
+            --require image_ocr
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: captcha-benchmark
+          path: artifacts/captcha-benchmark/
+          if-no-files-found: error
+
   dotnet:
     strategy:
       fail-fast: false
@@ -41,6 +97,11 @@ jobs:
       - name: Executar checks
         shell: pwsh
         run: ./tools/Run-Checks.ps1
+      - name: Revalidar launcher Chromium bruto
+        shell: pwsh
+        env:
+          RPABLOCKLY_CHECKS_BROWSER: chromium
+        run: dotnet run --project tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj --configuration Release --no-build
       - name: Auditar dependências
         shell: pwsh
         run: ./tools/Test-Dependencies.ps1
@@ -68,7 +129,9 @@ jobs:
       - name: Restaurar e compilar check SQL
         run: |
           dotnet restore tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj
+          dotnet restore tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj
           dotnet build tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj --configuration Release --no-restore
+          dotnet build tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj --configuration Release --no-restore
       - name: Executar integração SQL descartável
         env:
           RPABLOCKLY_REQUIRE_SQL_TESTS: 'true'

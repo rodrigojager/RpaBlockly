@@ -52,6 +52,43 @@
         "cardinality": { "enum": ["single", "first", "many"] }
       }
     },
+    "captchaOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recipeId": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": [
+            "imageText", "slider", "recaptchaV2", "recaptchaV3",
+            "recaptchaEnterprise", "hCaptcha", "turnstile", "cloudflareChallenge",
+            "arkoseFunCaptcha", "geeTest", "awsWaf", "friendlyCaptcha"
+          ]
+        },
+        "solverPolicy": { "enum": ["localOnly", "preferLocal", "serviceOnly"] },
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "resultOutput": {
+          "type": "string",
+          "pattern": "^runtime\\.[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)*$"
+        },
+        "verificationMode": { "enum": ["none", "answerProduced", "solveAndVerify"] },
+        "minMatchScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "expectedLength": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "allowInteractiveClick": { "type": "boolean" },
+        "allowCloudflareSidecar": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["allowCloudflareSidecar"],
+            "properties": { "allowCloudflareSidecar": { "const": true } }
+          },
+          "then": {
+            "required": ["kind"],
+            "properties": { "kind": { "const": "cloudflareChallenge" } }
+          }
+        }
+      ]
+    },
     "condition": {
       "type": "object",
       "additionalProperties": false,
@@ -96,7 +133,9 @@
             "completeAuthenticationAttempt",
             "setVariable", "readElement", "readElements", "switchPage",
             "closePage", "download", "screenshot", "safeFinalConfirmation",
-            "if", "repeat", "forEach", "runSubflow"
+            "if", "repeat", "forEach", "runSubflow",
+            "solveImageCaptcha", "solveRecaptchaV2", "solveSliderCaptcha",
+            "solveHCaptcha", "solveCaptcha", "waitHumanInput"
           ]
         },
         "name": { "type": "string", "minLength": 1 },
@@ -163,8 +202,57 @@
         "itemsSource": { "type": "string", "minLength": 1 },
         "itemVariable": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
         "indexVariable": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
-        "subflow": { "type": "string", "minLength": 1 }
-      }
+        "subflow": { "type": "string", "minLength": 1 },
+        "captcha": { "$ref": "#/$defs/captchaOptions" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "solveImageCaptcha" } } },
+          "then": {
+            "required": ["target", "trigger"],
+            "properties": {
+              "target": { "$ref": "#/$defs/locatorUse" },
+              "trigger": { "$ref": "#/$defs/locatorUse" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "solveSliderCaptcha" } } },
+          "then": {
+            "required": ["target", "trigger", "options"],
+            "properties": {
+              "target": { "$ref": "#/$defs/locatorUse" },
+              "trigger": { "$ref": "#/$defs/locatorUse" },
+              "options": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["locatorId", "cardinality"],
+                "properties": {
+                  "locatorId": { "type": "string", "minLength": 1 },
+                  "cardinality": { "enum": ["single", "first"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["captcha"],
+            "properties": { "captcha": { "$ref": "#/$defs/captchaOptions" } }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "navigate", "click", "clickIfVisible", "clickAndSwitchPage", "pressKey",
+                  "solveImageCaptcha", "solveRecaptchaV2", "solveSliderCaptcha",
+                  "solveHCaptcha", "solveCaptcha", "waitHumanInput"
+                ]
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
