@@ -123,11 +123,19 @@ public static class BrowserLauncher
     internal static string ResolveLocalTimeZoneId()
     {
         var localId = TimeZoneInfo.Local.Id;
-        return OperatingSystem.IsWindows() &&
-            TimeZoneInfo.TryConvertWindowsIdToIanaId(localId, out var ianaId)
-                ? ianaId
-                : localId;
+        if (OperatingSystem.IsWindows() &&
+            TimeZoneInfo.TryConvertWindowsIdToIanaId(localId, out var ianaId))
+        {
+            localId = ianaId;
+        }
+
+        return NormalizeTimeZoneIdForBrowser(localId);
     }
+
+    internal static string NormalizeTimeZoneIdForBrowser(string timeZoneId) =>
+        timeZoneId.Equals("Etc/UTC", StringComparison.OrdinalIgnoreCase)
+            ? "UTC"
+            : timeZoneId;
 
     internal static async Task<T> AwaitCancellableResourceAsync<T>(
         Task<T> operation,

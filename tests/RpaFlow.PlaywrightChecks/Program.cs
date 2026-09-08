@@ -578,6 +578,7 @@ static void CheckBrowserSelections()
     if (PlaywrightBrowserSelection.DefaultValue != "spybrowser" ||
         spyBrowser.Engine != "spybrowser" ||
         spyBrowser.Channel is not null ||
+        BrowserLauncher.NormalizeTimeZoneIdForBrowser("Etc/UTC") != "UTC" ||
         !PlaywrightBrowserSelection.SupportedValues.All(PlaywrightBrowserSelection.IsSupported) ||
         PlaywrightBrowserSelection.Resolve("chrome-canary") !=
             new PlaywrightBrowserSelection("chromium", "chrome-canary") ||
