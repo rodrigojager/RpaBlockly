@@ -594,6 +594,7 @@ static void CheckBrowserSelections()
 
 static void CheckSpyBrowserHumanizationSelections(PlaywrightRuntimeOptions baseline)
 {
+    baseline = baseline with { Browser = PlaywrightBrowserSelection.DefaultValue };
     if (!baseline.SpyBrowserHumanize || baseline.SpyBrowserMouseAlgorithm != "bezier" ||
         baseline.SpyBrowserCompatibilityMode != "legacy")
         throw new InvalidOperationException("Seleções SpyBrowser não mantêm os defaults históricos.");
@@ -610,10 +611,18 @@ static void CheckSpyBrowserHumanizationSelections(PlaywrightRuntimeOptions basel
         selected.GetType().GetProperty("CompatibilityMode")?.GetValue(selected)?.ToString() != "PlaywrightCompatible" ||
         BrowserLauncher.CreateHumanInteractionOptions(baseline with { SpyBrowserHumanize = false }) is not null)
         throw new InvalidOperationException("As seleções tipadas ou o modo raw não foram encaminhados corretamente.");
-    PlaywrightRuntimeOptionsValidator.Validate(baseline with
+    try
     {
-        SpyBrowserMouseAlgorithm = "invalid"
-    });
+        PlaywrightRuntimeOptionsValidator.Validate(baseline with
+        {
+            SpyBrowserMouseAlgorithm = "invalid"
+        });
+        throw new InvalidOperationException("Algoritmo ativo inválido foi aceito.");
+    }
+    catch (InvalidOperationException exception) when
+        (exception.Message.Contains("SpyBrowserMouseAlgorithm", StringComparison.Ordinal))
+    {
+    }
     PlaywrightRuntimeOptionsValidator.Validate(baseline with
     {
         SpyBrowserMouseAlgorithm = "invalid",
