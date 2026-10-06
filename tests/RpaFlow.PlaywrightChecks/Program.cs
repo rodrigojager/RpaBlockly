@@ -463,6 +463,7 @@ var options = new PlaywrightRuntimeOptions(
     StorageStatePath: storageStatePath,
     SaveStorageState: true);
 CheckBrowserSelections();
+CheckSpyBrowserHumanizationSelections(options);
 await CheckCancelledBrowserLaunchAsync(options);
 await CheckSpyBrowserHumanizationAsync(options);
 var result = await new PlaywrightFlowExecutor(
@@ -589,6 +590,52 @@ static void CheckBrowserSelections()
             "SpyBrowser não é o padrão ou uma seleção de navegador anterior foi removida.");
     }
     Console.WriteLine("OK: SpyBrowser é o padrão e as seleções anteriores permanecem disponíveis.");
+}
+
+static void CheckSpyBrowserHumanizationSelections(PlaywrightRuntimeOptions baseline)
+{
+    if (!baseline.SpyBrowserHumanize || baseline.SpyBrowserMouseAlgorithm != "bezier" ||
+        baseline.SpyBrowserCompatibilityMode != "legacy")
+        throw new InvalidOperationException("Seleções SpyBrowser não mantêm os defaults históricos.");
+    var defaults = BrowserLauncher.CreateHumanInteractionOptions(baseline);
+    if (defaults?.GetType().GetProperty("MouseAlgorithm")?.GetValue(defaults)?.ToString() != "Bezier" ||
+        defaults.GetType().GetProperty("CompatibilityMode")?.GetValue(defaults)?.ToString() != "Legacy")
+        throw new InvalidOperationException("O SDK não recebeu os defaults tipados Bézier/Legacy.");
+    var selected = BrowserLauncher.CreateHumanInteractionOptions(baseline with
+    {
+        SpyBrowserMouseAlgorithm = "cursory",
+        SpyBrowserCompatibilityMode = "playwrightcompatible"
+    });
+    if (selected?.GetType().GetProperty("MouseAlgorithm")?.GetValue(selected)?.ToString() != "Cursory" ||
+        selected.GetType().GetProperty("CompatibilityMode")?.GetValue(selected)?.ToString() != "PlaywrightCompatible" ||
+        BrowserLauncher.CreateHumanInteractionOptions(baseline with { SpyBrowserHumanize = false }) is not null)
+        throw new InvalidOperationException("As seleções tipadas ou o modo raw não foram encaminhados corretamente.");
+    PlaywrightRuntimeOptionsValidator.Validate(baseline with
+    {
+        SpyBrowserMouseAlgorithm = "invalid"
+    });
+    PlaywrightRuntimeOptionsValidator.Validate(baseline with
+    {
+        SpyBrowserMouseAlgorithm = "invalid",
+        SpyBrowserHumanize = false
+    });
+    PlaywrightRuntimeOptionsValidator.Validate(baseline with
+    {
+        Browser = "chromium",
+        SpyBrowserCompatibilityMode = "invalid"
+    });
+    try
+    {
+        PlaywrightRuntimeOptionsValidator.Validate(baseline with
+        {
+            SpyBrowserCompatibilityMode = "invalid"
+        });
+        throw new InvalidOperationException("Valor ativo inválido foi aceito.");
+    }
+    catch (InvalidOperationException exception) when
+        (exception.Message.Contains("SpyBrowserCompatibilityMode", StringComparison.Ordinal))
+    {
+    }
 }
 
 static async Task CheckSpyBrowserHumanizationAsync(PlaywrightRuntimeOptions baseline)

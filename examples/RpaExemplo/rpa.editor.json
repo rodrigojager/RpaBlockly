@@ -19,12 +19,30 @@
     {
       "path": "Runtime.Browser",
       "label": "Navegador",
-      "type": "text"
+      "type": "select",
+      "options": [{"label":"SpyBrowser","value":"spybrowser"},{"label":"Chromium Playwright","value":"chromium"},{"label":"CloakBrowser","value":"cloakbrowser"}]
     },
     {
       "path": "Runtime.SpyBrowserHumanize",
       "label": "Humanizar interações no SpyBrowser",
-      "type": "checkbox"
+      "type": "checkbox",
+      "visibleWhen": {"path":"Runtime.Browser","equals":"spybrowser"}
+    },
+    {
+      "path": "Runtime.SpyBrowserMouseAlgorithm",
+      "label": "Algoritmo do mouse",
+      "type": "select",
+      "options": [{"label":"Bézier","value":"bezier"},{"label":"Cursory","value":"cursory"}],
+      "tooltip": "Bézier cria curvas matemáticas e preserva o comportamento histórico. Cursory adapta formas de trajetórias registradas com variações. O algoritmo muda os caminhos do mouse, não a semântica das ações.",
+      "visibleWhen": {"path":"Runtime.Browser","equals":"spybrowser","and":{"path":"Runtime.SpyBrowserHumanize","equals":true}}
+    },
+    {
+      "path": "Runtime.SpyBrowserCompatibilityMode",
+      "label": "Modo de compatibilidade",
+      "type": "select",
+      "options": [{"label":"Legacy","value":"legacy"},{"label":"PlaywrightCompatible","value":"playwrightcompatible"}],
+      "tooltip": "Legacy preserva o comportamento dos fluxos existentes. PlaywrightCompatible preserva Fill nativo (não é digitação cadenciada), atalhos e duplo clique; digitação cadenciada é distinta e opções não suportadas/explicitadas podem seguir uma rota bruta. Recomendado para novos fluxos; o padrão continua Legacy.",
+      "visibleWhen": {"path":"Runtime.Browser","equals":"spybrowser","and":{"path":"Runtime.SpyBrowserHumanize","equals":true}}
     },
     {
       "path": "Runtime.Locale",

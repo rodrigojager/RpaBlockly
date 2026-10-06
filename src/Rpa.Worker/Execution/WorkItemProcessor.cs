@@ -128,7 +128,9 @@ public sealed class WorkItemProcessor(
                     runtime.MaximumArtifactFilesPerExecution,
                 ArtifactRetentionDays: runtime.ArtifactRetentionDays,
                 Captcha: runtime.Captcha?.ToRuntimeOptions(),
-                SpyBrowserHumanize: runtime.SpyBrowserHumanize);
+                SpyBrowserHumanize: runtime.SpyBrowserHumanize,
+                SpyBrowserMouseAlgorithm: runtime.SpyBrowserMouseAlgorithm,
+                SpyBrowserCompatibilityMode: runtime.SpyBrowserCompatibilityMode);
             PlaywrightRuntimeOptionsValidator.Validate(runtimeOptions);
 
             executionGuard = new ConfiguredExecutionGuard(

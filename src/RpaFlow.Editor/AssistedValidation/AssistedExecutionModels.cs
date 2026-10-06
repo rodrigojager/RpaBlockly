@@ -9,7 +9,10 @@ public sealed record AssistedExecutionStartRequest(
     JsonElement Policy,
     string Browser,
     string BoundaryActionId,
-    bool CaptureScreenshots = true);
+    bool CaptureScreenshots = true,
+    bool? SpyBrowserHumanize = null,
+    string? SpyBrowserMouseAlgorithm = null,
+    string? SpyBrowserCompatibilityMode = null);
 
 public sealed record AssistedExecutionEvent(
     long Sequence,

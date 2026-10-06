@@ -3,6 +3,7 @@ import {
   assistedHumanHandoffEvidence,
   getAssistedExecution,
   getLatestAssistedExecution,
+  readConfiguration,
   respondAssistedHumanHandoff,
   startAssistedExecution,
   stopAssistedExecution
@@ -21,6 +22,9 @@ export function initializeAssistedValidation({
   const title = document.getElementById("assisted-status-title");
   const detail = document.getElementById("assisted-status-detail");
   const browser = document.getElementById("assisted-browser");
+  const humanize = document.getElementById("assisted-humanize");
+  const mouseAlgorithm = document.getElementById("assisted-mouse-algorithm");
+  const compatibilityMode = document.getElementById("assisted-compatibility-mode");
   const boundary = document.getElementById("assisted-boundary");
   const screenshots = document.getElementById("assisted-capture-screenshots");
   const confirmation = document.getElementById("assisted-confirm-boundary");
@@ -47,11 +51,42 @@ export function initializeAssistedValidation({
   });
   startButton.addEventListener("click", start);
   stopButton.addEventListener("click", stop);
+  browser.addEventListener("change", updateSpyBrowserControls);
+  humanize.addEventListener("change", updateSpyBrowserControls);
+  mouseAlgorithm.addEventListener("change", updateSpyBrowserControls);
+  compatibilityMode.addEventListener("change", updateSpyBrowserControls);
+  for (const button of dialog.querySelectorAll(".help-tip")) {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.classList.toggle("is-open");
+    });
+  }
+  updateSpyBrowserControls();
+
+  function updateSpyBrowserControls() {
+    const visible = browser.value === "spybrowser";
+    for (const control of dialog.querySelectorAll(".assisted-spybrowser-only")) {
+      control.hidden = !visible;
+    }
+    document.getElementById("assisted-algorithm-label").hidden = !visible || !humanize.checked;
+    document.getElementById("assisted-compatibility-label").hidden = !visible || !humanize.checked;
+    mouseAlgorithm.disabled = !visible || !humanize.checked;
+    compatibilityMode.disabled = !visible || !humanize.checked;
+  }
 
   async function open() {
     renderBoundaries();
     dialog.showModal();
     try {
+      const config = await readConfiguration();
+      const runtime = config?.Runtime ?? config?.runtime ?? {};
+      browser.value = ["spybrowser", "chromium", "cloakbrowser"].includes(String(runtime.Browser ?? runtime.browser ?? "spybrowser").toLowerCase())
+        ? String(runtime.Browser ?? runtime.browser ?? "spybrowser").toLowerCase() : "spybrowser";
+      humanize.checked = (runtime.SpyBrowserHumanize ?? runtime.spyBrowserHumanize ?? true) === true;
+      mouseAlgorithm.value = String(runtime.SpyBrowserMouseAlgorithm ?? runtime.spyBrowserMouseAlgorithm ?? "bezier").toLowerCase();
+      compatibilityMode.value = String(runtime.SpyBrowserCompatibilityMode ?? runtime.spyBrowserCompatibilityMode ?? "legacy").toLowerCase();
+      updateSpyBrowserControls();
       const result = executionId
         ? await getAssistedExecution(executionId, afterSequence)
         : await getLatestAssistedExecution();
@@ -93,7 +128,7 @@ export function initializeAssistedValidation({
       resetResults();
       setStatus("starting", "Preparando o navegador", "Validando o snapshot do rascunho atual.");
       setRunning(true);
-      const result = await startAssistedExecution({
+      const request = {
         expectedRevision: revision(),
         flow: current.flow,
         locators: current.locators,
@@ -101,7 +136,15 @@ export function initializeAssistedValidation({
         browser: browser.value,
         boundaryActionId: boundary.value,
         captureScreenshots: screenshots.checked
-      });
+      };
+      if (browser.value === "spybrowser") {
+        request.spyBrowserHumanize = humanize.checked;
+        if (humanize.checked) {
+          request.spyBrowserMouseAlgorithm = mouseAlgorithm.value;
+          request.spyBrowserCompatibilityMode = compatibilityMode.value;
+        }
+      }
+      const result = await startAssistedExecution(request);
       executionId = result.executionId;
       renderSnapshot(result);
       schedulePoll(0);

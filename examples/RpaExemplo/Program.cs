@@ -72,7 +72,9 @@ var options = new PlaywrightRuntimeOptions(
     ArtifactRetentionDays:
         runtime["ArtifactRetentionDays"]?.GetValue<int>() ?? 30,
     Captcha: ReadCaptcha(runtime["Captcha"]?.AsObject()),
-    SpyBrowserHumanize: runtime["SpyBrowserHumanize"]?.GetValue<bool>() ?? true);
+    SpyBrowserHumanize: runtime["SpyBrowserHumanize"]?.GetValue<bool>() ?? true,
+    SpyBrowserMouseAlgorithm: runtime["SpyBrowserMouseAlgorithm"]?.GetValue<string>() ?? "bezier",
+    SpyBrowserCompatibilityMode: runtime["SpyBrowserCompatibilityMode"]?.GetValue<string>() ?? "legacy");
 PlaywrightRuntimeOptionsValidator.Validate(options);
 
 if (args.Contains("--validate-only", StringComparer.OrdinalIgnoreCase))

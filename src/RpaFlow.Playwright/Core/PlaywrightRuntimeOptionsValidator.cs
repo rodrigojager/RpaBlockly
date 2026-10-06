@@ -4,6 +4,22 @@ namespace RpaFlow.Playwright;
 
 public static class PlaywrightRuntimeOptionsValidator
 {
+    public static void ValidateSpyBrowserSelections(
+        bool humanize,
+        string? mouseAlgorithm,
+        string? compatibilityMode)
+    {
+        if (!humanize) return;
+        if (!string.Equals(mouseAlgorithm, "bezier", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(mouseAlgorithm, "cursory", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Runtime.SpyBrowserMouseAlgorithm deve ser 'bezier' ou 'cursory' quando a humanização está ativa.");
+        if (!string.Equals(compatibilityMode, "legacy", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(compatibilityMode, "playwrightcompatible", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Runtime.SpyBrowserCompatibilityMode deve ser 'legacy' ou 'playwrightcompatible' quando a humanização está ativa.");
+    }
+
     public static void Validate(PlaywrightRuntimeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -13,6 +29,21 @@ public static class PlaywrightRuntimeOptionsValidator
             errors.Add(
                 $"Browser não é suportado: '{options.Browser}'. Valores aceitos: " +
                 PlaywrightBrowserSelection.SupportedValuesDescription + ".");
+        }
+
+        if (PlaywrightBrowserSelection.IsSupported(options.Browser) &&
+            PlaywrightBrowserSelection.Resolve(options.Browser).Engine.Equals(
+                "spybrowser", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                ValidateSpyBrowserSelections(options.SpyBrowserHumanize,
+                    options.SpyBrowserMouseAlgorithm, options.SpyBrowserCompatibilityMode);
+            }
+            catch (InvalidOperationException exception)
+            {
+                errors.Add(exception.Message);
+            }
         }
 
         if (options.ActionTimeoutSeconds is < 1 or > 600)

@@ -98,6 +98,13 @@ function Test-Executable([string]$Name) {
     return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Restore-SpyBrowserPackages {
+    Invoke-Checked "pwsh" @(
+        "-NoProfile",
+        "-File", (Join-Path $repositoryRoot "tools\Restore-SpyBrowserPackages.ps1")) `
+        "O bootstrap dos pacotes SpyBrowser falhou"
+}
+
 function Invoke-Checked(
     [string]$Executable,
     [string[]]$Arguments,
@@ -487,6 +494,7 @@ function Install-Project {
     Assert-CorePrerequisites
     $state = Initialize-ProjectConfiguration
     if (-not $SkipBuild) {
+        Restore-SpyBrowserPackages
         Write-Section "Restaurando e compilando"
         Invoke-Checked "dotnet" @("restore", $solutionPath) "O restore da solução falhou"
         Invoke-Checked "dotnet" @("build", $solutionPath, "-c", "Release", "--no-restore") `
@@ -537,6 +545,7 @@ function Open-Editor {
             "O provisionamento do OCR falhou"
     }
     if (-not $SkipBuild) {
+        Restore-SpyBrowserPackages
         Write-Section "Compilando editor"
         Invoke-Checked "dotnet" @("build", $editorProject, "-c", "Release") `
             "O build do editor falhou"
@@ -558,6 +567,7 @@ function Open-Editor {
 function Test-RpaProject {
     Assert-CorePrerequisites
     $state = Initialize-ProjectConfiguration
+    if (-not $SkipBuild) { Restore-SpyBrowserPackages }
     $arguments = @(
         "run",
         "--project", $state.ProjectFile,

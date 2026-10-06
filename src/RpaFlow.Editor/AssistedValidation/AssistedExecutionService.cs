@@ -70,6 +70,17 @@ public sealed class AssistedExecutionService : IAsyncDisposable
             documents,
             new RpaPackageOrigin("editor-assisted-validation", _paths.ProjectRoot));
         var configuration = await ReadConfigurationObjectAsync(cancellationToken);
+        var runtimeConfiguration = GetObject(configuration, "Runtime");
+        var usesSpyBrowser = sessionBrowserIsSpyBrowser(request.Browser);
+        var effectiveHumanize = usesSpyBrowser &&
+            (request.SpyBrowserHumanize ?? ReadBool(runtimeConfiguration, "SpyBrowserHumanize", true));
+        var effectiveAlgorithm = request.SpyBrowserMouseAlgorithm ??
+            ReadString(runtimeConfiguration, "SpyBrowserMouseAlgorithm", "bezier");
+        var effectiveCompatibility = request.SpyBrowserCompatibilityMode ??
+            ReadString(runtimeConfiguration, "SpyBrowserCompatibilityMode", "legacy");
+        if (usesSpyBrowser)
+            PlaywrightRuntimeOptionsValidator.ValidateSpyBrowserSelections(
+                effectiveHumanize, effectiveAlgorithm, effectiveCompatibility);
         var executionId = "homologacao-" + Guid.NewGuid().ToString("N");
         var outputRoot = Path.Combine(
             _paths.ProjectRoot,
@@ -211,7 +222,12 @@ public sealed class AssistedExecutionService : IAsyncDisposable
                 ArtifactRetentionDays: 7,
                 CaptureScreenshotsAfterActions: request.CaptureScreenshots,
                 Captcha: ReadCaptcha(GetNode(runtime, "Captcha") as JsonObject),
-                SpyBrowserHumanize: ReadBool(runtime, "SpyBrowserHumanize", true));
+                SpyBrowserHumanize: session.Browser.Equals("spybrowser", StringComparison.OrdinalIgnoreCase) &&
+                    (request.SpyBrowserHumanize ?? ReadBool(runtime, "SpyBrowserHumanize", true)),
+                SpyBrowserMouseAlgorithm: request.SpyBrowserMouseAlgorithm ??
+                    ReadString(runtime, "SpyBrowserMouseAlgorithm", "bezier"),
+                SpyBrowserCompatibilityMode: request.SpyBrowserCompatibilityMode ??
+                    ReadString(runtime, "SpyBrowserCompatibilityMode", "legacy"));
             var executionRequest = new FlowExecutionRequest(
                 session.ExecutionId,
                 CloneObject(configuration, "Input"),
@@ -347,6 +363,9 @@ public sealed class AssistedExecutionService : IAsyncDisposable
         }
         return value;
     }
+
+    private static bool sessionBrowserIsSpyBrowser(string browser) =>
+        browser.Equals("spybrowser", StringComparison.OrdinalIgnoreCase);
 
     private static string ReadString(JsonObject owner, string name, string fallback) =>
         ReadOptionalString(owner, name) ?? fallback;

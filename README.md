@@ -98,8 +98,16 @@ salvar publica os três documentos atomicamente. Conflito de revisão nunca
 sobrescreve alterações silenciosamente.
 
 O browser operacional padrão é `spybrowser`, com interações humanizadas. Defina
-`Runtime.SpyBrowserHumanize=false` para desativar essa cadência ou selecione
-explicitamente `chromium`, Firefox, WebKit, um canal Chrome/Edge ou
+`Runtime.SpyBrowserHumanize=false` para desativar essa cadência. Quando ativa,
+`Runtime.SpyBrowserMouseAlgorithm` escolhe `bezier` (padrão histórico) ou `cursory`;
+`Runtime.SpyBrowserCompatibilityMode` escolhe `legacy` (padrão) ou
+`playwrightcompatible`. O modo compatível mantém operações nativas como Fill,
+atalhos e duplo clique; digitação cadenciada é distinta. Algumas opções não
+suportadas/explicitadas podem seguir uma rota bruta. O modo `playwrightcompatible`
+é recomendado para fluxos novos, sem alterar os padrões existentes. Estas opções
+só são aplicadas ao SpyBrowser; com humanização desativada permanecem inativas.
+
+Também é possível selecionar explicitamente `chromium`, Firefox, WebKit, um canal Chrome/Edge ou
 `cloakbrowser`; as opções anteriores continuam disponíveis. Cada caso usa um
 contexto descartável e isolado, sem perfil persistente implícito.
 

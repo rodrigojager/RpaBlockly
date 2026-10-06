@@ -212,6 +212,20 @@
               <option value="cloakbrowser">CloakBrowser</option>
             </select>
           </label>
+          <label id="assisted-humanize-label" class="assisted-spybrowser-only">
+            <input id="assisted-humanize" type="checkbox" checked>
+            Humanizar interações no SpyBrowser
+          </label>
+          <label id="assisted-algorithm-label" class="assisted-spybrowser-only">
+            Algoritmo de trajetória <button type="button" class="help-tip" aria-label="Ajuda: algoritmo de trajetória" aria-describedby="assisted-algorithm-help">?</button>
+            <span id="assisted-algorithm-help" class="help-tip-content" role="tooltip">Bézier cria curvas matemáticas e preserva o comportamento histórico. Cursory adapta formas de trajetórias registradas com variações. Altera caminhos do mouse, não a semântica das ações.</span>
+            <select id="assisted-mouse-algorithm"><option value="bezier">Bézier</option><option value="cursory">Cursory</option></select>
+          </label>
+          <label id="assisted-compatibility-label" class="assisted-spybrowser-only">
+            Compatibilidade <button type="button" class="help-tip" aria-label="Ajuda: modo de compatibilidade" aria-describedby="assisted-compatibility-help">?</button>
+            <span id="assisted-compatibility-help" class="help-tip-content" role="tooltip">Legacy preserva fluxos existentes. PlaywrightCompatible mantém Fill nativo (não é digitação cadenciada), atalhos e duplo clique; digitação cadenciada é distinta e opções não suportadas/explicitadas podem seguir uma rota bruta. Recomendado para novos fluxos; o padrão continua Legacy.</span>
+            <select id="assisted-compatibility-mode"><option value="legacy">Legacy</option><option value="playwrightcompatible">PlaywrightCompatible</option></select>
+          </label>
           <label>
             Última etapa segura permitida
             <select id="assisted-boundary"></select>

@@ -298,6 +298,27 @@ static async Task CheckBrowserRoundTripAsync(
         new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
     Check(await page.Locator("#configuration-dialog").GetAttributeAsync("open") is not null,
         "configuração local abre em formulário tipado");
+    Check(await page.InputValueAsync("[data-configuration-path='Runtime.Browser']") == "spybrowser" &&
+          await page.IsCheckedAsync("[data-configuration-path='Runtime.SpyBrowserHumanize']"),
+        "perfil antigo recebe defaults SpyBrowser sem desligar a humanização");
+    await page.UncheckAsync("[data-configuration-path='Runtime.SpyBrowserHumanize']");
+    var hiddenState = await page.Locator("[data-configuration-path='Runtime.SpyBrowserMouseAlgorithm']")
+        .EvaluateAsync<bool>("element => element.closest('label').hidden");
+    var compatibilityDisabled = await page.IsDisabledAsync("[data-configuration-path='Runtime.SpyBrowserCompatibilityMode']");
+    Check(hiddenState && compatibilityDisabled,
+        $"humanização desligada oculta/desativa algoritmo e compatibilidade (hidden={hiddenState}, disabled={compatibilityDisabled})");
+    await page.CheckAsync("[data-configuration-path='Runtime.SpyBrowserHumanize']");
+    await page.SelectOptionAsync("[data-configuration-path='Runtime.SpyBrowserMouseAlgorithm']", "cursory");
+    await page.SelectOptionAsync("[data-configuration-path='Runtime.SpyBrowserCompatibilityMode']", "playwrightcompatible");
+    var help = page.Locator("#configuration-fields .help-tip").First;
+    Check(await help.GetAttributeAsync("aria-label") is not null &&
+          await help.GetAttributeAsync("aria-describedby") is not null,
+        "tooltip de configuração possui nome e descrição acessíveis");
+    await help.ClickAsync();
+    Check(await page.IsCheckedAsync("[data-configuration-path='Runtime.SpyBrowserHumanize']"),
+        "clique no tooltip não alterna checkbox da linha");
+    Directory.CreateDirectory("D:/RpaBlockly/artifacts/spybrowser-ui-integration");
+    await page.ScreenshotAsync(new PageScreenshotOptions { Path = "D:/RpaBlockly/artifacts/spybrowser-ui-integration/editor-settings.png", FullPage = true });
     await page.FillAsync(
         "[data-configuration-path='Input.Url']",
         "https://alterada.test/");
@@ -317,11 +338,76 @@ static async Task CheckBrowserRoundTripAsync(
           "https://alterada.test/" &&
           savedConfiguration["Input"]?["Aceite"]?.GetValue<bool>() == true &&
           savedConfiguration["Runtime"]?["ActionTimeoutSeconds"]?.GetValue<int>() == 45 &&
-          savedConfiguration["Runtime"]?["BusySelectors"]?.AsArray().Count == 2,
-        "formulário salva URL, booleano, número e lista sem editar JSON");
+          savedConfiguration["Runtime"]?["BusySelectors"]?.AsArray().Count == 2 &&
+          savedConfiguration["Runtime"]?["SpyBrowserHumanize"]?.GetValue<bool>() == true &&
+          savedConfiguration["Runtime"]?["SpyBrowserMouseAlgorithm"]?.GetValue<string>() == "cursory" &&
+          savedConfiguration["Runtime"]?["SpyBrowserCompatibilityMode"]?.GetValue<string>() == "playwrightcompatible",
+        "formulário salva campos antigos e seleções SpyBrowser sem editar JSON");
     Check(savedConfiguration["Blockly"]?["Variables"]?["preservada"]
               ?.GetValue<string>() == "sim",
         "campos ocultos da configuração são preservados");
+
+    var appSettingsPath = Path.Combine(testRoot, "appsettings.json");
+    await File.WriteAllTextAsync(appSettingsPath, """
+        {"Runtime":{"ActionTimeoutSeconds":30,"BusySelectors":[],"Browser":"chrome-beta","SpyBrowserHumanize":false,"SpyBrowserMouseAlgorithm":"future-algorithm","SpyBrowserCompatibilityMode":null},"Input":{"Url":"https://before.test/","Aceite":false}}
+        """ + "\n", new UTF8Encoding(false, true));
+    await page.ClickAsync("#open-configuration");
+    await page.FillAsync("[data-configuration-path='Input.Url']", "https://unrelated-edit.test/");
+    await page.ClickAsync("#save-configuration");
+    await page.Locator("#configuration-dialog").WaitForAsync(
+        new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    var inactivePreserved = JsonNode.Parse(await File.ReadAllTextAsync(appSettingsPath))!.AsObject();
+    Check(inactivePreserved["Runtime"]?["Browser"]?.GetValue<string>() == "chrome-beta" &&
+          inactivePreserved["Runtime"]?["SpyBrowserMouseAlgorithm"]?.GetValue<string>() == "future-algorithm" &&
+          inactivePreserved["Runtime"]?["SpyBrowserCompatibilityMode"] is null &&
+          inactivePreserved["Input"]?["Url"]?.GetValue<string>() == "https://unrelated-edit.test/",
+        $"edição não relacionada preserva chrome-beta, valor inválido inativo e null explicitamente inativo (browser={inactivePreserved["Runtime"]?["Browser"]}, algorithm={inactivePreserved["Runtime"]?["SpyBrowserMouseAlgorithm"]}, mode={inactivePreserved["Runtime"]?["SpyBrowserCompatibilityMode"]?.ToJsonString()}, url={inactivePreserved["Input"]?["Url"]})");
+
+    await File.WriteAllTextAsync(appSettingsPath, """
+        {"Runtime":{"ActionTimeoutSeconds":30,"BusySelectors":[],"Browser":"spybrowser","SpyBrowserHumanize":true,"SpyBrowserMouseAlgorithm":"future-algorithm","SpyBrowserCompatibilityMode":"future-mode"},"Input":{"Url":"https://before.test/","Aceite":false}}
+        """ + "\n", new UTF8Encoding(false, true));
+    await page.ClickAsync("#open-configuration");
+    await page.ClickAsync("#save-configuration");
+    var invalidSelectionMessage = await page.Locator("#validation-message").TextContentAsync();
+    Check(invalidSelectionMessage?.Contains("SpyBrowserMouseAlgorithm", StringComparison.Ordinal) == true &&
+          (await File.ReadAllTextAsync(appSettingsPath)).Contains("future-algorithm", StringComparison.Ordinal) &&
+          (await File.ReadAllTextAsync(appSettingsPath)).Contains("future-mode", StringComparison.Ordinal),
+        "seleções SpyBrowser inválidas ativas exibem erro e são rejeitadas antes de salvar");
+    await page.SelectOptionAsync("[data-configuration-path='Runtime.SpyBrowserMouseAlgorithm']", "bezier");
+    await page.SelectOptionAsync("[data-configuration-path='Runtime.SpyBrowserCompatibilityMode']", "legacy");
+    await page.ClickAsync("#save-configuration");
+    await page.Locator("#configuration-dialog").WaitForAsync(
+        new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+
+    await File.WriteAllTextAsync(appSettingsPath, """
+        {"Runtime":{"ActionTimeoutSeconds":30,"BusySelectors":[],"Browser":"spybrowser","SpyBrowserHumanize":true,"SpyBrowserMouseAlgorithm":"bezier","SpyBrowserCompatibilityMode":null},"Input":{"Url":"https://before.test/","Aceite":false}}
+        """ + "\n", new UTF8Encoding(false, true));
+    await page.ClickAsync("#open-configuration");
+    await page.ClickAsync("#save-configuration");
+    Check((await page.Locator("#validation-message").TextContentAsync())?.Contains("SpyBrowserCompatibilityMode", StringComparison.Ordinal) == true &&
+          (await File.ReadAllTextAsync(appSettingsPath)).Contains("\"SpyBrowserCompatibilityMode\":null", StringComparison.Ordinal),
+        "null explícito em seleção ativa é rejeitado visivelmente sem ser convertido em default");
+    await page.SelectOptionAsync("[data-configuration-path='Runtime.SpyBrowserCompatibilityMode']", "legacy");
+    await page.ClickAsync("#save-configuration");
+    await page.Locator("#configuration-dialog").WaitForAsync(
+        new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+
+    await File.WriteAllTextAsync(appSettingsPath, """
+        {"Runtime":{"ActionTimeoutSeconds":30,"BusySelectors":[],"Browser":"unknown-browser","SpyBrowserHumanize":true},"Input":{"Url":"https://before.test/","Aceite":false}}
+        """ + "\n", new UTF8Encoding(false, true));
+    await page.ClickAsync("#open-configuration");
+    await page.ClickAsync("#save-configuration");
+    Check((await page.Locator("#validation-message").TextContentAsync())?.Contains("Corrija", StringComparison.Ordinal) == true &&
+          (await File.ReadAllTextAsync(appSettingsPath)).Contains("unknown-browser", StringComparison.Ordinal),
+        "navegador inválido impede o salvamento e a configuração no disco não é sobrescrita");
+    await page.SelectOptionAsync("[data-configuration-path='Runtime.Browser']", "spybrowser");
+    await page.ClickAsync("#save-configuration");
+    await page.Locator("#configuration-dialog").WaitForAsync(
+        new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    await File.WriteAllTextAsync(
+        appSettingsPath,
+        savedConfiguration.ToJsonString() + "\n",
+        new UTF8Encoding(false, true));
 
     await page.ClickAsync("#open-assisted-validation");
     Check(await page.Locator("#assisted-validation-dialog").GetAttributeAsync("open") is not null,
@@ -329,8 +415,25 @@ static async Task CheckBrowserRoundTripAsync(
     var assistedBrowsers = await page.Locator("#assisted-browser option")
         .EvaluateAllAsync<string[]>("items => items.map(item => item.value)");
     Check(assistedBrowsers.SequenceEqual(["spybrowser", "chromium", "cloakbrowser"]) &&
-          await page.InputValueAsync("#assisted-browser") == "spybrowser",
-        "homologação assistida usa SpyBrowser por padrão e mantém os providers anteriores");
+          await page.InputValueAsync("#assisted-browser") == "spybrowser" &&
+          await page.IsCheckedAsync("#assisted-humanize") &&
+          await page.InputValueAsync("#assisted-mouse-algorithm") == "cursory" &&
+          await page.InputValueAsync("#assisted-compatibility-mode") == "playwrightcompatible",
+        "homologação assistida carrega seleção persistida e mantém os providers anteriores");
+    await page.SelectOptionAsync("#assisted-browser", "chromium");
+    Check(await page.Locator("#assisted-humanize-label").EvaluateAsync<bool>("element => element.hidden"),
+        "opções SpyBrowser ficam ocultas para outros engines");
+    await page.SelectOptionAsync("#assisted-browser", "spybrowser");
+    await page.UncheckAsync("#assisted-humanize");
+    Check(await page.Locator("#assisted-algorithm-label").EvaluateAsync<bool>("element => element.hidden") &&
+          await page.IsDisabledAsync("#assisted-compatibility-mode"),
+        "modo desligado oculta e desativa seleções assistidas");
+    await page.CheckAsync("#assisted-humanize");
+    var assistedHelp = page.Locator("#assisted-algorithm-label .help-tip");
+    await assistedHelp.FocusAsync();
+    Check(await page.Locator("#assisted-algorithm-help").IsVisibleAsync() &&
+          await assistedHelp.GetAttributeAsync("aria-label") is not null,
+        "tooltip assistido aparece por foco e possui nome acessível");
     Check(await page.Locator("#assisted-boundary option").CountAsync() == 1,
         "limite seguro lista somente ações-folha do rascunho");
     await page.WaitForFunctionAsync(

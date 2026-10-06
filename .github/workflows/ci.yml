@@ -81,6 +81,9 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Bootstrap SpyBrowser
+        shell: pwsh
+        run: ./tools/Restore-SpyBrowserPackages.ps1
       - name: Restaurar
         shell: pwsh
         run: |
@@ -94,6 +97,9 @@ jobs:
       - name: Instalar Chromium de teste
         shell: pwsh
         run: pwsh tests/RpaFlow.PlaywrightChecks/bin/Release/net9.0/playwright.ps1 install --with-deps chromium
+      - name: Verificar integração SpyBrowser
+        shell: pwsh
+        run: dotnet run --project tests/RpaFlow.SpyBrowserIntegrationChecks/RpaFlow.SpyBrowserIntegrationChecks.csproj --configuration Release --no-build -- --browser
       - name: Executar checks
         shell: pwsh
         run: ./tools/Run-Checks.ps1
@@ -126,6 +132,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      - name: Bootstrap SpyBrowser
+        shell: pwsh
+        run: ./tools/Restore-SpyBrowserPackages.ps1
       - name: Restaurar e compilar check SQL
         run: |
           dotnet restore tests/RpaFlow.Packages.SqlServerChecks/RpaFlow.Packages.SqlServerChecks.csproj

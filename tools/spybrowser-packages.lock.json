@@ -1,0 +1,10 @@
+{
+  "version": "0.2.0-beta.2.1",
+  "releaseUrl": "https://github.com/rodrigojager/spybrowser/releases/download/v0.2.0-beta.2.1",
+  "sourceCommit": "7983680083dd66aea2ff39a753533d02d8de2491",
+  "packages": [
+    { "id": "SpyBrowser.Core", "version": "0.2.0-beta.2.1", "sha256": "df1fa5501263ff96805150d8de4f760a1a050f55196f880ff50030a4625ca2ab" },
+    { "id": "SpyBrowser.Cursory", "version": "0.2.0-beta.2.1", "sha256": "113390fd0009112c7103c7050824f5680f5c118157dda925d387953acdf3dbc1" },
+    { "id": "SpyBrowser.Playwright", "version": "0.2.0-beta.2.1", "sha256": "ee7b630cbe83d8e7f838fc2fe88eeb66667f90506ab7f9f4d339acb17e4d7309" }
+  ]
+}

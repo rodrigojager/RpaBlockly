@@ -7,7 +7,7 @@ public sealed partial class EditorProfile
         StringComparer.OrdinalIgnoreCase)
     {
         "text", "url", "email", "password", "date", "number", "checkbox",
-        "stringList"
+        "stringList", "select"
     };
 
     public string DisplayName { get; set; } = string.Empty;
@@ -42,6 +42,10 @@ public sealed partial class EditorProfile
             }
 
             Require(field.Label, $"{prefix}.label");
+            if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) &&
+                (field.Options is not { Count: > 0 } || field.Options.Any(option =>
+                    string.IsNullOrWhiteSpace(option.Value) || string.IsNullOrWhiteSpace(option.Label))))
+                throw new InvalidOperationException($"{prefix}.options é obrigatório para select.");
             if (!SupportedFieldTypes.Contains(field.Type))
             {
                 throw new InvalidOperationException(
@@ -73,4 +77,24 @@ public sealed class EditorConfigurationField
     public string Type { get; set; } = "text";
 
     public bool Nullable { get; set; }
+
+    public string? Tooltip { get; set; }
+
+    public List<EditorConfigurationOption>? Options { get; set; }
+
+    public EditorConfigurationVisibility? VisibleWhen { get; set; }
+}
+
+public sealed class EditorConfigurationOption
+{
+    public string Label { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+}
+
+public sealed class EditorConfigurationVisibility
+{
+    public string Path { get; set; } = string.Empty;
+    [System.Text.Json.Serialization.JsonPropertyName("equals")]
+    public System.Text.Json.JsonElement MatchValue { get; set; }
+    public EditorConfigurationVisibility? And { get; set; }
 }

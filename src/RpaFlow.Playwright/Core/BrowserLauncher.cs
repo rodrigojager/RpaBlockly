@@ -24,8 +24,14 @@ public static class BrowserLauncher
         PlaywrightRuntimeOptions options,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
         cancellationToken.ThrowIfCancellationRequested();
         var selection = PlaywrightBrowserSelection.Resolve(options.Browser);
+        if (selection.Engine.Equals("spybrowser", StringComparison.OrdinalIgnoreCase))
+            PlaywrightRuntimeOptionsValidator.ValidateSpyBrowserSelections(
+                options.SpyBrowserHumanize,
+                options.SpyBrowserMouseAlgorithm,
+                options.SpyBrowserCompatibilityMode);
         if (selection.Engine.Equals("spybrowser", StringComparison.OrdinalIgnoreCase))
         {
             var identity = BrowserIdentity.Create("rpablockly", "RpaBlockly") with
@@ -53,6 +59,7 @@ public static class BrowserLauncher
                         IdentityOverride = identity,
                         Headless = options.Headless,
                         Humanize = options.SpyBrowserHumanize,
+                        HumanInteraction = CreateHumanInteractionOptions(options),
                         DefaultTimeoutMilliseconds = options.ActionTimeoutSeconds * 1_000,
                         DefaultNavigationTimeoutMilliseconds = options.ActionTimeoutSeconds * 1_000,
                         RunGpuProbe = false
@@ -118,6 +125,32 @@ public static class BrowserLauncher
             playwright.Dispose();
             throw;
         }
+    }
+
+    internal static HumanInteractionOptions? CreateHumanInteractionOptions(
+        PlaywrightRuntimeOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        PlaywrightRuntimeOptionsValidator.ValidateSpyBrowserSelections(
+            options.SpyBrowserHumanize,
+            options.SpyBrowserMouseAlgorithm,
+            options.SpyBrowserCompatibilityMode);
+        if (!options.SpyBrowserHumanize) return null;
+        return new HumanInteractionOptions
+        {
+            MouseAlgorithm = options.SpyBrowserMouseAlgorithm.ToLowerInvariant() switch
+            {
+                "cursory" => MouseTrajectoryAlgorithm.Cursory,
+                "bezier" => MouseTrajectoryAlgorithm.Bezier,
+                _ => throw new ArgumentException("SpyBrowserMouseAlgorithm inválido.", nameof(options))
+            },
+            CompatibilityMode = options.SpyBrowserCompatibilityMode.ToLowerInvariant() switch
+            {
+                "playwrightcompatible" => HumanizationCompatibilityMode.PlaywrightCompatible,
+                "legacy" => HumanizationCompatibilityMode.Legacy,
+                _ => throw new ArgumentException("SpyBrowserCompatibilityMode inválido.", nameof(options))
+            }
+        };
     }
 
     internal static string ResolveLocalTimeZoneId()

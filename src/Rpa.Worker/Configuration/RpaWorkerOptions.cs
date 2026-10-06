@@ -168,6 +168,10 @@ public sealed class RpaRuntimeOptions
 
     public bool SpyBrowserHumanize { get; set; } = true;
 
+    public string SpyBrowserMouseAlgorithm { get; set; } = "bezier";
+
+    public string SpyBrowserCompatibilityMode { get; set; } = "legacy";
+
     public int ActionTimeoutSeconds { get; set; } = 30;
 
     public int UploadTimeoutSeconds { get; set; } = 90;

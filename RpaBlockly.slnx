@@ -20,6 +20,7 @@
     <Project Path="tests/RpaFlow.Legacy.Playwright/RpaFlow.Legacy.Playwright.csproj" />
     <Project Path="tests/RpaFlow.MigratorChecks/RpaFlow.MigratorChecks.csproj" />
     <Project Path="tests/RpaFlow.PlaywrightChecks/RpaFlow.PlaywrightChecks.csproj" />
+    <Project Path="tests/RpaFlow.SpyBrowserIntegrationChecks/RpaFlow.SpyBrowserIntegrationChecks.csproj" />
     <Project Path="tests/Rpa.WorkerChecks/Rpa.WorkerChecks.csproj" />
     <Project Path="tests/RpaFlow.RecorderContractChecks/RpaFlow.RecorderContractChecks.csproj" />
   </Folder>

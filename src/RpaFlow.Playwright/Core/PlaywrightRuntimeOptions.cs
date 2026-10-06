@@ -23,4 +23,6 @@ public sealed record PlaywrightRuntimeOptions(
     int ArtifactRetentionDays = 30,
     bool CaptureScreenshotsAfterActions = false,
     CaptchaOptions? Captcha = null,
-    bool SpyBrowserHumanize = true);
+    bool SpyBrowserHumanize = true,
+    string SpyBrowserMouseAlgorithm = "bezier",
+    string SpyBrowserCompatibilityMode = "legacy");
